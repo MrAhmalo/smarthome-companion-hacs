@@ -24,6 +24,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
         blinds = store.get_blinds()
         new_entities = []
         for entity_id, config in blinds.items():
+            if not entity_id.startswith("cover."):
+                continue
             if entity_id not in added_blind_entities:
                 new_entities.extend([
                     BlindRandomDelayPrevNumber(hass, store, blinds_manager, entity_id),
@@ -120,8 +122,10 @@ class _BlindBaseNumber(NumberEntity):
     def _cover_label(self, entity_id):
         state = self.hass.states.get(entity_id)
         if state and state.attributes.get("friendly_name"):
-            return state.attributes["friendly_name"]
-        return entity_id.split(".")[-1].replace("_", " ")
+            name = state.attributes["friendly_name"]
+        else:
+            name = entity_id.split(".")[-1].replace("_", " ").title()
+        return name.replace("Eg", "EG").replace("Og", "OG").replace("Hacs", "HACS")
 
     async def async_added_to_hass(self):
         self.async_on_remove(
@@ -144,6 +148,7 @@ class BlindRandomDelayPrevNumber(_BlindBaseNumber):
         self._attr_native_max_value = 120
         self._attr_native_step = 1
         self._attr_native_unit_of_measurement = "min"
+        self._attr_mode = "box"
 
     @property
     def native_value(self):
@@ -170,6 +175,7 @@ class BlindRandomDelayPostNumber(_BlindBaseNumber):
         self._attr_native_max_value = 120
         self._attr_native_step = 1
         self._attr_native_unit_of_measurement = "min"
+        self._attr_mode = "box"
 
     @property
     def native_value(self):

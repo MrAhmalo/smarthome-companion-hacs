@@ -21,6 +21,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
         blinds = store.get_blinds()
         new_entities = []
         for entity_id, config in blinds.items():
+            if not entity_id.startswith("cover."):
+                continue
             if entity_id not in added_blind_entities:
                 new_entities.append(BlindWatchdogButton(hass, store, blinds_manager, entity_id))
                 added_blind_entities.add(entity_id)
@@ -65,8 +67,10 @@ class BlindWatchdogButton(ButtonEntity):
     def _cover_label(self, entity_id):
         state = self.hass.states.get(entity_id)
         if state and state.attributes.get("friendly_name"):
-            return state.attributes["friendly_name"]
-        return entity_id.split(".")[-1].replace("_", " ")
+            name = state.attributes["friendly_name"]
+        else:
+            name = entity_id.split(".")[-1].replace("_", " ").title()
+        return name.replace("Eg", "EG").replace("Og", "OG").replace("Hacs", "HACS")
 
     async def async_press(self) -> None:
         """Handle button press to execute watchdog on this specific blind."""

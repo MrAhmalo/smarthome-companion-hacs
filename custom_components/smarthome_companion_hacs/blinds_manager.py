@@ -34,6 +34,37 @@ class BlindsManager:
         # Keep last 20
         self._traces[entity_id] = self._traces[entity_id][:20]
 
+    async def _log_to_logbook(self, entity_id, message):
+        try:
+            await self.hass.services.async_call(
+                "logbook",
+                "log",
+                {
+                    "name": "SmartHome Companion",
+                    "message": message,
+                    "entity_id": entity_id,
+                    "domain": "cover"
+                },
+                blocking=False
+            )
+        except Exception as e:
+            _LOGGER.warning("Failed to call logbook service for %s: %s", entity_id, e)
+
+    async def _log_action(self, entity_id, action_type, target_position, is_watchdog_check):
+        suffix = " (durch Watchdog korrigiert)" if is_watchdog_check else ""
+        if action_type == "open":
+            msg = f"geöffnet von der Integration um der Öffnungszeit nachzugehen{suffix}."
+        elif action_type == "close":
+            msg = f"geschlossen von der Integration um der Schließzeit nachzugehen{suffix}."
+        elif action_type == "shading":
+            msg = f"von der Integration auf Beschattungsposition ({target_position}%) gefahren{suffix}."
+        elif action_type == "ventilation":
+            msg = f"von der Integration auf Lüftungsposition ({target_position}%) gefahren{suffix}."
+        else:
+            msg = f"von der Integration gesteuert auf {target_position}%{suffix}."
+        
+        await self._log_to_logbook(entity_id, msg)
+
     def _parse_time(self, t_str, default):
         if not t_str:
             return default
@@ -224,6 +255,8 @@ class BlindsManager:
     async def _evaluate_all(self, is_watchdog_check=False):
         blinds = self.store.get_blinds()
         for entity_id, config in blinds.items():
+            if not entity_id.startswith("cover."):
+                continue
             await self._evaluate_blind(entity_id, config, is_watchdog_check)
 
     async def _evaluate_blind(self, entity_id, config, is_watchdog_check=False, is_state_change=False):
@@ -292,6 +325,7 @@ class BlindsManager:
                 mem["ventilation_initiated_today"] = now.date().isoformat()
                 self._add_trace(entity_id, "Lüftungsposition gesendet (Präventiv)", ventilation_position)
                 # Command cover to open precisely to the ventilation position directly
+                await self._log_to_logbook(entity_id, f"präventiv von der Integration auf Lüftungsposition ({ventilation_position}%) gefahren.")
                 await self.hass.services.async_call("cover", "set_cover_position", {"entity_id": entity_id, "position": ventilation_position}, blocking=False, context=Context())
 
         if is_morning_ventilation_time and mem.get("ventilation_stopped_today") != now.date().isoformat():
@@ -313,6 +347,7 @@ class BlindsManager:
                 mem["ventilation_stopped_today"] = now.date().isoformat()
                 
                 # Stop cover command as a hard block intercept
+                await self._log_to_logbook(entity_id, "von der Integration angehalten (Lüftungsstopp).")
                 await self.hass.services.async_call("cover", "stop_cover", {"entity_id": entity_id}, blocking=False, context=Context())
                 mem["override_until"] = now + timedelta(minutes=int(manual_pause_duration))
                 return
@@ -334,6 +369,7 @@ class BlindsManager:
         close_time_dt = times["close_time"]
 
         target_position = 100
+        action_type = "open"
         
         is_night = False
         if open_time_dt <= close_time_dt:
@@ -345,11 +381,13 @@ class BlindsManager:
                 
         if is_night:
             target_position = 0
+            action_type = "close"
         else:
             # Lüftung Morgens
             vent_until = self._parse_time(config.get("ventilation_until"), time(10, 0))
             if config.get("enable_ventilation", False) and now.time() <= vent_until:
                 target_position = int(config.get("ventilation_position", 59))
+                action_type = "ventilation"
             else:
                 # Beschattung
                 if config.get("enable_shading", False):
@@ -381,6 +419,7 @@ class BlindsManager:
                             
                         if in_azimuth:
                             target_position = int(config.get("shading_position", 30))
+                            action_type = "shading"
                             
         # Transition and watchdog logs decoupling
         last_target_pos = mem.get("last_target_position")
@@ -394,11 +433,13 @@ class BlindsManager:
             if is_transition:
                 self._add_trace(entity_id, "Automation", target_position)
                 mem["last_managed_position"] = target_position
+                await self._log_action(entity_id, action_type, target_position, is_watchdog_check=False)
                 await self.hass.services.async_call("cover", "set_cover_position", {"entity_id": entity_id, "position": target_position}, blocking=False, context=Context())
             # Wenn es ein Watchdog-Check ist, wird die Position als Fallback korrigiert
             elif is_watchdog_check:
                 self._add_trace(entity_id, "Watchdog: Position korrigiert", target_position)
                 mem["last_managed_position"] = target_position
+                await self._log_action(entity_id, action_type, target_position, is_watchdog_check=True)
                 await self.hass.services.async_call("cover", "set_cover_position", {"entity_id": entity_id, "position": target_position}, blocking=False, context=Context())
         elif is_watchdog_check:
             # Watchdog successfully verifying correct state (no log trace)
