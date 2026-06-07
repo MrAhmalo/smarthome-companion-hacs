@@ -43,6 +43,116 @@ class BlindsManager:
         except Exception:
             return default
 
+    def calculate_times(self, entity_id, config):
+        import random
+        now = dt_util.now()
+        date_str = now.date().isoformat()
+        
+        def get_dt(t):
+            return datetime.combine(now.date(), t, now.tzinfo)
+
+        def clamp_time(dt_val, e_t, l_t):
+            if e_t:
+                edt = get_dt(e_t)
+                if dt_val < edt: dt_val = edt
+            if l_t:
+                ldt = get_dt(l_t)
+                if dt_val > ldt: dt_val = ldt
+            return dt_val
+
+        # 1. Basis-Öffnungszeit kalkulieren
+        base_open_time_dt = None
+        sunrise_time_dt = None
+        if config.get("use_fixed_open_time", False):
+            ot = self._parse_time(config.get("fixed_open_time"), time(7, 0))
+            base_open_time_dt = get_dt(ot)
+        elif config.get("use_sunrise", False):
+            sun_sun = self.hass.states.get("sun.sun")
+            sun_next_rising = sun_sun.attributes.get("next_rising") if sun_sun else None
+            if sun_next_rising:
+                rt = dt_util.parse_datetime(sun_next_rising)
+                if rt:
+                    rt_local = dt_util.as_local(rt)
+                    sunrise_time_dt = datetime.combine(now.date(), rt_local.time(), now.tzinfo)
+                    sunrise_time_dt += timedelta(minutes=config.get("sunrise_offset", 0))
+                    eot = self._parse_time(config.get("earliest_open_time"), time(6, 0))
+                    lot = self._parse_time(config.get("latest_open_time"), time(9, 0))
+                    sunrise_time_dt = clamp_time(sunrise_time_dt, eot, lot)
+                    base_open_time_dt = sunrise_time_dt
+
+        if not base_open_time_dt:
+            base_open_time_dt = get_dt(time(7, 0))
+
+        # 2. Basis-Schließzeit kalkulieren
+        base_close_time_dt = None
+        sunset_time_dt = None
+        if config.get("use_fixed_close_time", False):
+            ct = self._parse_time(config.get("fixed_close_time"), time(22, 0))
+            base_close_time_dt = get_dt(ct)
+        elif config.get("use_sunset", False):
+            sun_sun = self.hass.states.get("sun.sun")
+            sun_next_setting = sun_sun.attributes.get("next_setting") if sun_sun else None
+            if sun_next_setting:
+                st = dt_util.parse_datetime(sun_next_setting)
+                if st:
+                    st_local = dt_util.as_local(st)
+                    sunset_time_dt = datetime.combine(now.date(), st_local.time(), now.tzinfo)
+                    sunset_time_dt += timedelta(minutes=config.get("sunset_offset", 0))
+                    ect = self._parse_time(config.get("earliest_close_time"), time(18, 0))
+                    lct = self._parse_time(config.get("latest_close_time"), time(23, 0))
+                    sunset_time_dt = clamp_time(sunset_time_dt, ect, lct)
+                    base_close_time_dt = sunset_time_dt
+
+        if not base_close_time_dt:
+            base_close_time_dt = get_dt(time(22, 0))
+
+        # 3. Zufall anwenden (standardmäßig aktiviert!)
+        enable_random_delay = config.get("enable_random_delay", True)
+        if enable_random_delay is None:
+            enable_random_delay = True
+            
+        random_delay_prev = config.get("random_delay_prev", 10)
+        random_delay_post = config.get("random_delay_post", 10)
+        
+        try:
+            random_delay_prev = int(random_delay_prev)
+        except Exception:
+            random_delay_prev = 10
+            
+        try:
+            random_delay_post = int(random_delay_post)
+        except Exception:
+            random_delay_post = 10
+
+        actual_open_time_dt = base_open_time_dt
+        actual_close_time_dt = base_close_time_dt
+        open_offset = 0
+        close_offset = 0
+
+        if enable_random_delay:
+            # Deterministic seed for today to keep it stable
+            open_seed = f"{entity_id}-{date_str}-open"
+            close_seed = f"{entity_id}-{date_str}-close"
+            
+            r_open = random.Random(open_seed)
+            open_offset = r_open.randint(-random_delay_prev, random_delay_post)
+            actual_open_time_dt = base_open_time_dt + timedelta(minutes=open_offset)
+            
+            r_close = random.Random(close_seed)
+            close_offset = r_close.randint(-random_delay_prev, random_delay_post)
+            actual_close_time_dt = base_close_time_dt + timedelta(minutes=close_offset)
+
+        return {
+            "open_time": actual_open_time_dt,
+            "close_time": actual_close_time_dt,
+            "sunrise_time": sunrise_time_dt,
+            "sunset_time": sunset_time_dt,
+            "base_open_time": base_open_time_dt,
+            "base_close_time": base_close_time_dt,
+            "open_offset": open_offset,
+            "close_offset": close_offset,
+        }
+
     async def async_setup(self):
         await self._async_setup_schedulers()
 
@@ -219,58 +329,9 @@ class BlindsManager:
             else:
                 mem["override_until"] = None
 
-        # Helper
-        def get_dt(t):
-            return datetime.combine(now.date(), t, now.tzinfo)
-
-        def clamp_time(dt_val, e_t, l_t):
-            if e_t:
-                edt = get_dt(e_t)
-                if dt_val < edt: dt_val = edt
-            if l_t:
-                ldt = get_dt(l_t)
-                if dt_val > ldt: dt_val = ldt
-            return dt_val
-
-        # Öffnungszeit kalkulieren
-        open_time_dt = None
-        if config.get("use_fixed_open_time", False):
-            ot = self._parse_time(config.get("fixed_open_time"), time(7, 0))
-            open_time_dt = get_dt(ot)
-        elif config.get("use_sunrise", False):
-            sun_next_rising = self.hass.states.get("sun.sun").attributes.get("next_rising")
-            if sun_next_rising:
-                rt = dt_util.parse_datetime(sun_next_rising)
-                if rt:
-                    rt_local = dt_util.as_local(rt)
-                    open_time_dt = datetime.combine(now.date(), rt_local.time(), now.tzinfo)
-                    open_time_dt += timedelta(minutes=config.get("sunrise_offset", 0))
-                    eot = self._parse_time(config.get("earliest_open_time"), time(6, 0))
-                    lot = self._parse_time(config.get("latest_open_time"), time(9, 0))
-                    open_time_dt = clamp_time(open_time_dt, eot, lot)
-
-        if not open_time_dt:
-            open_time_dt = get_dt(time(7, 0))
-
-        # Schließzeit kalkulieren
-        close_time_dt = None
-        if config.get("use_fixed_close_time", False):
-            ct = self._parse_time(config.get("fixed_close_time"), time(22, 0))
-            close_time_dt = get_dt(ct)
-        elif config.get("use_sunset", False):
-            sun_next_setting = self.hass.states.get("sun.sun").attributes.get("next_setting")
-            if sun_next_setting:
-                st = dt_util.parse_datetime(sun_next_setting)
-                if st:
-                    st_local = dt_util.as_local(st)
-                    close_time_dt = datetime.combine(now.date(), st_local.time(), now.tzinfo)
-                    close_time_dt += timedelta(minutes=config.get("sunset_offset", 0))
-                    ect = self._parse_time(config.get("earliest_close_time"), time(18, 0))
-                    lct = self._parse_time(config.get("latest_close_time"), time(23, 0))
-                    close_time_dt = clamp_time(close_time_dt, ect, lct)
-
-        if not close_time_dt:
-            close_time_dt = get_dt(time(22, 0))
+        times = self.calculate_times(entity_id, config)
+        open_time_dt = times["open_time"]
+        close_time_dt = times["close_time"]
 
         target_position = 100
         

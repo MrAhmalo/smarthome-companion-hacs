@@ -1,6 +1,7 @@
 import logging
 
 from homeassistant.components.sensor import SensorEntity
+from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
 
@@ -10,6 +11,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass, entry, async_add_entities):
     sun_manager = hass.data[DOMAIN].get("sun_manager")
     store = hass.data[DOMAIN].get("store")
+    blinds_manager = hass.data[DOMAIN].get("blinds_manager")
     if not sun_manager:
         return
 
@@ -28,6 +30,40 @@ async def async_setup_entry(hass, entry, async_add_entities):
         )
 
     async_add_entities(entities)
+
+    # Track dynamically added blind unique IDs
+    added_blind_entities = set()
+
+    def add_blind_sensors(event=None):
+        if not store or not blinds_manager:
+            return
+        blinds = store.get_blinds()
+        new_entities = []
+        for entity_id, config in blinds.items():
+            if entity_id not in added_blind_entities:
+                new_entities.extend(
+                    [
+                        BlindOpenTimeSensor(hass, store, blinds_manager, entity_id),
+                        BlindCloseTimeSensor(hass, store, blinds_manager, entity_id),
+                        BlindSunriseOpenTimeSensor(hass, store, blinds_manager, entity_id),
+                        BlindSunsetCloseTimeSensor(hass, store, blinds_manager, entity_id),
+                        BlindNextActionSensor(hass, store, blinds_manager, entity_id),
+                    ]
+                )
+                added_blind_entities.add(entity_id)
+
+        if new_entities:
+            async_add_entities(new_entities)
+
+    # Initial register
+    add_blind_sensors()
+
+    # Dynamic registration upon config reloads/updates
+    entry.async_on_unload(
+        hass.bus.async_listen(
+            "smarthome_companion_blinds_updated", add_blind_sensors
+        )
+    )
 
 
 class _BaseBlindsSensor(SensorEntity):
@@ -71,6 +107,15 @@ class ConfiguredBlindsSensor(_BaseBlindsSensor):
         self._attr_icon = "mdi:window-shutter-cog"
 
     @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "hub")},
+            name="SmartHome Companion",
+            manufacturer="SmartHome Companion",
+            model="Hub & Einstellungen",
+        )
+
+    @property
     def native_value(self):
         return len(self._configured_blinds())
 
@@ -99,6 +144,15 @@ class UnconfiguredBlindsSensor(_BaseBlindsSensor):
         self._attr_name = "Smarthome Companion nicht eingerichtete Rollläden"
         self._attr_unique_id = "smarthome_companion_unconfigured_blinds"
         self._attr_icon = "mdi:window-shutter-alert"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "hub")},
+            name="SmartHome Companion",
+            manufacturer="SmartHome Companion",
+            model="Hub & Einstellungen",
+        )
 
     @property
     def native_value(self):
@@ -133,6 +187,15 @@ class FassadeSunSensor(SensorEntity):
         self._attr_icon = "mdi:weather-sunny"
 
     @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "hub")},
+            name="SmartHome Companion",
+            manufacturer="SmartHome Companion",
+            model="Hub & Einstellungen",
+        )
+
+    @property
     def native_value(self):
         return round(self.sun_manager.intensities.get(self._direction_id, 0), 1)
 
@@ -145,3 +208,198 @@ class FassadeSunSensor(SensorEntity):
 
     async def _handle_update(self, event):
         self.async_write_ha_state()
+
+
+class _BlindBaseSensor(SensorEntity):
+    def __init__(self, hass, store, blinds_manager, blind_id, sensor_type):
+        self.hass = hass
+        self.store = store
+        self.blinds_manager = blinds_manager
+        self._blind_id = blind_id
+        self._sensor_type = sensor_type
+
+    @property
+    def available(self):
+         return self._blind_id in self.store.get_blinds()
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        cover_name = self._cover_label(self._blind_id)
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._blind_id)},
+            name=cover_name,
+            manufacturer="SmartHome Companion",
+            model="Rollladen-Automat",
+        )
+
+    def _cover_label(self, entity_id):
+        state = self.hass.states.get(entity_id)
+        if state and state.attributes.get("friendly_name"):
+            return state.attributes["friendly_name"]
+        return entity_id.split(".")[-1].replace("_", " ")
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "smarthome_companion_blinds_updated", self._handle_update
+            )
+        )
+
+    async def _handle_update(self, event):
+        self.async_write_ha_state()
+
+
+class BlindOpenTimeSensor(_BlindBaseSensor):
+    def __init__(self, hass, store, blinds_manager, blind_id):
+        super().__init__(hass, store, blinds_manager, blind_id, "open_time")
+        self._attr_name = "Geplante Öffnungszeit"
+        self._attr_unique_id = f"smarthome_companion_sensor_open_time_{blind_id}"
+        self._attr_icon = "mdi:clock-start"
+
+    @property
+    def native_value(self):
+        config = self.store.get_blinds().get(self._blind_id)
+        if not config:
+            return None
+        times = self.blinds_manager.calculate_times(self._blind_id, config)
+        open_time = times.get("open_time")
+        if open_time:
+            return open_time.strftime("%H:%M")
+        return None
+
+
+class BlindCloseTimeSensor(_BlindBaseSensor):
+    def __init__(self, hass, store, blinds_manager, blind_id):
+        super().__init__(hass, store, blinds_manager, blind_id, "close_time")
+        self._attr_name = "Geplante Schließzeit"
+        self._attr_unique_id = f"smarthome_companion_sensor_close_time_{blind_id}"
+        self._attr_icon = "mdi:clock-end"
+
+    @property
+    def native_value(self):
+        config = self.store.get_blinds().get(self._blind_id)
+        if not config:
+            return None
+        times = self.blinds_manager.calculate_times(self._blind_id, config)
+        close_time = times.get("close_time")
+        if close_time:
+            return close_time.strftime("%H:%M")
+        return None
+
+
+class BlindSunriseOpenTimeSensor(_BlindBaseSensor):
+    def __init__(self, hass, store, blinds_manager, blind_id):
+        super().__init__(hass, store, blinds_manager, blind_id, "sunrise_time")
+        self._attr_name = "Sonnenaufgangs-Öffnungszeit"
+        self._attr_unique_id = f"smarthome_companion_sensor_sunrise_open_time_{blind_id}"
+        self._attr_icon = "mdi:weather-sunset-up"
+
+    @property
+    def native_value(self):
+        config = self.store.get_blinds().get(self._blind_id)
+        if not config:
+            return None
+        if not config.get("use_sunrise", False):
+            return "Deaktiviert"
+        times = self.blinds_manager.calculate_times(self._blind_id, config)
+        sunrise_time = times.get("sunrise_time")
+        if sunrise_time:
+            return sunrise_time.strftime("%H:%M")
+        return "Deaktiviert"
+
+
+class BlindSunsetCloseTimeSensor(_BlindBaseSensor):
+    def __init__(self, hass, store, blinds_manager, blind_id):
+        super().__init__(hass, store, blinds_manager, blind_id, "sunset_time")
+        self._attr_name = "Sonnenuntergangs-Schließzeit"
+        self._attr_unique_id = f"smarthome_companion_sensor_sunset_close_time_{blind_id}"
+        self._attr_icon = "mdi:weather-sunset-down"
+
+    @property
+    def native_value(self):
+        config = self.store.get_blinds().get(self._blind_id)
+        if not config:
+            return None
+        if not config.get("use_sunset", False):
+            return "Deaktiviert"
+        times = self.blinds_manager.calculate_times(self._blind_id, config)
+        sunset_time = times.get("sunset_time")
+        if sunset_time:
+            return sunset_time.strftime("%H:%M")
+        return "Deaktiviert"
+
+
+class BlindNextActionSensor(_BlindBaseSensor):
+    def __init__(self, hass, store, blinds_manager, blind_id):
+        super().__init__(hass, store, blinds_manager, blind_id, "next_action")
+        self._attr_name = "Nächste Aktion"
+        self._attr_unique_id = f"smarthome_companion_sensor_next_action_{blind_id}"
+        self._attr_icon = "mdi:clock-check-outline"
+
+    @property
+    def native_value(self):
+        config = self.store.get_blinds().get(self._blind_id)
+        if not config:
+            return None
+        
+        times = self.blinds_manager.calculate_times(self._blind_id, config)
+        open_time = times.get("open_time")
+        close_time = times.get("close_time")
+        
+        if not open_time or not close_time:
+            return None
+            
+        import datetime as dt_module
+        now = dt_util.now()
+        
+        next_open = open_time
+        if next_open <= now:
+            next_open = next_open + dt_module.timedelta(days=1)
+            
+        next_close = close_time
+        if next_close <= now:
+            next_close = next_close + dt_module.timedelta(days=1)
+            
+        if next_open < next_close:
+            return f"Öffnen um {next_open.strftime('%H:%M')}"
+        else:
+            return f"Schließen um {next_close.strftime('%H:%M')}"
+
+    @property
+    def extra_state_attributes(self):
+        config = self.store.get_blinds().get(self._blind_id)
+        if not config:
+            return {}
+        
+        times = self.blinds_manager.calculate_times(self._blind_id, config)
+        open_time = times.get("open_time")
+        close_time = times.get("close_time")
+        
+        if not open_time or not close_time:
+            return {}
+            
+        import datetime as dt_module
+        now = dt_util.now()
+        
+        next_open = open_time
+        if next_open <= now:
+            next_open = next_open + dt_module.timedelta(days=1)
+            
+        next_close = close_time
+        if next_close <= now:
+            next_close = next_close + dt_module.timedelta(days=1)
+            
+        if next_open < next_close:
+            action = "Öffnen"
+            next_dt = next_open
+        else:
+            action = "Schließen"
+            next_dt = next_close
+            
+        return {
+            "next_action": action,
+            "next_time": next_dt.strftime("%H:%M"),
+            "next_datetime": next_dt.isoformat(),
+            "open_offset_minutes": times.get("open_offset", 0),
+            "close_offset_minutes": times.get("close_offset", 0),
+        }
