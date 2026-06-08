@@ -1,0 +1,11 @@
+{
+  "domain": "smarthome_companion_hacs",
+  "name": "SmartHome Companion Backend",
+  "documentation": "https://github.com/MrAhmalo/SmartHome-Companion",
+  "dependencies": ["sun", "weather"],
+  "codeowners": ["@MrAhmalo"],
+  "config_flow": true,
+  "requirements": [],
+  "iot_class": "local_push",
+  "version": "2.3.0"
+}
