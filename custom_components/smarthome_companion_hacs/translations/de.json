@@ -1,1 +1,0 @@
-{ "config": { "step": { "user": { "title": "Setup Backend", "description": "Backend initialisieren?" } }, "abort": { "single_instance_allowed": "Nur eine Instanz erlaubt." } } }
