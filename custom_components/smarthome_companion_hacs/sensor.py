@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 import homeassistant.util.dt as dt_util
 
 from homeassistant.components.sensor import SensorEntity
@@ -268,8 +269,12 @@ class BlindOpenTimeSensor(_BlindBaseSensor):
         config = self.store.get_blinds().get(self._blind_id)
         if not config:
             return None
-        times = self.blinds_manager.calculate_times(self._blind_id, config)
-        open_time = times.get("open_time")
+        now = dt_util.now()
+        times_today = self.blinds_manager.calculate_times(self._blind_id, config, now.date())
+        open_time = times_today.get("open_time")
+        if open_time and open_time <= now:
+            times_tomorrow = self.blinds_manager.calculate_times(self._blind_id, config, now.date() + timedelta(days=1))
+            open_time = times_tomorrow.get("open_time")
         if open_time:
             return open_time.strftime("%H:%M")
         return None
@@ -287,8 +292,12 @@ class BlindCloseTimeSensor(_BlindBaseSensor):
         config = self.store.get_blinds().get(self._blind_id)
         if not config:
             return None
-        times = self.blinds_manager.calculate_times(self._blind_id, config)
-        close_time = times.get("close_time")
+        now = dt_util.now()
+        times_today = self.blinds_manager.calculate_times(self._blind_id, config, now.date())
+        close_time = times_today.get("close_time")
+        if close_time and close_time <= now:
+            times_tomorrow = self.blinds_manager.calculate_times(self._blind_id, config, now.date() + timedelta(days=1))
+            close_time = times_tomorrow.get("close_time")
         if close_time:
             return close_time.strftime("%H:%M")
         return None
@@ -308,8 +317,12 @@ class BlindSunriseOpenTimeSensor(_BlindBaseSensor):
             return None
         if not config.get("use_sunrise", False):
             return "Deaktiviert"
-        times = self.blinds_manager.calculate_times(self._blind_id, config)
-        sunrise_time = times.get("sunrise_time")
+        now = dt_util.now()
+        times_today = self.blinds_manager.calculate_times(self._blind_id, config, now.date())
+        sunrise_time = times_today.get("sunrise_time")
+        if sunrise_time and sunrise_time <= now:
+            times_tomorrow = self.blinds_manager.calculate_times(self._blind_id, config, now.date() + timedelta(days=1))
+            sunrise_time = times_tomorrow.get("sunrise_time")
         if sunrise_time:
             return sunrise_time.strftime("%H:%M")
         return "Deaktiviert"
@@ -329,8 +342,12 @@ class BlindSunsetCloseTimeSensor(_BlindBaseSensor):
             return None
         if not config.get("use_sunset", False):
             return "Deaktiviert"
-        times = self.blinds_manager.calculate_times(self._blind_id, config)
-        sunset_time = times.get("sunset_time")
+        now = dt_util.now()
+        times_today = self.blinds_manager.calculate_times(self._blind_id, config, now.date())
+        sunset_time = times_today.get("sunset_time")
+        if sunset_time and sunset_time <= now:
+            times_tomorrow = self.blinds_manager.calculate_times(self._blind_id, config, now.date() + timedelta(days=1))
+            sunset_time = times_tomorrow.get("sunset_time")
         if sunset_time:
             return sunset_time.strftime("%H:%M")
         return "Deaktiviert"
@@ -349,23 +366,26 @@ class BlindNextActionSensor(_BlindBaseSensor):
         if not config:
             return None
         
-        times = self.blinds_manager.calculate_times(self._blind_id, config)
-        open_time = times.get("open_time")
-        close_time = times.get("close_time")
+        now = dt_util.now()
+        times_today = self.blinds_manager.calculate_times(self._blind_id, config, now.date())
+        open_time = times_today.get("open_time")
+        close_time = times_today.get("close_time")
         
         if not open_time or not close_time:
             return None
             
-        import datetime as dt_module
-        now = dt_util.now()
-        
         next_open = open_time
         if next_open <= now:
-            next_open = next_open + dt_module.timedelta(days=1)
+            times_tomorrow = self.blinds_manager.calculate_times(self._blind_id, config, now.date() + timedelta(days=1))
+            next_open = times_tomorrow.get("open_time")
             
         next_close = close_time
         if next_close <= now:
-            next_close = next_close + dt_module.timedelta(days=1)
+            times_tomorrow = self.blinds_manager.calculate_times(self._blind_id, config, now.date() + timedelta(days=1))
+            next_close = times_tomorrow.get("close_time")
+            
+        if not next_open or not next_close:
+            return None
             
         if next_open < next_close:
             return f"Öffnen um {next_open.strftime('%H:%M')}"
@@ -378,35 +398,42 @@ class BlindNextActionSensor(_BlindBaseSensor):
         if not config:
             return {}
         
-        times = self.blinds_manager.calculate_times(self._blind_id, config)
-        open_time = times.get("open_time")
-        close_time = times.get("close_time")
+        now = dt_util.now()
+        times_today = self.blinds_manager.calculate_times(self._blind_id, config, now.date())
+        open_time = times_today.get("open_time")
+        close_time = times_today.get("close_time")
         
         if not open_time or not close_time:
             return {}
             
-        import datetime as dt_module
-        now = dt_util.now()
-        
         next_open = open_time
         if next_open <= now:
-            next_open = next_open + dt_module.timedelta(days=1)
+            times_tomorrow = self.blinds_manager.calculate_times(self._blind_id, config, now.date() + timedelta(days=1))
+            next_open = times_tomorrow.get("open_time")
+            open_offset = times_tomorrow.get("open_offset", 0)
+        else:
+            open_offset = times_today.get("open_offset", 0)
             
         next_close = close_time
         if next_close <= now:
-            next_close = next_close + dt_module.timedelta(days=1)
+            times_tomorrow = self.blinds_manager.calculate_times(self._blind_id, config, now.date() + timedelta(days=1))
+            next_close = times_tomorrow.get("close_time")
+            close_offset = times_tomorrow.get("close_offset", 0)
+        else:
+            close_offset = times_today.get("close_offset", 0)
             
         if next_open < next_close:
             action = "Öffnen"
             next_dt = next_open
+            offset = open_offset
         else:
             action = "Schließen"
             next_dt = next_close
+            offset = close_offset
             
         return {
             "next_action": action,
             "next_time": next_dt.strftime("%H:%M"),
             "next_datetime": next_dt.isoformat(),
-            "open_offset_minutes": times.get("open_offset", 0),
-            "close_offset_minutes": times.get("close_offset", 0),
+            "offset_minutes": offset,
         }

@@ -37,13 +37,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await sun_manager.async_setup()
     await blinds_manager.async_setup()
 
-    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "number", "button", "switch"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "number", "button", "switch", "text", "select"])
 
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "number", "button", "switch"])
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "number", "button", "switch", "text", "select"])
     if unload_ok:
         hass.data.pop(DOMAIN, None)
     return unload_ok

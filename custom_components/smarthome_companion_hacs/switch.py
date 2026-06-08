@@ -24,7 +24,16 @@ async def async_setup_entry(hass, entry, async_add_entities):
             if not entity_id.startswith("cover."):
                 continue
             if entity_id not in added_blind_entities:
-                new_entities.append(BlindRandomDelaySwitch(hass, store, blinds_manager, entity_id))
+                new_entities.extend([
+                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "enable_random_delay", "Zufällige Verzögerung", "smarthome_companion_switch_random_delay", "mdi:shuffle-variant", True),
+                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "use_fixed_open_time", "Feste Öffnungszeit nutzen", "smarthome_companion_switch_use_fixed_open_time", "mdi:calendar-clock", False),
+                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "use_sunrise", "Sonnenaufgang nutzen", "smarthome_companion_switch_use_sunrise", "mdi:weather-sunset-up", False),
+                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "use_fixed_close_time", "Feste Schließzeit nutzen", "smarthome_companion_switch_use_fixed_close_time", "mdi:calendar-clock", False),
+                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "use_sunset", "Sonnenuntergang nutzen", "smarthome_companion_switch_use_sunset", "mdi:weather-sunset-down", False),
+                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "enable_ventilation", "Lüftungsstopp aktivieren", "smarthome_companion_switch_enable_ventilation", "mdi:window-shutter-open", False),
+                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "enable_shading", "Beschattung aktivieren", "smarthome_companion_switch_enable_shading", "mdi:window-shutter", False),
+                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "enable_manual_pause", "Manuelle Sperre aktivieren", "smarthome_companion_switch_enable_manual_pause", "mdi:hand-extended-outline", True),
+                ])
                 added_blind_entities.add(entity_id)
         if new_entities:
             async_add_entities(new_entities)
@@ -40,15 +49,17 @@ async def async_setup_entry(hass, entry, async_add_entities):
     )
 
 
-class BlindRandomDelaySwitch(SwitchEntity):
-    def __init__(self, hass, store, blinds_manager, blind_id):
+class _BlindBaseGenericSwitch(SwitchEntity):
+    def __init__(self, hass, store, blinds_manager, blind_id, key, name, unique_id_prefix, icon, default_value=True):
         self.hass = hass
         self.store = store
         self.blinds_manager = blinds_manager
         self._blind_id = blind_id
-        self._attr_name = "Zufällige Verzögerung"
-        self._attr_unique_id = f"smarthome_companion_switch_random_delay_{blind_id}"
-        self._attr_icon = "mdi:shuffle-variant"
+        self._key = key
+        self._attr_name = name
+        self._attr_unique_id = f"{unique_id_prefix}_{blind_id}"
+        self._attr_icon = icon
+        self._default_value = default_value
 
     @property
     def available(self):
@@ -76,21 +87,21 @@ class BlindRandomDelaySwitch(SwitchEntity):
     def is_on(self) -> bool:
         config = self.store.get_blinds().get(self._blind_id)
         if not config:
-            return True
-        val = config.get("enable_random_delay", True)
-        return True if val is None else bool(val)
+            return self._default_value
+        val = config.get(self._key, self._default_value)
+        return self._default_value if val is None else bool(val)
 
     async def async_turn_on(self, **kwargs) -> None:
         blinds = self.store.get_blinds()
         if self._blind_id in blinds:
-            blinds[self._blind_id]["enable_random_delay"] = True
+            blinds[self._blind_id][self._key] = True
             await self.store.async_save(self.store.data)
             await self.blinds_manager.async_reload()
 
     async def async_turn_off(self, **kwargs) -> None:
         blinds = self.store.get_blinds()
         if self._blind_id in blinds:
-            blinds[self._blind_id]["enable_random_delay"] = False
+            blinds[self._blind_id][self._key] = False
             await self.store.async_save(self.store.data)
             await self.blinds_manager.async_reload()
 
