@@ -62,9 +62,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 continue
             if entity_id not in added_blind_entities:
                 new_entities.extend([
-                    BlindTimeText(hass, store, blinds_manager, entity_id, "fixed_open_time", "Feste Öffnungszeit", "smarthome_companion_text_fixed_open_time", "mdi:clock-outline", "07:00"),
-                    BlindTimeText(hass, store, blinds_manager, entity_id, "fixed_close_time", "Feste Schließzeit", "smarthome_companion_text_fixed_close_time", "mdi:clock-outline", "22:00"),
-                    BlindTimeText(hass, store, blinds_manager, entity_id, "ventilation_until", "Lüftung bis Uhrzeit", "smarthome_companion_text_ventilation_until", "mdi:clock-end", "10:00"),
+                    BlindTimeText(hass, store, blinds_manager, entity_id, "fixed_open_time", "Öffnen - Feste Zeit: Uhrzeit", "smarthome_companion_text_fixed_open_time", "mdi:clock-outline", "07:00"),
+                    BlindTimeText(hass, store, blinds_manager, entity_id, "fixed_close_time", "Schließen - Feste Zeit: Uhrzeit", "smarthome_companion_text_fixed_close_time", "mdi:clock-outline", "22:00"),
+                    BlindTimeText(hass, store, blinds_manager, entity_id, "ventilation_until", "Lüftung: Uhrzeit (Bis)", "smarthome_companion_text_ventilation_until", "mdi:clock-end", "10:00"),
                 ])
                 added_blind_entities.add(entity_id)
         if new_entities:

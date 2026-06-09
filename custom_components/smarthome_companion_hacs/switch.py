@@ -25,13 +25,13 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 continue
             if entity_id not in added_blind_entities:
                 new_entities.extend([
-                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "enable_random_delay", "Zufällige Verzögerung", "smarthome_companion_switch_random_delay", "mdi:shuffle-variant", True),
-                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "use_fixed_open_time", "Feste Öffnungszeit nutzen", "smarthome_companion_switch_use_fixed_open_time", "mdi:calendar-clock", False),
-                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "use_sunrise", "Sonnenaufgang nutzen", "smarthome_companion_switch_use_sunrise", "mdi:weather-sunset-up", False),
-                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "use_fixed_close_time", "Feste Schließzeit nutzen", "smarthome_companion_switch_use_fixed_close_time", "mdi:calendar-clock", False),
-                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "use_sunset", "Sonnenuntergang nutzen", "smarthome_companion_switch_use_sunset", "mdi:weather-sunset-down", False),
-                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "enable_ventilation", "Lüftungsstopp aktivieren", "smarthome_companion_switch_enable_ventilation", "mdi:window-shutter-open", False),
-                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "enable_shading", "Beschattung aktivieren", "smarthome_companion_switch_enable_shading", "mdi:window-shutter", False),
+                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "enable_random_delay", "Verzögerung: Aktivieren", "smarthome_companion_switch_random_delay", "mdi:shuffle-variant", True),
+                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "use_fixed_open_time", "Öffnen - Feste Zeit: Aktivieren", "smarthome_companion_switch_use_fixed_open_time", "mdi:calendar-clock", False),
+                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "use_sunrise", "Öffnen - Sonnenaufgang: Aktivieren", "smarthome_companion_switch_use_sunrise", "mdi:weather-sunset-up", False),
+                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "use_fixed_close_time", "Schließen - Feste Zeit: Aktivieren", "smarthome_companion_switch_use_fixed_close_time", "mdi:calendar-clock", False),
+                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "use_sunset", "Schließen - Sonnenuntergang: Aktivieren", "smarthome_companion_switch_use_sunset", "mdi:weather-sunset-down", False),
+                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "enable_ventilation", "Lüftung: Aktivieren", "smarthome_companion_switch_enable_ventilation", "mdi:window-shutter-open", False),
+                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "enable_shading", "Beschattung: Aktivieren", "smarthome_companion_switch_enable_shading", "mdi:window-shutter", False),
                 ])
                 added_blind_entities.add(entity_id)
         if new_entities:

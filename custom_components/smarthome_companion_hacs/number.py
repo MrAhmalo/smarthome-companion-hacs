@@ -33,11 +33,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 new_entities.extend([
                     BlindRandomDelayPrevNumber(hass, store, blinds_manager, entity_id),
                     BlindRandomDelayPostNumber(hass, store, blinds_manager, entity_id),
-                    _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "sunrise_offset", "Sonnenaufgang Offset", "smarthome_companion_number_sunrise_offset", "mdi:clock-fast", -120, 120, 1, "min", 0),
-                    _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "sunset_offset", "Sonnenuntergang Offset", "smarthome_companion_number_sunset_offset", "mdi:clock-fast", -120, 120, 1, "min", 0),
-                    _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "ventilation_position", "Lüftungsposition", "smarthome_companion_number_ventilation_position", "mdi:window-shutter-open", 0, 100, 1, "%", 59),
-                    _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "shading_position", "Beschattungsposition", "smarthome_companion_number_shading_position", "mdi:window-shutter", 0, 100, 1, "%", 30),
-                    _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "shading_intensity_threshold", "Beschattung Auslöse-Helligkeit", "smarthome_companion_number_shading_intensity_threshold", "mdi:white-balance-sunny", 0, 1000, 10, "W/m²", 600),
+                    _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "sunrise_offset", "Öffnen - Sonnenaufgang: Offset", "smarthome_companion_number_sunrise_offset", "mdi:clock-fast", -120, 120, 1, "min", 0),
+                    _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "sunset_offset", "Schließen - Sonnenuntergang: Offset", "smarthome_companion_number_sunset_offset", "mdi:clock-fast", -120, 120, 1, "min", 0),
+                    _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "ventilation_position", "Lüftung: Position", "smarthome_companion_number_ventilation_position", "mdi:window-shutter-open", 0, 100, 1, "%", 59),
+                    _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "shading_position", "Beschattung: Position", "smarthome_companion_number_shading_position", "mdi:window-shutter", 0, 100, 1, "%", 30),
+                    _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "shading_intensity_threshold", "Beschattung: Helligkeits-Schwellenwert", "smarthome_companion_number_shading_intensity_threshold", "mdi:white-balance-sunny", 0, 1000, 10, "W/m²", 600),
                 ])
                 added_blind_entities.add(entity_id)
         if new_entities:
@@ -150,7 +150,7 @@ class _BlindBaseNumber(NumberEntity):
 class BlindRandomDelayPrevNumber(_BlindBaseNumber):
     def __init__(self, hass, store, blinds_manager, blind_id):
         super().__init__(hass, store, blinds_manager, blind_id)
-        self._attr_name = "Zufällige Verzögerung vorher"
+        self._attr_name = "Verzögerung: Maximale Dauer vorher"
         self._attr_unique_id = f"smarthome_companion_number_random_delay_prev_{blind_id}"
         self._attr_icon = "mdi:minus"
         self._attr_native_min_value = 0
@@ -177,7 +177,7 @@ class BlindRandomDelayPrevNumber(_BlindBaseNumber):
 class BlindRandomDelayPostNumber(_BlindBaseNumber):
     def __init__(self, hass, store, blinds_manager, blind_id):
         super().__init__(hass, store, blinds_manager, blind_id)
-        self._attr_name = "Zufällige Verzögerung nachher"
+        self._attr_name = "Verzögerung: Maximale Dauer nachher"
         self._attr_unique_id = f"smarthome_companion_number_random_delay_post_{blind_id}"
         self._attr_icon = "mdi:plus"
         self._attr_native_min_value = 0
