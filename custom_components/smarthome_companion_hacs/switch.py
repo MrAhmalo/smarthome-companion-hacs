@@ -32,7 +32,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "use_sunset", "Sonnenuntergang nutzen", "smarthome_companion_switch_use_sunset", "mdi:weather-sunset-down", False),
                     _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "enable_ventilation", "Lüftungsstopp aktivieren", "smarthome_companion_switch_enable_ventilation", "mdi:window-shutter-open", False),
                     _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "enable_shading", "Beschattung aktivieren", "smarthome_companion_switch_enable_shading", "mdi:window-shutter", False),
-                    _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "enable_manual_pause", "Manuelle Sperre aktivieren", "smarthome_companion_switch_enable_manual_pause", "mdi:hand-extended-outline", True),
                 ])
                 added_blind_entities.add(entity_id)
         if new_entities:

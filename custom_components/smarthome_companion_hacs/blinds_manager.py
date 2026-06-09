@@ -16,7 +16,11 @@ class BlindsManager:
         self._regular_unsub = None
         self._state_change_unsub = None
         self._traces = {}
-        self._states = {}
+        self._started_at = dt_util.now()
+        
+        if "states" not in self.store.data:
+            self.store.data["states"] = {}
+        self._states = self.store.data["states"]
 
     def get_traces(self, entity_id):
         return self._traces.get(entity_id, [])
@@ -263,14 +267,14 @@ class BlindsManager:
             # We evaluate on cover state changes to instantly intercept ventilation positioning
             await self._evaluate_blind(entity_id, blinds[entity_id], is_watchdog_check=False, is_state_change=True)
 
-    async def _evaluate_all(self, is_watchdog_check=False):
+    async def _evaluate_all(self, is_watchdog_check=False, force_correction=False):
         blinds = self.store.get_blinds()
         for entity_id, config in blinds.items():
             if not entity_id.startswith("cover."):
                 continue
-            await self._evaluate_blind(entity_id, config, is_watchdog_check)
+            await self._evaluate_blind(entity_id, config, is_watchdog_check, force_correction=force_correction)
 
-    async def _evaluate_blind(self, entity_id, config, is_watchdog_check=False, is_state_change=False):
+    async def _evaluate_blind(self, entity_id, config, is_watchdog_check=False, is_state_change=False, force_correction=False):
         """
         Gleiche die konfigurierten UI-Parameter mit dem aktuellen Stand ab und 
         sende Service-Calls an die Rolladen-Aktorik.
@@ -280,34 +284,50 @@ class BlindsManager:
         - Lüftungsposition am Morgen
         - Manueller-Überschreibungs-Watchdog
         """
+        if entity_id not in self._states:
+            self._states[entity_id] = {
+                "last_managed_position": None,
+                "last_target_position": None,
+                "last_known_position": None,
+                "ventilation_stopped_today": None,
+                "ventilation_initiated_today": None,
+                "automatic_transit": False,
+                "manual_override_today": None,
+                "last_command_time": None,
+                "was_offline": False
+            }
+            
+        mem = self._states[entity_id]
+
         state_obj = self.hass.states.get(entity_id)
-        if not state_obj:
+        if not state_obj or state_obj.state in ["unavailable", "unknown"]:
+            mem["was_offline"] = True
             return
             
         current_position = state_obj.attributes.get("current_position")
         if current_position is None:
+            mem["was_offline"] = True
             return
         
         try:
             current_position = int(current_position)
         except ValueError:
+            mem["was_offline"] = True
             return
             
-        now = dt_util.now()
-        
-        if entity_id not in self._states:
-            self._states[entity_id] = {
-                "last_managed_position": current_position,
-                "last_target_position": None,
-                "last_known_position": current_position,
-                "ventilation_stopped_today": None,
-                "ventilation_initiated_today": None,
-                "automatic_transit": False,
-                "manual_override_today": None,
-                "last_command_time": None
-            }
+        if mem.get("last_known_position") is None:
+            mem["last_known_position"] = current_position
+        if mem.get("last_managed_position") is None:
+            mem["last_managed_position"] = current_position
             
-        mem = self._states[entity_id]
+        shutter_was_offline = mem.get("was_offline", False)
+        mem["was_offline"] = False
+        
+        ha_recovering = (dt_util.now() - self._started_at) < timedelta(minutes=15)
+        if is_watchdog_check and not (ha_recovering or shutter_was_offline or force_correction):
+            return
+
+        now = dt_util.now()
         cover_state = state_obj.state
         
         # Reset manual override if the day has changed
@@ -315,12 +335,8 @@ class BlindsManager:
             mem["manual_override_today"] = None
             _LOGGER.info("Resetting daily manual override for %s", entity_id)
 
-        # Retrieve manual override configurations
-        enable_manual_pause = config.get("enable_manual_pause")
-        if enable_manual_pause is None:
-            enable_manual_pause = True
-        else:
-            enable_manual_pause = bool(enable_manual_pause)
+        # Retrieve manual override configurations (enable_manual_pause is removed and always True)
+        enable_manual_pause = True
 
         override_allow_scheduled = config.get("manual_override_allow_scheduled", True)
         if override_allow_scheduled is None:
@@ -508,12 +524,19 @@ class BlindsManager:
                     
             # Exception 3: Watchdog error correction (when offline/recovering etc.)
             elif is_watchdog_check and override_allow_watchdog:
-                # The watchdog is explicitly permitted to correct state even if manually overridden
-                allow_bypass = True
-                _LOGGER.info("Bypassing manual override for watchdog error correction on %s", entity_id)
+                ha_recovering = (dt_util.now() - self._started_at) < timedelta(minutes=15)
+                if ha_recovering or shutter_was_offline or force_correction:
+                    # The watchdog is explicitly permitted to correct state even if manually overridden
+                    # but only if HA recently restarted or the shutter was offline/unavailable, or forced
+                    allow_bypass = True
+                    _LOGGER.info(
+                        "Bypassing manual override for watchdog error correction on %s (HA recovering: %s, shutter was offline: %s, forced: %s)",
+                        entity_id, ha_recovering, shutter_was_offline, force_correction
+                    )
 
             if not allow_bypass:
                 # Manual override blocks automation changes
+                await self.store.async_save(self.store.data)
                 return
 
         # Automatisierung und Watchdog
@@ -537,3 +560,5 @@ class BlindsManager:
         elif is_watchdog_check:
             # Watchdog successfully verifying correct state (no log trace)
             pass
+
+        await self.store.async_save(self.store.data)

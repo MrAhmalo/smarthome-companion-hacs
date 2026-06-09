@@ -38,7 +38,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "ventilation_position", "Lüftungsposition", "smarthome_companion_number_ventilation_position", "mdi:window-shutter-open", 0, 100, 1, "%", 59),
                     _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "shading_position", "Beschattungsposition", "smarthome_companion_number_shading_position", "mdi:window-shutter", 0, 100, 1, "%", 30),
                     _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "shading_intensity_threshold", "Beschattung Auslöse-Helligkeit", "smarthome_companion_number_shading_intensity_threshold", "mdi:white-balance-sunny", 0, 1000, 10, "W/m²", 600),
-                    _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "manual_pause_duration", "Manuelle Sperrdauer", "smarthome_companion_number_manual_pause_duration", "mdi:timer-outline", 1, 240, 1, "min", 60),
                 ])
                 added_blind_entities.add(entity_id)
         if new_entities:

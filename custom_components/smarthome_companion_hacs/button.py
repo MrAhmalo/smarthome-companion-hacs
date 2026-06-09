@@ -79,7 +79,7 @@ class BlindWatchdogButton(ButtonEntity):
         config = blinds.get(self._blind_id)
         if config:
             await self.blinds_manager._evaluate_blind(
-                self._blind_id, config, is_watchdog_check=True
+                self._blind_id, config, is_watchdog_check=True, force_correction=True
             )
             # Instantly fire refresh event so that tracing logs or time sensors on other entities update
             self.hass.bus.async_fire("smarthome_companion_blinds_updated")
