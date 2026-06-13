@@ -1,7 +1,10 @@
 import logging
 from datetime import timedelta, datetime, time
+# pyrefly: ignore [missing-import]
 from homeassistant.helpers.event import async_track_time_interval, async_track_state_change_event
+# pyrefly: ignore [missing-import]
 from homeassistant.core import Context
+# pyrefly: ignore [missing-import]
 import homeassistant.util.dt as dt_util
 from .const import DOMAIN
 
@@ -107,10 +110,12 @@ class BlindsManager:
         # 1. Basis-Öffnungszeit kalkulieren
         base_open_time_dt = None
         sunrise_time_dt = None
+        fixed_open_dt = None
+
         if config.get("use_fixed_open_time", False):
-            ot = self._parse_time(config.get("fixed_open_time"), time(7, 0))
-            base_open_time_dt = get_dt(ot)
-        elif config.get("use_sunrise", False):
+            fixed_open_dt = get_dt(self._parse_time(config.get("fixed_open_time"), time(7, 0)))
+            
+        if config.get("use_sunrise", False):
             sun_sun = self.hass.states.get("sun.sun")
             sun_next_rising = sun_sun.attributes.get("next_rising") if sun_sun else None
             if sun_next_rising:
@@ -120,7 +125,42 @@ class BlindsManager:
                     sunrise_time_dt = datetime.combine(date_val, rt_local.time(), now.tzinfo)
                     sunrise_time_dt += timedelta(minutes=config.get("sunrise_offset", 0))
                     sunrise_time_dt = clamp_earliest_time(sunrise_time_dt, eot)
-                    base_open_time_dt = sunrise_time_dt
+
+        if fixed_open_dt and sunrise_time_dt:
+            base_open_time_dt = max(fixed_open_dt, sunrise_time_dt)
+        elif fixed_open_dt:
+            base_open_time_dt = fixed_open_dt
+        elif sunrise_time_dt:
+            base_open_time_dt = sunrise_time_dt
+
+        # Weekend override
+        is_weekend_or_holiday = False
+        if date_val.weekday() >= 5:
+            is_weekend_or_holiday = True
+        else:
+            settings = self.store.data.get("settings", {})
+            holiday_sensor_id = settings.get("holiday_sensor", "binary_sensor.workday_sensor")
+            if holiday_sensor_id:
+                sensor_state = self.hass.states.get(holiday_sensor_id)
+                if sensor_state:
+                    state_val = sensor_state.state.lower()
+                    if holiday_sensor_id.startswith("calendar."):
+                        if state_val == "on":
+                            is_weekend_or_holiday = True
+                    elif "workday" in holiday_sensor_id.lower():
+                        if state_val == "off":
+                            is_weekend_or_holiday = True
+                    else:
+                        # Fallback for other holiday binary sensors where 'on' means holiday
+                        if state_val == "on":
+                            is_weekend_or_holiday = True
+
+        if config.get("enable_weekend_open", False) and is_weekend_or_holiday:
+            weekend_dt = get_dt(self._parse_time(config.get("weekend_open_time"), time(9, 0)))
+            if base_open_time_dt:
+                base_open_time_dt = max(base_open_time_dt, weekend_dt)
+            else:
+                base_open_time_dt = weekend_dt
 
         if not base_open_time_dt:
             base_open_time_dt = get_dt(self._parse_time(config.get("fixed_open_time"), time(7, 0)))
@@ -128,10 +168,12 @@ class BlindsManager:
         # 2. Basis-Schließzeit kalkulieren
         base_close_time_dt = None
         sunset_time_dt = None
+        fixed_close_dt = None
+
         if config.get("use_fixed_close_time", False):
-            ct = self._parse_time(config.get("fixed_close_time"), time(22, 0))
-            base_close_time_dt = get_dt(ct)
-        elif config.get("use_sunset", False):
+            fixed_close_dt = get_dt(self._parse_time(config.get("fixed_close_time"), time(22, 0)))
+
+        if config.get("use_sunset", False):
             sun_sun = self.hass.states.get("sun.sun")
             sun_next_setting = sun_sun.attributes.get("next_setting") if sun_sun else None
             if sun_next_setting:
@@ -141,7 +183,13 @@ class BlindsManager:
                     sunset_time_dt = datetime.combine(date_val, st_local.time(), now.tzinfo)
                     sunset_time_dt += timedelta(minutes=config.get("sunset_offset", 0))
                     sunset_time_dt = clamp_earliest_time(sunset_time_dt, ect)
-                    base_close_time_dt = sunset_time_dt
+
+        if fixed_close_dt and sunset_time_dt:
+            base_close_time_dt = min(fixed_close_dt, sunset_time_dt)
+        elif fixed_close_dt:
+            base_close_time_dt = fixed_close_dt
+        elif sunset_time_dt:
+            base_close_time_dt = sunset_time_dt
 
         if not base_close_time_dt:
             base_close_time_dt = get_dt(self._parse_time(config.get("fixed_close_time"), time(22, 0)))
@@ -466,7 +514,7 @@ class BlindsManager:
                 # Beschattung mit globalem Außentemperatur-Check
                 if config.get("enable_shading", False):
                     settings = self.store.data.get("settings", {})
-                    temp_sensor_id = settings.get("temp_sensor", "weather.forecast_home")
+                    temp_sensor_id = settings.get("temp_sensor", "sensor.weather_temperature")
                     shading_temp_threshold = float(settings.get("shading_temp_threshold", 23.0))
                     
                     current_temp = None

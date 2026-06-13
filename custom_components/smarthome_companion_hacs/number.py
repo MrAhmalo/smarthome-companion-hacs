@@ -1,5 +1,7 @@
 import logging
+# pyrefly: ignore [missing-import]
 from homeassistant.components.number import NumberEntity
+# pyrefly: ignore [missing-import]
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
@@ -15,8 +17,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     # Add global watchdog interval setting
     async_add_entities([
-        WatchdogIntervalNumber(hass, store, blinds_manager),
-        ShadingTempThresholdNumber(hass, store, blinds_manager)
+        WatchdogIntervalNumber(hass, store, blinds_manager)
     ])
 
     added_blind_entities = set()
@@ -275,53 +276,3 @@ class _BlindBaseGenericNumber(NumberEntity):
         self.async_write_ha_state()
 
 
-class ShadingTempThresholdNumber(NumberEntity):
-    def __init__(self, hass, store, blinds_manager):
-        self.hass = hass
-        self.store = store
-        self.blinds_manager = blinds_manager
-        self._attr_name = "SmartHome Companion Hitzeschutz Temperaturgrenzwert"
-        self._attr_unique_id = "smarthome_companion_number_shading_temp_threshold"
-        self._attr_icon = "mdi:thermometer"
-        self._attr_native_min_value = 15.0
-        self._attr_native_max_value = 35.0
-        self._attr_native_step = 0.5
-        self._attr_native_unit_of_measurement = "°C"
-        self._attr_mode = "box"
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, "hub")},
-            name="SmartHome Companion",
-            manufacturer="SmartHome Companion",
-            model="Hub & Einstellungen",
-        )
-
-    @property
-    def native_value(self):
-        settings = self.store.data.get("settings", {})
-        blinds = self.store.get_blinds()
-        return float(blinds.get("_global_shading_temp_threshold", settings.get("shading_temp_threshold", 23.0)))
-
-    async def async_set_native_value(self, value: float) -> None:
-        """Update settings and blinds store with new value."""
-        if "settings" not in self.store.data:
-            self.store.data["settings"] = {}
-        self.store.data["settings"]["shading_temp_threshold"] = float(value)
-        
-        blinds = self.store.get_blinds()
-        blinds["_global_shading_temp_threshold"] = float(value)
-        
-        await self.store.async_save(self.store.data)
-        await self.blinds_manager.async_reload()
-
-    async def async_added_to_hass(self):
-        self.async_on_remove(
-            self.hass.bus.async_listen(
-                "smarthome_companion_blinds_updated", self._handle_update
-            )
-        )
-
-    async def _handle_update(self, event):
-        self.async_write_ha_state()

@@ -260,7 +260,7 @@ class _BlindBaseSensor(SensorEntity):
 class BlindOpenTimeSensor(_BlindBaseSensor):
     def __init__(self, hass, store, blinds_manager, blind_id):
         super().__init__(hass, store, blinds_manager, blind_id, "open_time")
-        self._attr_name = "Status: Geplante Öffnungszeit"
+        self._attr_name = "Geplante Öffnungszeit"
         self._attr_unique_id = f"smarthome_companion_sensor_open_time_{blind_id}"
         self._attr_icon = "mdi:clock-start"
 
@@ -283,7 +283,7 @@ class BlindOpenTimeSensor(_BlindBaseSensor):
 class BlindCloseTimeSensor(_BlindBaseSensor):
     def __init__(self, hass, store, blinds_manager, blind_id):
         super().__init__(hass, store, blinds_manager, blind_id, "close_time")
-        self._attr_name = "Status: Geplante Schließzeit"
+        self._attr_name = "Geplante Schließzeit"
         self._attr_unique_id = f"smarthome_companion_sensor_close_time_{blind_id}"
         self._attr_icon = "mdi:clock-end"
 
@@ -306,7 +306,7 @@ class BlindCloseTimeSensor(_BlindBaseSensor):
 class BlindSunriseOpenTimeSensor(_BlindBaseSensor):
     def __init__(self, hass, store, blinds_manager, blind_id):
         super().__init__(hass, store, blinds_manager, blind_id, "sunrise_time")
-        self._attr_name = "Status: Sonnenaufgangs-Öffnungszeit"
+        self._attr_name = "Sonnenaufgangs-Öffnungszeit"
         self._attr_unique_id = f"smarthome_companion_sensor_sunrise_open_time_{blind_id}"
         self._attr_icon = "mdi:weather-sunset-up"
 
@@ -331,7 +331,7 @@ class BlindSunriseOpenTimeSensor(_BlindBaseSensor):
 class BlindSunsetCloseTimeSensor(_BlindBaseSensor):
     def __init__(self, hass, store, blinds_manager, blind_id):
         super().__init__(hass, store, blinds_manager, blind_id, "sunset_time")
-        self._attr_name = "Status: Sonnenuntergangs-Schließzeit"
+        self._attr_name = "Sonnenuntergangs-Schließzeit"
         self._attr_unique_id = f"smarthome_companion_sensor_sunset_close_time_{blind_id}"
         self._attr_icon = "mdi:weather-sunset-down"
 
@@ -356,7 +356,7 @@ class BlindSunsetCloseTimeSensor(_BlindBaseSensor):
 class BlindNextActionSensor(_BlindBaseSensor):
     def __init__(self, hass, store, blinds_manager, blind_id):
         super().__init__(hass, store, blinds_manager, blind_id, "next_action")
-        self._attr_name = "Status: Nächste Aktion"
+        self._attr_name = "Nächste Aktion"
         self._attr_unique_id = f"smarthome_companion_sensor_next_action_{blind_id}"
         self._attr_icon = "mdi:clock-check-outline"
 
