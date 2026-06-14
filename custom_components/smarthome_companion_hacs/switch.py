@@ -32,6 +32,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "use_sunset", "Schließen - Sonnenuntergang: Aktivieren", "smarthome_companion_switch_use_sunset", "mdi:weather-sunset-down", False),
                     _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "enable_ventilation", "Lüftung: Aktivieren", "smarthome_companion_switch_enable_ventilation", "mdi:window-shutter-open", False),
                     _BlindBaseGenericSwitch(hass, store, blinds_manager, entity_id, "enable_shading", "Beschattung: Aktivieren", "smarthome_companion_switch_enable_shading", "mdi:window-shutter", False),
+                    _SleepInTomorrowSwitch(hass, store, blinds_manager, entity_id),
                 ])
                 added_blind_entities.add(entity_id)
         if new_entities:
@@ -103,6 +104,81 @@ class _BlindBaseGenericSwitch(SwitchEntity):
             blinds[self._blind_id][self._key] = False
             await self.store.async_save(self.store.data)
             await self.blinds_manager.async_reload()
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "smarthome_companion_blinds_updated", self._handle_update
+            )
+        )
+
+    async def _handle_update(self, event):
+        self.async_write_ha_state()
+
+class _SleepInTomorrowSwitch(SwitchEntity):
+    def __init__(self, hass, store, blinds_manager, blind_id):
+        self.hass = hass
+        self.store = store
+        self.blinds_manager = blinds_manager
+        self._blind_id = blind_id
+        self._attr_name = "Morgen Ausschlafen"
+        self._attr_unique_id = f"smarthome_companion_switch_sleep_in_tomorrow_{blind_id}"
+        self._attr_icon = "mdi:bed-clock"
+
+    @property
+    def available(self):
+        return self._blind_id in self.store.get_blinds()
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        state = self.hass.states.get(self._blind_id)
+        if state and state.attributes.get("friendly_name"):
+            name = state.attributes["friendly_name"]
+        else:
+            name = self._blind_id.split(".")[-1].replace("_", " ").title()
+        cover_name = name.replace("Eg", "EG").replace("Og", "OG").replace("Hacs", "HACS")
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._blind_id)},
+            name=cover_name,
+            manufacturer="SmartHome Companion",
+            model="Rollladen-Automat",
+        )
+
+    @property
+    def is_on(self) -> bool:
+        import homeassistant.util.dt as dt_util
+        from datetime import timedelta
+        now = dt_util.now()
+        target_date = now.date()
+        if now.hour >= 12:
+            target_date = target_date + timedelta(days=1)
+            
+        config = self.store.get_blinds().get(self._blind_id)
+        if not config: return False
+        return config.get("sleep_in_date") == target_date.isoformat()
+
+    async def async_turn_on(self, **kwargs) -> None:
+        import homeassistant.util.dt as dt_util
+        from datetime import timedelta
+        now = dt_util.now()
+        target_date = now.date()
+        if now.hour >= 12:
+            target_date = target_date + timedelta(days=1)
+            
+        blinds = self.store.get_blinds()
+        if self._blind_id in blinds:
+            blinds[self._blind_id]["sleep_in_date"] = target_date.isoformat()
+            await self.store.async_save(self.store.data)
+            await self.blinds_manager.async_reload()
+            self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        blinds = self.store.get_blinds()
+        if self._blind_id in blinds:
+            blinds[self._blind_id]["sleep_in_date"] = None
+            await self.store.async_save(self.store.data)
+            await self.blinds_manager.async_reload()
+            self.async_write_ha_state()
 
     async def async_added_to_hass(self):
         self.async_on_remove(

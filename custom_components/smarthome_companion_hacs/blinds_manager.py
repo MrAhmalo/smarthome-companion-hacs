@@ -162,6 +162,14 @@ class BlindsManager:
             else:
                 base_open_time_dt = weekend_dt
 
+        sleep_in_date_str = config.get("sleep_in_date")
+        if sleep_in_date_str and sleep_in_date_str == date_val.isoformat():
+            weekend_dt = get_dt(self._parse_time(config.get("weekend_open_time"), time(9, 0)))
+            if base_open_time_dt:
+                base_open_time_dt = max(base_open_time_dt, weekend_dt)
+            else:
+                base_open_time_dt = weekend_dt
+
         if not base_open_time_dt:
             base_open_time_dt = get_dt(self._parse_time(config.get("fixed_open_time"), time(7, 0)))
 

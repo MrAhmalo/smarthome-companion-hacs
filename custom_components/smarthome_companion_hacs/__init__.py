@@ -39,6 +39,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "number", "button", "switch", "text", "select"])
 
+    async def handle_set_sleep_in(call):
+        entity_ids = call.data.get("entity_ids", [])
+        active = call.data.get("active", True)
+        
+        import homeassistant.util.dt as dt_util
+        from datetime import timedelta
+        
+        now = dt_util.now()
+        target_date = now.date()
+        if now.hour >= 12:
+            target_date = target_date + timedelta(days=1)
+            
+        target_date_str = target_date.isoformat() if active else None
+        
+        s = hass.data[DOMAIN]["store"]
+        blinds = s.get_blinds()
+        updated = False
+        
+        for eid in entity_ids:
+            if eid in blinds:
+                if blinds[eid].get("sleep_in_date") != target_date_str:
+                    blinds[eid]["sleep_in_date"] = target_date_str
+                    updated = True
+                    
+        if updated:
+            await s.async_save(s.data)
+            await hass.data[DOMAIN]["blinds_manager"].async_reload()
+            
+    hass.services.async_register(DOMAIN, "set_sleep_in", handle_set_sleep_in)
+
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
