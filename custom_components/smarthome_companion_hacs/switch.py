@@ -58,6 +58,7 @@ class _BlindBaseGenericSwitch(SwitchEntity):
         self._key = key
         self._attr_name = name
         self._attr_unique_id = f"{unique_id_prefix}_{blind_id}"
+        self.entity_id = f"switch.{unique_id_prefix}_{blind_id.replace('.', '_')}"
         self._attr_icon = icon
         self._default_value = default_value
 
@@ -123,6 +124,7 @@ class _SleepInTomorrowSwitch(SwitchEntity):
         self._blind_id = blind_id
         self._attr_name = "Morgen Ausschlafen"
         self._attr_unique_id = f"smarthome_companion_switch_sleep_in_tomorrow_{blind_id}"
+        self.entity_id = f"switch.smarthome_companion_switch_sleep_in_tomorrow_{blind_id.replace('.', '_')}"
         self._attr_icon = "mdi:bed-clock"
 
     @property
