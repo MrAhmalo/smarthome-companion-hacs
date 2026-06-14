@@ -157,7 +157,17 @@ class _SleepInTomorrowSwitch(SwitchEntity):
             
         config = self.store.get_blinds().get(self._blind_id)
         if not config: return False
+        
         return config.get("sleep_in_date") == target_date.isoformat()
+
+    @property
+    def extra_state_attributes(self):
+        config = self.store.get_blinds().get(self._blind_id)
+        if not config: return {}
+        is_naturally = False
+        if config.get("enable_weekend_open", False):
+            is_naturally = self.store.data.get("tomorrow_is_holiday", False)
+        return {"naturally_sleeping_in": is_naturally}
 
     async def async_turn_on(self, **kwargs) -> None:
         import homeassistant.util.dt as dt_util
