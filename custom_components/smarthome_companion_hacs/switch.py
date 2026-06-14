@@ -146,37 +146,71 @@ class _SleepInTomorrowSwitch(SwitchEntity):
             model="Rollladen-Automat",
         )
 
-    @property
-    def is_on(self) -> bool:
+    def _get_target_date(self):
         import homeassistant.util.dt as dt_util
-        from datetime import timedelta
+        from datetime import timedelta, datetime, time
         now = dt_util.now()
         target_date = now.date()
-        if now.hour >= 12:
+        
+        config = self.store.get_blinds().get(self._blind_id)
+        if not config:
+            if now.hour >= 12:
+                target_date = target_date + timedelta(days=1)
+            return target_date
+
+        times = self.blinds_manager.calculate_times(self._blind_id, config, date_val=target_date)
+        base_open_time = times.get("base_open_time")
+        
+        def get_dt(t):
+            return datetime.combine(target_date, t, now.tzinfo)
+            
+        weekend_dt = get_dt(self.blinds_manager._parse_time(config.get("weekend_open_time"), time(9, 0)))
+        
+        if base_open_time:
+            cutoff = max(base_open_time, weekend_dt)
+        else:
+            cutoff = weekend_dt
+            
+        open_offset = times.get("open_offset", 0)
+        cutoff = cutoff + timedelta(minutes=open_offset)
+        
+        if now >= cutoff:
             target_date = target_date + timedelta(days=1)
             
+        return target_date
+
+    @property
+    def is_on(self) -> bool:
         config = self.store.get_blinds().get(self._blind_id)
         if not config: return False
         
+        target_date = self._get_target_date()
         return config.get("sleep_in_date") == target_date.isoformat()
 
     @property
     def extra_state_attributes(self):
+        import homeassistant.util.dt as dt_util
         config = self.store.get_blinds().get(self._blind_id)
         if not config: return {}
+        
+        now = dt_util.now()
+        target_date = self._get_target_date()
+        
         is_naturally = False
         if config.get("enable_weekend_open", False):
-            is_naturally = self.store.data.get("tomorrow_is_holiday", False)
-        return {"naturally_sleeping_in": is_naturally}
+            if target_date == now.date():
+                is_naturally = self.store.data.get("today_is_holiday", False)
+            else:
+                is_naturally = self.store.data.get("tomorrow_is_holiday", False)
+                
+        return {
+            "naturally_sleeping_in": is_naturally,
+            "target_day_relative": "heute" if target_date == now.date() else "morgen"
+        }
 
     async def async_turn_on(self, **kwargs) -> None:
-        import homeassistant.util.dt as dt_util
-        from datetime import timedelta
-        now = dt_util.now()
-        target_date = now.date()
-        if now.hour >= 12:
-            target_date = target_date + timedelta(days=1)
-            
+        target_date = self._get_target_date()
+        
         blinds = self.store.get_blinds()
         if self._blind_id in blinds:
             blinds[self._blind_id]["sleep_in_date"] = target_date.isoformat()

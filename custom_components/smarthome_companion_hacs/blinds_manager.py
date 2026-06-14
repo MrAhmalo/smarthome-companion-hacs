@@ -20,6 +20,7 @@ class BlindsManager:
         self._state_change_unsub = None
         self._traces = {}
         self._started_at = dt_util.now()
+        self._last_holiday_update_hour = -1
         
         if "states" not in self.store.data:
             self.store.data["states"] = {}
@@ -304,58 +305,64 @@ class BlindsManager:
             )
             
         # Initial call for holiday evaluation
-        self.hass.async_create_task(self._update_tomorrow_holiday())
+        self.hass.async_create_task(self._update_holidays())
 
-    async def _update_tomorrow_holiday(self):
+    async def _update_holidays(self):
         now = dt_util.now()
-        target_date = now.date()
-        if now.hour >= 12:
-            target_date = target_date + timedelta(days=1)
+        
+        for day_offset in (0, 1):
+            target_date = now.date() + timedelta(days=day_offset)
+            is_holiday = False
             
-        is_holiday = False
-        if target_date.weekday() >= 5:
-            is_holiday = True
-        else:
-            settings = self.store.data.get("settings", {})
-            holiday_sensor_id = settings.get("holiday_sensor", "")
-            if holiday_sensor_id.startswith("calendar."):
-                start = datetime.combine(target_date, time(0, 0), now.tzinfo)
-                end = datetime.combine(target_date, time(23, 59, 59), now.tzinfo)
-                try:
-                    response = await self.hass.services.async_call(
-                        "calendar",
-                        "get_events",
-                        {
-                            "entity_id": holiday_sensor_id,
-                            "start_date_time": start.isoformat(),
-                            "end_date_time": end.isoformat(),
-                        },
-                        blocking=True,
-                        return_response=True,
-                    )
-                    if response and holiday_sensor_id in response:
-                        events = response[holiday_sensor_id].get("events", [])
-                        if events:
+            if target_date.weekday() >= 5:
+                is_holiday = True
+            else:
+                settings = self.store.data.get("settings", {})
+                holiday_sensor_id = settings.get("holiday_sensor", "")
+                if holiday_sensor_id.startswith("calendar."):
+                    start = datetime.combine(target_date, time(0, 0), now.tzinfo)
+                    end = datetime.combine(target_date, time(23, 59, 59), now.tzinfo)
+                    try:
+                        response = await self.hass.services.async_call(
+                            "calendar",
+                            "get_events",
+                            {
+                                "entity_id": holiday_sensor_id,
+                                "start_date_time": start.isoformat(),
+                                "end_date_time": end.isoformat(),
+                            },
+                            blocking=True,
+                            return_response=True,
+                        )
+                        if response and holiday_sensor_id in response:
+                            events = response[holiday_sensor_id].get("events", [])
+                            if events:
+                                is_holiday = True
+                    except Exception as e:
+                        pass
+                elif "workday" in holiday_sensor_id.lower():
+                    if target_date == now.date():
+                        sensor_state = self.hass.states.get(holiday_sensor_id)
+                        if sensor_state and sensor_state.state.lower() == "off":
                             is_holiday = True
-                except Exception as e:
-                    _LOGGER.warning("Failed to fetch calendar events: %s", e)
-            elif "workday" in holiday_sensor_id.lower():
-                if target_date == now.date():
-                    sensor_state = self.hass.states.get(holiday_sensor_id)
-                    if sensor_state and sensor_state.state.lower() == "off":
-                        is_holiday = True
-            elif holiday_sensor_id:
-                if target_date == now.date():
-                    sensor_state = self.hass.states.get(holiday_sensor_id)
-                    if sensor_state and sensor_state.state.lower() == "on":
-                        is_holiday = True
-                        
-        self.store.data["tomorrow_is_holiday"] = is_holiday
+                elif holiday_sensor_id:
+                    if target_date == now.date():
+                        sensor_state = self.hass.states.get(holiday_sensor_id)
+                        if sensor_state and sensor_state.state.lower() == "on":
+                            is_holiday = True
+                            
+            if day_offset == 0:
+                self.store.data["today_is_holiday"] = is_holiday
+            else:
+                self.store.data["tomorrow_is_holiday"] = is_holiday
+
+        self.hass.bus.async_fire("smarthome_companion_blinds_updated")
 
     async def _regular_loop(self, now):
-        # Aktualisiere die Wochenend-/Feiertagslogik nur um 0:00 Uhr und 12:00 Uhr
-        if now.minute == 0 and now.hour in (0, 12):
-            await self._update_tomorrow_holiday()
+        # Aktualisiere die Wochenend-/Feiertagslogik zuverlässig während der Stunden 0 und 12
+        if now.hour in (0, 12) and self._last_holiday_update_hour != now.hour:
+            self._last_holiday_update_hour = now.hour
+            await self._update_holidays()
         await self._evaluate_all(is_watchdog_check=False)
 
     async def _watchdog_loop(self, now):
