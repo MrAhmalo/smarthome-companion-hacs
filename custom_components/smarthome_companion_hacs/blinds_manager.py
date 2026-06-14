@@ -336,8 +336,13 @@ class BlindsManager:
                         )
                         if response and holiday_sensor_id in response:
                             events = response[holiday_sensor_id].get("events", [])
-                            if events:
+                            for ev in events:
+                                ev_end = ev.get("end", "")
+                                # Home Assistant all-day events end at 00:00:00 of the next day (e.g. YYYY-MM-DD)
+                                if len(ev_end) == 10 and ev_end == target_date.isoformat():
+                                    continue
                                 is_holiday = True
+                                break
                     except Exception as e:
                         pass
                 elif "workday" in holiday_sensor_id.lower():
