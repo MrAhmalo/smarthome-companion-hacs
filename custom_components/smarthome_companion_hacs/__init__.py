@@ -8,6 +8,7 @@ from .store import CompanionStore
 from .ws_api import async_register_websockets
 from .blinds_manager import BlindsManager
 from .sun_manager import SunManager
+from .irrigation_manager import IrrigationManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,18 +25,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     sun_manager = SunManager(hass, store)
     blinds_manager = BlindsManager(hass, store, sun_manager)
+    irrigation_manager = IrrigationManager(hass, store)
     
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN] = {
         "store": store,
         "sun_manager": sun_manager,
-        "blinds_manager": blinds_manager
+        "blinds_manager": blinds_manager,
+        "irrigation_manager": irrigation_manager
     }
 
     async_register_websockets(hass)
     
     await sun_manager.async_setup()
     await blinds_manager.async_setup()
+    await irrigation_manager.async_setup()
 
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "number", "button", "switch", "text", "select"])
 

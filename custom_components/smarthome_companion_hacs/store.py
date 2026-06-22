@@ -9,7 +9,7 @@ class CompanionStore:
     def __init__(self, hass):
         self.hass = hass
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
-        self.data = {"blinds": {}}
+        self.data = {"blinds": {}, "irrigation": {}}
 
     async def async_load(self):
         saved = await self._store.async_load()
@@ -26,4 +26,11 @@ class CompanionStore:
 
     async def save_blinds(self, blinds_data):
         self.data["blinds"] = blinds_data
+        await self.async_save(self.data)
+
+    def get_irrigation(self):
+        return self.data.get("irrigation", {})
+
+    async def save_irrigation(self, irrigation_data):
+        self.data["irrigation"] = irrigation_data
         await self.async_save(self.data)
