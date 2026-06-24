@@ -241,15 +241,61 @@ class IrrigationManager:
                     except ValueError:
                         pass
 
+        # Fetch weather forecast for heat override
+        heat_override_active = False
+        any_heat_override = any(z.get("enableHeatOverride") or z.get("enable_heat_override") for z in self.config.get("zones", []))
+        weather_entity = global_rain_sensor if global_rain_sensor and global_rain_sensor.startswith("weather.") else "weather.forecast_home"
+        
+        if any_heat_override:
+            try:
+                # Need to use return_response=True for modern HA service calls
+                response = await self.hass.services.async_call(
+                    "weather",
+                    "get_forecasts",
+                    {"entity_id": weather_entity, "type": "daily"},
+                    blocking=True,
+                    return_response=True
+                )
+                if response and weather_entity in response:
+                    forecasts = response[weather_entity].get("forecast", [])
+                    for f in forecasts:
+                        dt_str = f.get("datetime")
+                        if dt_str:
+                            f_dt = dt_util.parse_datetime(dt_str)
+                            if f_dt and f_dt.date() == now.date():
+                                max_temp = float(f.get("temperature", 0))
+                                if max_temp > 30.0:
+                                    heat_override_active = True
+                                break
+            except Exception as e:
+                _LOGGER.error(f"Failed to fetch weather forecast for heat override: {e}")
+
         # We will iterate and check if it's time to run
         for zone in self.config.get("zones", []):
             zone_id = zone.get("id")
+            valve_entity = zone.get("valve_entity_id")
+            
+            # Detect manual turn on outside of the automation
+            if valve_entity and zone_id not in self.running_zones:
+                valve_state = self.hass.states.get(valve_entity)
+                if valve_state and valve_state.state == "on":
+                    _LOGGER.info(f"Detected manual turn on for {zone.get('name')}. Tracking it now.")
+                    self.running_zones[zone_id] = {
+                        "start_time": now,
+                        "duration": timedelta(minutes=zone.get("scheduled_duration_minutes", 30)),
+                        "valve_entity": valve_entity,
+                        "soil_sensor_entity_id": zone.get("soil_sensor_entity_id"),
+                        "target_moisture_percent": zone.get("target_moisture_percent", 100)
+                    }
+
             if zone_id in self.running_zones:
                 continue # Already running
             
             weekdays = zone.get("weekday_schedule", [False]*7)
+            is_heat_override = heat_override_active and (zone.get("enableHeatOverride") or zone.get("enable_heat_override"))
+            
             # now.weekday() returns 0 for Monday, 6 for Sunday, which perfectly matches our UI array
-            if not weekdays[now.weekday()]:
+            if not weekdays[now.weekday()] and not is_heat_override:
                 continue
                 
             time_str = zone.get("scheduled_time", "00:00")
