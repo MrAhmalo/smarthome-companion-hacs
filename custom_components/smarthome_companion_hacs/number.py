@@ -12,13 +12,14 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass, entry, async_add_entities):
     store = hass.data[DOMAIN].get("store")
     blinds_manager = hass.data[DOMAIN].get("blinds_manager")
-    if not store or not blinds_manager:
-        return
+    
+    module = entry.data.get("module", "legacy")
 
-    # Add global watchdog interval setting
-    async_add_entities([
-        WatchdogIntervalNumber(hass, store, blinds_manager)
-    ])
+    if module in ("blinds", "legacy") and store and blinds_manager:
+        # Add global watchdog interval setting
+        async_add_entities([
+            WatchdogIntervalNumber(hass, store, blinds_manager)
+        ])
 
     added_blind_entities = set()
 
@@ -44,15 +45,16 @@ async def async_setup_entry(hass, entry, async_add_entities):
         if new_entities:
             async_add_entities(new_entities)
 
-    # Initial register
-    add_blind_numbers()
+    if module in ("blinds", "legacy"):
+        # Initial register
+        add_blind_numbers()
 
-    # Dynamic registration
-    entry.async_on_unload(
-        hass.bus.async_listen(
-            "smarthome_companion_blinds_updated", add_blind_numbers
+        # Dynamic registration
+        entry.async_on_unload(
+            hass.bus.async_listen(
+                "smarthome_companion_blinds_updated", add_blind_numbers
+            )
         )
-    )
 
 
 class WatchdogIntervalNumber(NumberEntity):

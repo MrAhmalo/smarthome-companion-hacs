@@ -12,46 +12,47 @@ async def async_setup_entry(hass, entry, async_add_entities):
     store = hass.data[DOMAIN].get("store")
     blinds_manager = hass.data[DOMAIN].get("blinds_manager")
     irrigation_manager = hass.data[DOMAIN].get("irrigation_manager")
-    if not store or not blinds_manager:
-        return
+    
+    module = entry.data.get("module", "legacy")
 
-    # Global text settings for temperature, cloud/sun detection, and security time thresholds
-    async_add_entities([
-        HubTextSetting(
-            hass, store, blinds_manager,
-            key="temp_sensor",
-            name="Sonnenerkennung Temperatursensor",
-            unique_id="smarthome_companion_text_temp_sensor",
-            icon="mdi:thermometer",
-            default_value="weather.forecast_home"
-        ),
-        HubTextSetting(
-            hass, store, blinds_manager,
-            key="cloud_sensor",
-            name="Sonnenerkennung Bewölkungssensor",
-            unique_id="smarthome_companion_text_cloud_sensor",
-            icon="mdi:weather-partly-cloudy",
-            default_value="weather.forecast_home"
-        ),
-        HubTimeSetting(
-            hass, store, blinds_manager,
-            key="earliest_open_time",
-            name="Global: Früheste Öffnungszeit",
-            unique_id="smarthome_companion_text_global_earliest_open_time",
-            icon="mdi:clock-start",
-            default_value="06:00"
-        ),
-        HubTimeSetting(
-            hass, store, blinds_manager,
-            key="earliest_close_time",
-            name="Global: Früheste Schließzeit",
-            unique_id="smarthome_companion_text_global_earliest_close_time",
-            icon="mdi:clock-start",
-            default_value="18:00"
-        ),
-    ])
+    if module in ("blinds", "legacy") and store and blinds_manager:
+        # Global text settings for temperature, cloud/sun detection, and security time thresholds
+        async_add_entities([
+            HubTextSetting(
+                hass, store, blinds_manager,
+                key="temp_sensor",
+                name="Sonnenerkennung Temperatursensor",
+                unique_id="smarthome_companion_text_temp_sensor",
+                icon="mdi:thermometer",
+                default_value="weather.forecast_home"
+            ),
+            HubTextSetting(
+                hass, store, blinds_manager,
+                key="cloud_sensor",
+                name="Sonnenerkennung Bewölkungssensor",
+                unique_id="smarthome_companion_text_cloud_sensor",
+                icon="mdi:weather-partly-cloudy",
+                default_value="weather.forecast_home"
+            ),
+            HubTimeSetting(
+                hass, store, blinds_manager,
+                key="earliest_open_time",
+                name="Global: Früheste Öffnungszeit",
+                unique_id="smarthome_companion_text_global_earliest_open_time",
+                icon="mdi:clock-start",
+                default_value="06:00"
+            ),
+            HubTimeSetting(
+                hass, store, blinds_manager,
+                key="earliest_close_time",
+                name="Global: Früheste Schließzeit",
+                unique_id="smarthome_companion_text_global_earliest_close_time",
+                icon="mdi:clock-start",
+                default_value="18:00"
+            ),
+        ])
 
-    if irrigation_manager:
+    if module in ("irrigation", "legacy") and store and irrigation_manager:
         async_add_entities([
             IrrigationTextSetting(
                 hass, store, irrigation_manager,
@@ -83,15 +84,16 @@ async def async_setup_entry(hass, entry, async_add_entities):
         if new_entities:
             async_add_entities(new_entities)
 
-    # Initial register
-    add_blind_texts()
+    if module in ("blinds", "legacy"):
+        # Initial register
+        add_blind_texts()
 
-    # Dynamic registration
-    entry.async_on_unload(
-        hass.bus.async_listen(
-            "smarthome_companion_blinds_updated", add_blind_texts
+        # Dynamic registration
+        entry.async_on_unload(
+            hass.bus.async_listen(
+                "smarthome_companion_blinds_updated", add_blind_texts
+            )
         )
-    )
 
 
 class BlindTimeText(TextEntity):

@@ -1,5 +1,6 @@
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.core import callback
 
 from .const import DOMAIN
 
@@ -11,17 +12,33 @@ class SmartHomeCompanionConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
-        if self._async_current_entries():
-            return self.async_abort(reason="single_instance_allowed")
-
-        if user_input is not None:
-            return self.async_create_entry(
-                title="SmartHome Companion",
-                data={"setup_completed": True},
-            )
-
-        return self.async_show_form(
+        return self.async_show_menu(
             step_id="user",
-            data_schema=vol.Schema({}),
+            menu_options=["blinds", "irrigation"]
         )
+
+    async def async_step_blinds(self, user_input=None):
+        """Handle the blinds module step."""
+        if self._async_current_entries():
+            for entry in self._async_current_entries():
+                if entry.data.get("module") == "blinds" or "setup_completed" in entry.data:
+                    return self.async_abort(reason="already_configured")
+
+        return self.async_create_entry(
+            title="SmartHome Rollläden",
+            data={"module": "blinds"},
+        )
+
+    async def async_step_irrigation(self, user_input=None):
+        """Handle the irrigation module step."""
+        if self._async_current_entries():
+            for entry in self._async_current_entries():
+                if entry.data.get("module") == "irrigation":
+                    return self.async_abort(reason="already_configured")
+
+        return self.async_create_entry(
+            title="SmartHome Bewässerung",
+            data={"module": "irrigation"},
+        )
+
 

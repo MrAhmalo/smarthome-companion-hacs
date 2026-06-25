@@ -14,28 +14,33 @@ async def async_setup_entry(hass, entry, async_add_entities):
     sun_manager = hass.data[DOMAIN].get("sun_manager")
     store = hass.data[DOMAIN].get("store")
     blinds_manager = hass.data[DOMAIN].get("blinds_manager")
-    if not sun_manager:
-        return
+    
+    module = entry.data.get("module", "legacy")
 
-    entities = [
-        FassadeSunSensor(sun_manager, "nord", "Nord"),
-        FassadeSunSensor(sun_manager, "ost", "Ost"),
-        FassadeSunSensor(sun_manager, "sued", "Süd"),
-        FassadeSunSensor(sun_manager, "west", "West"),
-    ]
-    if store:
-        entities.extend(
-            [
+    entities = []
+    if module in ("blinds", "legacy") and sun_manager:
+        entities.extend([
+            FassadeSunSensor(sun_manager, "nord", "Nord"),
+            FassadeSunSensor(sun_manager, "ost", "Ost"),
+            FassadeSunSensor(sun_manager, "sued", "Süd"),
+            FassadeSunSensor(sun_manager, "west", "West"),
+        ])
+        if store:
+            entities.extend([
                 ConfiguredBlindsSensor(hass, store),
                 UnconfiguredBlindsSensor(hass, store),
-                ConfiguredIrrigationSensor(hass, store),
-                UnconfiguredIrrigationSensor(hass, store),
-                IrrigationMaxManualRuntimeSensor(hass, store),
-                IrrigationSimultaneousModeSensor(hass, store),
-            ]
-        )
+            ])
+            
+    if module in ("irrigation", "legacy") and store:
+        entities.extend([
+            ConfiguredIrrigationSensor(hass, store),
+            UnconfiguredIrrigationSensor(hass, store),
+            IrrigationMaxManualRuntimeSensor(hass, store),
+            IrrigationSimultaneousModeSensor(hass, store),
+        ])
 
-    async_add_entities(entities)
+    if entities:
+        async_add_entities(entities)
 
     # Track dynamically added blind unique IDs
     added_blind_entities = set()
@@ -63,26 +68,28 @@ async def async_setup_entry(hass, entry, async_add_entities):
         if new_entities:
             async_add_entities(new_entities)
 
-    # Initial register
-    add_blind_sensors()
+    if module in ("blinds", "legacy"):
+        # Initial register
+        add_blind_sensors()
 
-    # Dynamic registration upon config reloads/updates
-    entry.async_on_unload(
-        hass.bus.async_listen(
-            "smarthome_companion_blinds_updated", add_blind_sensors
+        # Dynamic registration upon config reloads/updates
+        entry.async_on_unload(
+            hass.bus.async_listen(
+                "smarthome_companion_blinds_updated", add_blind_sensors
+            )
         )
-    )
 
     def update_irrigation_sensors(event=None):
         for entity in entities:
             if isinstance(entity, (ConfiguredIrrigationSensor, UnconfiguredIrrigationSensor, IrrigationMaxManualRuntimeSensor, IrrigationSimultaneousModeSensor)):
                 entity.async_write_ha_state()
 
-    entry.async_on_unload(
-        hass.bus.async_listen(
-            "smarthome_companion_irrigation_updated", update_irrigation_sensors
+    if module in ("irrigation", "legacy"):
+        entry.async_on_unload(
+            hass.bus.async_listen(
+                "smarthome_companion_irrigation_updated", update_irrigation_sensors
+            )
         )
-    )
 
 
 class _BaseBlindsSensor(SensorEntity):

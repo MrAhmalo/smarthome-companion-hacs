@@ -18,62 +18,72 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up the SmartHome Companion HACS component from a config entry."""
-    _LOGGER.info("Setting up SmartHome Companion HACS Backend")
+    _LOGGER.info(f"Setting up SmartHome Companion Backend ({entry.title})")
 
-    store = CompanionStore(hass)
-    await store.async_load()
-
-    sun_manager = SunManager(hass, store)
-    blinds_manager = BlindsManager(hass, store, sun_manager)
-    irrigation_manager = IrrigationManager(hass, store)
-    
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN] = {
-        "store": store,
-        "sun_manager": sun_manager,
-        "blinds_manager": blinds_manager,
-        "irrigation_manager": irrigation_manager
-    }
 
-    async_register_websockets(hass)
-    
-    await sun_manager.async_setup()
-    await blinds_manager.async_setup()
-    await irrigation_manager.async_setup()
+    if "store" not in hass.data[DOMAIN]:
+        store = CompanionStore(hass)
+        await store.async_load()
+        sun_manager = SunManager(hass, store)
+        
+        hass.data[DOMAIN]["store"] = store
+        hass.data[DOMAIN]["sun_manager"] = sun_manager
+        
+        async_register_websockets(hass)
+        await sun_manager.async_setup()
+
+        async def handle_set_sleep_in(call):
+            entity_ids = call.data.get("entity_ids", [])
+            active = call.data.get("active", True)
+            
+            import homeassistant.util.dt as dt_util
+            from datetime import timedelta
+            
+            now = dt_util.now()
+            target_date = now.date()
+            if now.hour >= 12:
+                target_date = target_date + timedelta(days=1)
+                
+            target_date_str = target_date.isoformat() if active else None
+            
+            s = hass.data[DOMAIN]["store"]
+            blinds = s.get_blinds()
+            updated = False
+            
+            for eid in entity_ids:
+                if eid in blinds:
+                    if blinds[eid].get("sleep_in_date") != target_date_str:
+                        blinds[eid]["sleep_in_date"] = target_date_str
+                        updated = True
+                        
+            if updated:
+                await s.async_save(s.data)
+                await hass.data[DOMAIN]["blinds_manager"].async_reload()
+                
+        hass.services.async_register(DOMAIN, "set_sleep_in", handle_set_sleep_in)
+
+    store = hass.data[DOMAIN]["store"]
+    sun_manager = hass.data[DOMAIN]["sun_manager"]
+
+    module = entry.data.get("module", "legacy")
+
+    if module in ("blinds", "legacy"):
+        if "blinds_manager" not in hass.data[DOMAIN]:
+            blinds_manager = BlindsManager(hass, store, sun_manager)
+            hass.data[DOMAIN]["blinds_manager"] = blinds_manager
+            await blinds_manager.async_setup()
+
+    if module in ("irrigation", "legacy"):
+        if "irrigation_manager" not in hass.data[DOMAIN]:
+            irrigation_manager = IrrigationManager(hass, store)
+            hass.data[DOMAIN]["irrigation_manager"] = irrigation_manager
+            await irrigation_manager.async_setup()
 
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "number", "button", "switch", "text", "select"])
 
-    async def handle_set_sleep_in(call):
-        entity_ids = call.data.get("entity_ids", [])
-        active = call.data.get("active", True)
-        
-        import homeassistant.util.dt as dt_util
-        from datetime import timedelta
-        
-        now = dt_util.now()
-        target_date = now.date()
-        if now.hour >= 12:
-            target_date = target_date + timedelta(days=1)
-            
-        target_date_str = target_date.isoformat() if active else None
-        
-        s = hass.data[DOMAIN]["store"]
-        blinds = s.get_blinds()
-        updated = False
-        
-        for eid in entity_ids:
-            if eid in blinds:
-                if blinds[eid].get("sleep_in_date") != target_date_str:
-                    blinds[eid]["sleep_in_date"] = target_date_str
-                    updated = True
-                    
-        if updated:
-            await s.async_save(s.data)
-            await hass.data[DOMAIN]["blinds_manager"].async_reload()
-            
-    hass.services.async_register(DOMAIN, "set_sleep_in", handle_set_sleep_in)
-
     return True
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""

@@ -10,8 +10,8 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass, entry, async_add_entities):
     store = hass.data[DOMAIN].get("store")
     blinds_manager = hass.data[DOMAIN].get("blinds_manager")
-    if not store or not blinds_manager:
-        return
+    
+    module = entry.data.get("module", "legacy")
 
     added_blind_entities = set()
 
@@ -29,15 +29,16 @@ async def async_setup_entry(hass, entry, async_add_entities):
         if new_entities:
             async_add_entities(new_entities)
 
-    # Initial registration
-    add_blind_buttons()
+    if module in ("blinds", "legacy"):
+        # Initial registration
+        add_blind_buttons()
 
-    # Dynamic registration
-    entry.async_on_unload(
-        hass.bus.async_listen(
-            "smarthome_companion_blinds_updated", add_blind_buttons
+        # Dynamic registration
+        entry.async_on_unload(
+            hass.bus.async_listen(
+                "smarthome_companion_blinds_updated", add_blind_buttons
+            )
         )
-    )
 
 
 class BlindWatchdogButton(ButtonEntity):

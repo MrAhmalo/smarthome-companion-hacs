@@ -116,7 +116,8 @@ class IrrigationManager:
             "duration": timedelta(minutes=duration_minutes),
             "valve_entity": valve_entity,
             "soil_sensor_entity_id": zone.get("soil_sensor_entity_id"),
-            "target_moisture_percent": zone.get("target_moisture_percent", 100)
+            "target_moisture_percent": zone.get("target_moisture_percent", 100),
+            "is_manual": True
         }
 
     async def async_manual_toggle(self, zone_id, state):
@@ -141,7 +142,8 @@ class IrrigationManager:
                 "duration": timedelta(minutes=max_runtime),
                 "valve_entity": valve_entity,
                 "soil_sensor_entity_id": zone.get("soil_sensor_entity_id"),
-                "target_moisture_percent": zone.get("target_moisture_percent", 100)
+                "target_moisture_percent": zone.get("target_moisture_percent", 100),
+                "is_manual": True
             }
         else:
             _LOGGER.info(f"Toggling OFF zone {zone_id}.")
@@ -161,7 +163,7 @@ class IrrigationManager:
                 stop_reason = "Zeit abgelaufen (Timeout)"
                 
             soil_sensor = data.get("soil_sensor_entity_id")
-            if not stop_reason and soil_sensor:
+            if not stop_reason and soil_sensor and not data.get("is_manual", False):
                 s_state = self.hass.states.get(soil_sensor)
                 if s_state:
                     try:
@@ -295,9 +297,10 @@ class IrrigationManager:
                 valve_state = self.hass.states.get(valve_entity)
                 if valve_state and valve_state.state == "on":
                     _LOGGER.info(f"Detected manual turn on for {zone.get('name')}. Tracking it now.")
+                    max_runtime = self.config.get("max_manual_runtime_minutes", 60)
                     self.running_zones[zone_id] = {
                         "start_time": now,
-                        "duration": timedelta(minutes=zone.get("scheduled_duration_minutes", 30)),
+                        "duration": timedelta(minutes=max_runtime),
                         "valve_entity": valve_entity,
                         "soil_sensor_entity_id": zone.get("soil_sensor_entity_id"),
                         "target_moisture_percent": zone.get("target_moisture_percent", 100)

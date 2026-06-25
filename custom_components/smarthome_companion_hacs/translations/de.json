@@ -1,1 +1,1 @@
-{ "config": { "step": { "user": { "title": "Setup Backend", "description": "Backend initialisieren?" } }, "abort": { "single_instance_allowed": "Nur eine Instanz erlaubt." } } }
+{ "config": { "step": { "user": { "title": "Setup Backend", "description": "Welches Modul möchtest du einrichten?", "menu_options": { "blinds": "Rollladen-Konfiguration", "irrigation": "Bewässerungs-Konfiguration" } } }, "abort": { "already_configured": "Dieses Modul ist bereits konfiguriert." } } }
