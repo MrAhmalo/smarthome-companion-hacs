@@ -11,6 +11,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass, entry, async_add_entities):
     store = hass.data[DOMAIN].get("store")
     blinds_manager = hass.data[DOMAIN].get("blinds_manager")
+    irrigation_manager = hass.data[DOMAIN].get("irrigation_manager")
     if not store or not blinds_manager:
         return
 
@@ -49,6 +50,18 @@ async def async_setup_entry(hass, entry, async_add_entities):
             default_value="18:00"
         ),
     ])
+
+    if irrigation_manager:
+        async_add_entities([
+            IrrigationTextSetting(
+                hass, store, irrigation_manager,
+                key="global_rain_sensor",
+                name="Bewässerung: Wetter-Sensor",
+                unique_id="smarthome_companion_text_irrigation_weather_sensor",
+                icon="mdi:weather-partly-cloudy",
+                default_value="weather.forecast_home"
+            ),
+        ])
 
     added_blind_entities = set()
 
@@ -216,3 +229,51 @@ class HubTimeSetting(HubTextSetting):
             await self.blinds_manager.async_reload()
         else:
             _LOGGER.warning("Invalid time format submitted for global setting: %s (Must be HH:MM)", value)
+
+class IrrigationTextSetting(TextEntity):
+    def __init__(self, hass, store, irrigation_manager, key, name, unique_id, icon, default_value):
+        self.hass = hass
+        self.store = store
+        self.irrigation_manager = irrigation_manager
+        self._key = key
+        self._attr_name = name
+        self._attr_unique_id = unique_id
+        self._attr_icon = icon
+        self._default_value = default_value
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "irrigation_hub")},
+            name="SmartHome Bewässerung",
+            manufacturer="SmartHome Companion",
+            model="Bewässerungs-Steuerung",
+        )
+
+    @property
+    def native_value(self):
+        settings = self.store.data.get("irrigation", {})
+        val = settings.get(self._key, self._default_value)
+        if val is None or val == "":
+            return self._default_value
+        return str(val)
+
+    async def async_set_value(self, value: str) -> None:
+        """Set the text value."""
+        if "irrigation" not in self.store.data:
+            self.store.data["irrigation"] = {}
+        self.store.data["irrigation"][self._key] = value
+        await self.store.async_save(self.store.data)
+        if self.irrigation_manager:
+            await self.irrigation_manager.async_reload()
+        self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "smarthome_companion_irrigation_updated", self._handle_update
+            )
+        )
+
+    async def _handle_update(self, event):
+        self.async_write_ha_state()

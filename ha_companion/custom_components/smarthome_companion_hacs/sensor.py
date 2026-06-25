@@ -28,6 +28,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
             [
                 ConfiguredBlindsSensor(hass, store),
                 UnconfiguredBlindsSensor(hass, store),
+                ConfiguredIrrigationSensor(hass, store),
+                UnconfiguredIrrigationSensor(hass, store),
+                IrrigationMaxManualRuntimeSensor(hass, store),
+                IrrigationSimultaneousModeSensor(hass, store),
             ]
         )
 
@@ -66,6 +70,17 @@ async def async_setup_entry(hass, entry, async_add_entities):
     entry.async_on_unload(
         hass.bus.async_listen(
             "smarthome_companion_blinds_updated", add_blind_sensors
+        )
+    )
+
+    def update_irrigation_sensors(event=None):
+        for entity in entities:
+            if isinstance(entity, (ConfiguredIrrigationSensor, UnconfiguredIrrigationSensor, IrrigationMaxManualRuntimeSensor, IrrigationSimultaneousModeSensor)):
+                entity.async_write_ha_state()
+
+    entry.async_on_unload(
+        hass.bus.async_listen(
+            "smarthome_companion_irrigation_updated", update_irrigation_sensors
         )
     )
 
@@ -181,6 +196,164 @@ class UnconfiguredBlindsSensor(_BaseBlindsSensor):
                 for entity_id in unconfigured
             ],
         }
+
+
+class _BaseIrrigationSensor(SensorEntity):
+    def __init__(self, hass, store):
+        self.hass = hass
+        self.store = store
+
+    def _get_zones(self):
+        irrigation_data = self.store.get_irrigation()
+        if not irrigation_data:
+            return []
+        return irrigation_data.get("zones", [])
+
+    def _all_valve_entities(self):
+        return {state.entity_id for state in self.hass.states.async_all("valve")}
+
+    def _valve_label(self, entity_id):
+        state = self.hass.states.get(entity_id)
+        if state and state.attributes.get("friendly_name"):
+            name = state.attributes["friendly_name"]
+        else:
+            name = entity_id.split(".")[-1].replace("_", " ").title()
+        return name
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "smarthome_companion_irrigation_updated", self._handle_update
+            )
+        )
+
+    async def _handle_update(self, event):
+        self.async_write_ha_state()
+
+
+class ConfiguredIrrigationSensor(_BaseIrrigationSensor):
+    def __init__(self, hass, store):
+        super().__init__(hass, store)
+        self._attr_name = "Smarthome Companion eingerichtete Bewässerungszonen"
+        self._attr_unique_id = "smarthome_companion_configured_irrigation_zones"
+        self._attr_icon = "mdi:sprinkler-variant"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "irrigation_hub")},
+            name="SmartHome Bewässerung",
+            manufacturer="SmartHome Companion",
+            model="Bewässerungssystem",
+        )
+
+    @property
+    def native_value(self):
+        return len(self._get_zones())
+
+    @property
+    def extra_state_attributes(self):
+        zones = self._get_zones()
+        return {
+            "configured_count": len(zones),
+            "configured_zones": [
+                {
+                    "id": zone.get("id"),
+                    "name": zone.get("name"),
+                    "valve": zone.get("valve_entity_id"),
+                }
+                for zone in zones
+            ],
+        }
+
+
+class UnconfiguredIrrigationSensor(_BaseIrrigationSensor):
+    def __init__(self, hass, store):
+        super().__init__(hass, store)
+        self._attr_name = "Smarthome Companion nicht eingerichtete Ventile"
+        self._attr_unique_id = "smarthome_companion_unconfigured_irrigation_valves"
+        self._attr_icon = "mdi:valve-closed"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "irrigation_hub")},
+            name="SmartHome Bewässerung",
+            manufacturer="SmartHome Companion",
+            model="Bewässerungssystem",
+        )
+
+    @property
+    def native_value(self):
+        zones = self._get_zones()
+        configured_valves = {z.get("valve_entity_id") for z in zones if z.get("valve_entity_id")}
+        return len(self._all_valve_entities() - configured_valves)
+
+    @property
+    def extra_state_attributes(self):
+        zones = self._get_zones()
+        configured_valves = {z.get("valve_entity_id") for z in zones if z.get("valve_entity_id")}
+        all_valves = sorted(self._all_valve_entities())
+        unconfigured = [entity_id for entity_id in all_valves if entity_id not in configured_valves]
+        return {
+            "unconfigured_count": len(unconfigured),
+            "total_valve_entities": len(all_valves),
+            "unconfigured_valves": [
+                {
+                    "entity_id": entity_id,
+                    "name": self._valve_label(entity_id),
+                }
+                for entity_id in unconfigured
+            ],
+        }
+
+class IrrigationMaxManualRuntimeSensor(_BaseIrrigationSensor):
+    def __init__(self, hass, store):
+        super().__init__(hass, store)
+        self._attr_name = "Maximale manuelle Laufzeit"
+        self._attr_unique_id = "smarthome_companion_irrigation_max_manual_runtime"
+        self._attr_icon = "mdi:timer-sand"
+        self._attr_native_unit_of_measurement = "min"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "irrigation_hub")},
+            name="SmartHome Bewässerung",
+            manufacturer="SmartHome Companion",
+            model="Bewässerungssystem",
+        )
+
+    @property
+    def native_value(self):
+        irrigation_data = self.store.get_irrigation()
+        if not irrigation_data:
+            return 60
+        return irrigation_data.get("max_manual_runtime_minutes", 60)
+
+class IrrigationSimultaneousModeSensor(_BaseIrrigationSensor):
+    def __init__(self, hass, store):
+        super().__init__(hass, store)
+        self._attr_name = "Bewässerungsmodus (Gleichzeitig)"
+        self._attr_unique_id = "smarthome_companion_irrigation_simultaneous_mode"
+        self._attr_icon = "mdi:water-pump"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "irrigation_hub")},
+            name="SmartHome Bewässerung",
+            manufacturer="SmartHome Companion",
+            model="Bewässerungssystem",
+        )
+
+    @property
+    def native_value(self):
+        irrigation_data = self.store.get_irrigation()
+        if not irrigation_data:
+            return "Nacheinander"
+        return "Gleichzeitig" if irrigation_data.get("simultaneous", False) else "Nacheinander"
+
 
 
 class FassadeSunSensor(SensorEntity):

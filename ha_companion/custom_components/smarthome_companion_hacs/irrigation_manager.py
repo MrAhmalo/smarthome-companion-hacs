@@ -84,8 +84,8 @@ class IrrigationManager:
         self.config = self.store.get_irrigation()
         _LOGGER.debug("IrrigationManager reloaded config.")
 
-    async def async_manual_start(self, zone_id):
-        """Manually start a zone based on its configured duration."""
+    async def async_manual_start(self, zone_id, duration_minutes=None):
+        """Manually start a zone based on its configured or specified duration."""
         # Find zone
         zones = self.config.get("zones", [])
         zone = next((z for z in zones if z.get("id") == zone_id), None)
@@ -94,7 +94,14 @@ class IrrigationManager:
             return
 
         valve_entity = zone.get("valve_entity_id")
-        duration_minutes = zone.get("scheduled_duration_minutes", 30)
+        if duration_minutes is None:
+            # If no specific duration given, default to the max global runtime
+            duration_minutes = self.config.get("max_manual_runtime_minutes", 60)
+            
+        # Ensure it does not exceed the global max manual runtime
+        max_runtime = self.config.get("max_manual_runtime_minutes", 60)
+        if duration_minutes > max_runtime:
+            duration_minutes = max_runtime
 
         if not valve_entity:
             _LOGGER.warning(f"Zone {zone_id} has no valve entity configured.")
@@ -126,8 +133,16 @@ class IrrigationManager:
         if state:
             _LOGGER.info(f"Toggling ON zone {zone_id}.")
             await self._turn_on_valve(valve_entity)
-            # Optionally track it without an end time, or let HA handle it.
-            # We'll just turn it on.
+            
+            # Apply global max manual runtime as timeout
+            max_runtime = self.config.get("max_manual_runtime_minutes", 60)
+            self.running_zones[zone_id] = {
+                "start_time": dt_util.now(),
+                "duration": timedelta(minutes=max_runtime),
+                "valve_entity": valve_entity,
+                "soil_sensor_entity_id": zone.get("soil_sensor_entity_id"),
+                "target_moisture_percent": zone.get("target_moisture_percent", 100)
+            }
         else:
             _LOGGER.info(f"Toggling OFF zone {zone_id}.")
             await self._turn_off_valve(valve_entity)
