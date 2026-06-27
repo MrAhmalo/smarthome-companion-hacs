@@ -22,6 +22,7 @@ class BlindsManager:
         self._started_at = dt_util.now()
         self._last_holiday_update_hour = -1
         self._today_max_temp = None
+        self._today_max_temp_date = None
         self._last_weather_update_hour = -1
         
         if "states" not in self.store.data:
@@ -375,18 +376,47 @@ class BlindsManager:
             return
             
         try:
-            response = await self.hass.services.async_call(
-                "weather",
-                "get_forecasts",
-                {"entity_id": weather_entity, "type": "daily"},
-                blocking=True,
-                return_response=True,
-            )
+            response = None
+            try:
+                response = await self.hass.services.async_call(
+                    "weather",
+                    "get_forecasts",
+                    {"entity_id": weather_entity, "type": "daily"},
+                    blocking=True,
+                    return_response=True,
+                )
+            except Exception:
+                # Fallback zu hourly, falls daily nicht unterstützt wird
+                response = await self.hass.services.async_call(
+                    "weather",
+                    "get_forecasts",
+                    {"entity_id": weather_entity, "type": "hourly"},
+                    blocking=True,
+                    return_response=True,
+                )
+
             if response and weather_entity in response:
                 forecasts = response[weather_entity].get("forecast", [])
                 if forecasts:
-                    today_forecast = forecasts[0]
-                    self._today_max_temp = float(today_forecast.get("temperature", 0))
+                    today_temps = []
+                    for f in forecasts:
+                        dt_str = f.get("datetime")
+                        if dt_str:
+                            try:
+                                f_date = dt_util.parse_datetime(dt_str).date()
+                                if f_date == now.date():
+                                    # Hole die Temperatur, teste verschiedene mögliche Keys
+                                    for t_key in ["temperature", "max_temp", "native_temperature"]:
+                                        if t_key in f and f[t_key] is not None:
+                                            today_temps.append(float(f[t_key]))
+                                            break
+                            except Exception:
+                                pass
+                    
+                    if today_temps:
+                        self._today_max_temp = max(today_temps)
+                        self._today_max_temp_date = now.date()
+                        
                     self._last_weather_update_hour = now.hour
         except Exception as e:
             _LOGGER.warning("Could not fetch weather forecast for blinds heat protection: %s", e)
@@ -536,8 +566,8 @@ class BlindsManager:
                         is_morning_ventilation = config.get("enable_ventilation", False) and now.time() <= self._parse_time(config.get("ventilation_until"), time(10, 0))
                         is_opening = current_position > last_known
                         
-                        if is_morning_ventilation and is_opening and mem.get("ventilation_stopped_today") != now.date().isoformat():
-                            _LOGGER.info("Manual opening during morning ventilation detected for %s. Not setting manual override.", entity_id)
+                        if is_morning_ventilation and is_opening:
+                            _LOGGER.info("Manual opening during morning ventilation timeframe detected for %s. Not setting manual override.", entity_id)
                         else:
                             mem["manual_override_today"] = now.date().isoformat()
                             _LOGGER.info("Manual override detected for %s. Active for the rest of today", entity_id)
@@ -656,14 +686,32 @@ class BlindsManager:
                             action_type = "shading"
                             
                 # Hitzeschutz: Belüftung beibehalten statt komplett zu öffnen, wenn Temperatur-Vorhersage für heute zu hoch
-                if action_type == "open" and config.get("enable_heat_protection_ventilation", False):
+                if action_type in ["open", "shading"] and config.get("enable_heat_protection_ventilation", False):
                     threshold = float(self.store.data.get("_global_heat_protection_max_temp_threshold", 25.0))
                     heat_protection_triggered = mem.get("heat_protection_ventilation_triggered_today") == now.date().isoformat()
                     
-                    if heat_protection_triggered or (self._today_max_temp is not None and self._today_max_temp >= threshold):
+                    if heat_protection_triggered or (self._today_max_temp is not None and getattr(self, "_today_max_temp_date", None) == now.date() and self._today_max_temp >= threshold):
                         mem["heat_protection_ventilation_triggered_today"] = now.date().isoformat()
-                        target_position = int(config.get("ventilation_position", 59))
-                        action_type = "ventilation"
+                        
+                        # Neue Option: Nach dem Lüften später komplett schließen?
+                        close_enabled = self.store.data.get("_global_heat_protection_close_enabled", False)
+                        close_active = False
+                        if close_enabled:
+                            offset_minutes = int(self.store.data.get("_global_heat_protection_close_offset", 120))
+                            
+                            vent_until_time = self._parse_time(config.get("ventilation_until"), time(10, 0))
+                            vent_until_dt = datetime.combine(now.date(), vent_until_time, now.tzinfo)
+                            close_time_dt = vent_until_dt + timedelta(minutes=offset_minutes)
+                            
+                            if now >= close_time_dt:
+                                close_active = True
+                                
+                        if close_active:
+                            target_position = int(self.store.data.get("_global_heat_protection_close_position", 0))
+                            action_type = "heat_protection_close"
+                        elif action_type == "open":
+                            target_position = int(config.get("ventilation_position", 59))
+                            action_type = "ventilation"
                         
         # Transition and watchdog logs decoupling
         last_target_pos = mem.get("last_target_position")
@@ -675,12 +723,14 @@ class BlindsManager:
         if has_active_override:
             allow_bypass = False
             
-            # Exception 1: Scheduled opening and closing times
-            if is_transition and action_type in ["open", "close", "ventilation"]:
+            # Exception 1: Scheduled closing times
+            if is_transition and action_type in ["open", "close", "ventilation", "heat_protection_close"]:
                 if override_allow_scheduled:
-                    allow_bypass = True
-                    mem["manual_override_today"] = None
-                    _LOGGER.info("Bypassing manual override for scheduled action %s on %s", action_type, entity_id)
+                    # Only bypass manual overrides when the schedule says to close (night time or heat protection close).
+                    if action_type in ["close", "heat_protection_close"]:
+                        allow_bypass = True
+                        mem["manual_override_today"] = None
+                        _LOGGER.info("Bypassing manual override for scheduled close action on %s", entity_id)
                     
             # Exception 2: Shading activated or deactivated (transition to or from shading)
             elif is_transition and (action_type == "shading" or last_target_pos == int(config.get("shading_position", 30))):
