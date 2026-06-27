@@ -14,6 +14,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     sun_manager = hass.data[DOMAIN].get("sun_manager")
     store = hass.data[DOMAIN].get("store")
     blinds_manager = hass.data[DOMAIN].get("blinds_manager")
+    irrigation_manager = hass.data[DOMAIN].get("irrigation_manager")
     
     module = entry.data.get("module", "legacy")
 
@@ -79,12 +80,39 @@ async def async_setup_entry(hass, entry, async_add_entities):
             )
         )
 
+    added_irrigation_zones = set()
+
+    def add_irrigation_sensors(event=None):
+        if not store or not irrigation_manager:
+            return
+        irrigation_data = store.get_irrigation()
+        if not irrigation_data:
+            return
+        zones = irrigation_data.get("zones", [])
+        new_entities = []
+        for zone in zones:
+            zone_id = zone.get("id")
+            if not zone_id:
+                continue
+            if zone_id not in added_irrigation_zones:
+                new_entities.extend([
+                    IrrigationZoneLastWateredSensor(hass, store, irrigation_manager, zone_id),
+                    IrrigationZoneNextPlannedSensor(hass, store, irrigation_manager, zone_id),
+                    IrrigationZoneStatusSensor(hass, store, irrigation_manager, zone_id),
+                ])
+                added_irrigation_zones.add(zone_id)
+
+        if new_entities:
+            async_add_entities(new_entities)
+
     def update_irrigation_sensors(event=None):
+        add_irrigation_sensors()
         for entity in entities:
             if isinstance(entity, (ConfiguredIrrigationSensor, UnconfiguredIrrigationSensor, IrrigationMaxManualRuntimeSensor, IrrigationSimultaneousModeSensor)):
                 entity.async_write_ha_state()
 
     if module in ("irrigation", "legacy"):
+        add_irrigation_sensors()
         entry.async_on_unload(
             hass.bus.async_listen(
                 "smarthome_companion_irrigation_updated", update_irrigation_sensors
@@ -617,3 +645,174 @@ class BlindNextActionSensor(_BlindBaseSensor):
             "next_datetime": next_dt.isoformat(),
             "offset_minutes": offset,
         }
+
+class _IrrigationZoneBaseSensor(SensorEntity):
+    def __init__(self, hass, store, irrigation_manager, zone_id, sensor_type):
+        self.hass = hass
+        self.store = store
+        self.irrigation_manager = irrigation_manager
+        self._zone_id = zone_id
+        self._sensor_type = sensor_type
+
+    def _get_zone(self):
+        irrigation_data = self.store.get_irrigation()
+        if not irrigation_data: return None
+        for z in irrigation_data.get("zones", []):
+            if z.get("id") == self._zone_id:
+                return z
+        return None
+
+    @property
+    def available(self):
+        return self._get_zone() is not None
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        zone = self._get_zone()
+        name = zone.get("name", "Unbekannte Zone") if zone else "Bewässerungszone"
+        return DeviceInfo(
+            identifiers={(DOMAIN, f"irrigation_zone_{self._zone_id}")},
+            name=f"Bewässerung {name}",
+            manufacturer="SmartHome Companion",
+            model="Bewässerungskreis",
+            via_device=(DOMAIN, "irrigation_hub")
+        )
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "smarthome_companion_irrigation_updated", self._handle_update
+            )
+        )
+
+    async def _handle_update(self, event):
+        self.async_write_ha_state()
+
+class IrrigationZoneLastWateredSensor(_IrrigationZoneBaseSensor):
+    def __init__(self, hass, store, irrigation_manager, zone_id):
+        super().__init__(hass, store, irrigation_manager, zone_id, "last_watered")
+        self._attr_name = "Zuletzt bewässert"
+        self._attr_unique_id = f"smarthome_companion_sensor_irr_last_watered_{zone_id}"
+        self._attr_icon = "mdi:water-check"
+
+    @property
+    def native_value(self):
+        zone = self._get_zone()
+        if not zone or not zone.get("last_watered_at"):
+            return "Nie"
+        try:
+            dt = dt_util.parse_datetime(zone.get("last_watered_at"))
+            return dt.strftime("%d.%m.%Y %H:%M") if dt else "Nie"
+        except:
+            return "Nie"
+
+class IrrigationZoneNextPlannedSensor(_IrrigationZoneBaseSensor):
+    def __init__(self, hass, store, irrigation_manager, zone_id):
+        super().__init__(hass, store, irrigation_manager, zone_id, "next_planned")
+        self._attr_name = "Nächste geplante Prüfung"
+        self._attr_unique_id = f"smarthome_companion_sensor_irr_next_planned_{zone_id}"
+        self._attr_icon = "mdi:calendar-clock"
+
+    @property
+    def native_value(self):
+        zone = self._get_zone()
+        if not zone: return "Keine"
+        
+        now = dt_util.now()
+        time_str = zone.get("scheduled_time", "00:00")
+        try:
+            parts = time_str.split(":")
+            candidate = now.replace(hour=int(parts[0]), minute=int(parts[1]), second=0, microsecond=0)
+        except Exception:
+            return "Keine"
+            
+        if candidate < now:
+            candidate += timedelta(days=1)
+            
+        schedule = zone.get("weekday_schedule", [True]*7)
+        for i in range(14):
+            weekday = candidate.weekday()
+            heat_active = self.irrigation_manager.is_heat_override_today(zone) if hasattr(self.irrigation_manager, "is_heat_override_today") else False
+            
+            if (weekday < len(schedule) and schedule[weekday]) or heat_active:
+                if candidate.date() == now.date():
+                    return f"Heute {candidate.strftime('%H:%M')}"
+                elif candidate.date() == (now + timedelta(days=1)).date():
+                    return f"Morgen {candidate.strftime('%H:%M')}"
+                else:
+                    return candidate.strftime("%d.%m. %H:%M")
+            candidate += timedelta(days=1)
+            
+        return "Keine"
+
+    @property
+    def extra_state_attributes(self):
+        zone = self._get_zone()
+        if not zone: return {}
+        
+        now = dt_util.now()
+        time_str = zone.get("scheduled_time", "00:00")
+        try:
+            parts = time_str.split(":")
+            candidate = now.replace(hour=int(parts[0]), minute=int(parts[1]), second=0, microsecond=0)
+        except Exception:
+            return {}
+            
+        if candidate < now:
+            candidate += timedelta(days=1)
+            
+        schedule = zone.get("weekday_schedule", [True]*7)
+        extra_days = []
+        heat_active = self.irrigation_manager.is_heat_override_today(zone) if hasattr(self.irrigation_manager, "is_heat_override_today") else False
+        if heat_active:
+            extra_days.append(now.weekday())
+            
+        next_dt = None
+        for i in range(14):
+            weekday = candidate.weekday()
+            
+            if (weekday < len(schedule) and schedule[weekday]) or (candidate.date() == now.date() and heat_active):
+                if not next_dt:
+                    next_dt = candidate.isoformat()
+            candidate += timedelta(days=1)
+            
+        return {
+            "next_datetime": next_dt,
+            "extra_active_days": extra_days
+        }
+
+class IrrigationZoneStatusSensor(_IrrigationZoneBaseSensor):
+    def __init__(self, hass, store, irrigation_manager, zone_id):
+        super().__init__(hass, store, irrigation_manager, zone_id, "status")
+        self._attr_name = "Aktueller Status"
+        self._attr_unique_id = f"smarthome_companion_sensor_irr_status_{zone_id}"
+        self._attr_icon = "mdi:information-outline"
+
+    @property
+    def native_value(self):
+        zone = self._get_zone()
+        if not zone: return "Unbekannt"
+        
+        if zone.get("id") in self.irrigation_manager.running_zones:
+            return "Bewässert aktuell"
+            
+        heat_active = self.irrigation_manager.is_heat_override_today(zone) if hasattr(self.irrigation_manager, "is_heat_override_today") else False
+        if heat_active:
+            return "Hitze-Automatik aktiv"
+            
+        last_skip = zone.get("last_skipped_at")
+        last_run = zone.get("last_watered_at")
+        
+        if last_skip:
+            try:
+                dt_skip = dt_util.parse_datetime(last_skip)
+                dt_run = dt_util.parse_datetime(last_run) if last_run else None
+                if dt_run is None or dt_skip > dt_run:
+                    reason = zone.get("last_skipped_reason", "")
+                    return f"Pausiert ({reason})"
+            except:
+                pass
+                
+        return "Wartet"
+ 
+ 

@@ -15,6 +15,23 @@ class IrrigationManager:
         self.running_zones = {}
         self.sensor_history = {}
         self._timer_unsub = None
+        self._last_checked_date = None
+        self._heat_override_active_yesterday = False
+        self._heat_override_active_today = False
+
+    def is_heat_override_today(self, zone):
+        if not (zone.get("enableHeatOverride") or zone.get("enable_heat_override")):
+            return False
+            
+        time_str = zone.get("scheduled_time", "00:00")
+        try:
+            h = int(time_str.split(":")[0])
+        except:
+            h = 0
+            
+        if h < 12:
+            return self._heat_override_active_yesterday or self._heat_override_active_today
+        return self._heat_override_active_today
 
     def validate_config(self, config_dict):
         """Validate the irrigation configuration."""
@@ -259,6 +276,11 @@ class IrrigationManager:
                         pass
 
         # Fetch weather forecast for heat override
+        if self._last_checked_date != now.date():
+            self._heat_override_active_yesterday = self._heat_override_active_today
+            self._heat_override_active_today = False
+            self._last_checked_date = now.date()
+            
         heat_override_active = False
         any_heat_override = any(z.get("enableHeatOverride") or z.get("enable_heat_override") for z in self.config.get("zones", []))
         weather_entity = global_rain_sensor if global_rain_sensor and global_rain_sensor.startswith("weather.") else "weather.forecast_home"
@@ -283,6 +305,7 @@ class IrrigationManager:
                                 max_temp = float(f.get("temperature", 0))
                                 if max_temp > 30.0:
                                     heat_override_active = True
+                                    self._heat_override_active_today = True
                                 break
             except Exception as e:
                 _LOGGER.error(f"Failed to fetch weather forecast for heat override: {e}")
@@ -310,7 +333,7 @@ class IrrigationManager:
                 continue # Already running
             
             weekdays = zone.get("weekday_schedule", [False]*7)
-            is_heat_override = heat_override_active and (zone.get("enableHeatOverride") or zone.get("enable_heat_override"))
+            is_heat_override = self.is_heat_override_today(zone)
             
             # now.weekday() returns 0 for Monday, 6 for Sunday, which perfectly matches our UI array
             if not weekdays[now.weekday()] and not is_heat_override:
@@ -339,6 +362,7 @@ class IrrigationManager:
                 # Check Soil Moisture Override
                 soil_sensor = zone.get("soil_sensor_entity_id")
                 target_moisture = zone.get("target_moisture_percent", 100)
+                start_moisture = zone.get("start_moisture_percent", target_moisture - 5)
                 
                 moisture = None
                 if soil_sensor:
@@ -351,10 +375,10 @@ class IrrigationManager:
                 else:
                     moisture = zone.get("virtual_moisture_percent", 50.0)
                     
-                if moisture is not None and moisture >= target_moisture:
-                    _LOGGER.info(f"Skipping scheduled zone {name} due to soil/virtual moisture {moisture}% >= {target_moisture}%.")
+                if moisture is not None and moisture > start_moisture:
+                    _LOGGER.info(f"Skipping scheduled zone {name} due to soil/virtual moisture {moisture}% > start threshold {start_moisture}%.")
                     zone["last_skipped_at"] = now.isoformat()
-                    zone["last_skipped_reason"] = "Feucht genug"
+                    zone["last_skipped_reason"] = "Noch feucht genug"
                     config_changed = True
                     continue
                 
