@@ -16,6 +16,7 @@ def async_register_websockets(hass):
     websocket_api.async_register_command(hass, handle_cleanup_irrigation_config)
     websocket_api.async_register_command(hass, handle_irrigation_manual_start)
     websocket_api.async_register_command(hass, handle_irrigation_manual_toggle)
+    websocket_api.async_register_command(hass, handle_irrigation_force_check)
 
 @websocket_api.websocket_command({
     vol.Required("type"): "smarthome_companion/blinds/get",
@@ -152,4 +153,14 @@ async def handle_irrigation_manual_toggle(hass, connection, msg):
     if "irrigation_manager" in hass.data[DOMAIN]:
         irrigation_manager = hass.data[DOMAIN]["irrigation_manager"]
         await irrigation_manager.async_manual_toggle(msg["zone_id"], msg["state"])
+    connection.send_result(msg["id"], {"success": True})
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smarthome_companion/irrigation/force_check",
+})
+@websocket_api.async_response
+async def handle_irrigation_force_check(hass, connection, msg):
+    if "irrigation_manager" in hass.data[DOMAIN]:
+        irrigation_manager = hass.data[DOMAIN]["irrigation_manager"]
+        await irrigation_manager.async_force_check()
     connection.send_result(msg["id"], {"success": True})

@@ -778,7 +778,8 @@ class IrrigationZoneNextPlannedSensor(_IrrigationZoneBaseSensor):
             
         return {
             "next_datetime": next_dt,
-            "extra_active_days": extra_days
+            "extra_active_days": extra_days,
+            "last_forecast_temperature": getattr(self.irrigation_manager, "_last_forecast_temperature", None)
         }
 
 class IrrigationZoneStatusSensor(_IrrigationZoneBaseSensor):

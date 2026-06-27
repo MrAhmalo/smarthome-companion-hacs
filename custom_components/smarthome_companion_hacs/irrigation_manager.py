@@ -18,6 +18,7 @@ class IrrigationManager:
         self._last_checked_date = None
         self._heat_override_active_yesterday = False
         self._heat_override_active_today = False
+        self._last_forecast_temperature = None
 
     def is_heat_override_today(self, zone):
         if not (zone.get("enableHeatOverride") or zone.get("enable_heat_override")):
@@ -99,7 +100,12 @@ class IrrigationManager:
     async def async_reload(self):
         """Reload configuration from store."""
         self.config = self.store.get_irrigation()
-        _LOGGER.debug("IrrigationManager reloaded config.")
+        _LOGGER.info("Irrigation configuration reloaded.")
+        
+    async def async_force_check(self):
+        """Force an immediate check of the irrigation logic."""
+        _LOGGER.info("Forcing immediate irrigation check.")
+        await self._async_check_irrigation(dt_util.now())
 
     async def async_manual_start(self, zone_id, duration_minutes=None):
         """Manually start a zone based on its configured or specified duration."""
@@ -303,6 +309,7 @@ class IrrigationManager:
                             f_dt = dt_util.parse_datetime(dt_str)
                             if f_dt and f_dt.date() == now.date():
                                 max_temp = float(f.get("temperature", 0))
+                                self._last_forecast_temperature = max_temp
                                 threshold = self.config.get("heat_override_threshold", 30.0)
                                 if max_temp > threshold:
                                     heat_override_active = True
