@@ -814,5 +814,4 @@ class IrrigationZoneStatusSensor(_IrrigationZoneBaseSensor):
                 pass
                 
         return "Wartet"
- 
- 
+
