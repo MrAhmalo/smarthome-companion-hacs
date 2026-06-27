@@ -303,7 +303,8 @@ class IrrigationManager:
                             f_dt = dt_util.parse_datetime(dt_str)
                             if f_dt and f_dt.date() == now.date():
                                 max_temp = float(f.get("temperature", 0))
-                                if max_temp > 30.0:
+                                threshold = self.config.get("heat_override_threshold", 30.0)
+                                if max_temp > threshold:
                                     heat_override_active = True
                                     self._heat_override_active_today = True
                                 break
