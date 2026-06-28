@@ -266,7 +266,7 @@ class BlindsManager:
         except Exception as e:
             _LOGGER.warning("Could not instantly recalculate sun intensities: %s", e)
             
-        await self._update_tomorrow_holiday()
+        await self._update_holidays()
         await self._update_weather_forecast()
         
         # Will be called when new config comes from UI
