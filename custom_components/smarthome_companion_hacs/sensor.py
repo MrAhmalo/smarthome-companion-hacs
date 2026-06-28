@@ -25,6 +25,16 @@ async def async_setup_entry(hass, entry, async_add_entities):
             FassadeSunSensor(sun_manager, "ost", "Ost"),
             FassadeSunSensor(sun_manager, "sued", "Süd"),
             FassadeSunSensor(sun_manager, "west", "West"),
+            FassadeSunForecastSensor(sun_manager, "nord", "Nord"),
+            FassadeSunForecastSensor(sun_manager, "ost", "Ost"),
+            FassadeSunForecastSensor(sun_manager, "sued", "Süd"),
+            FassadeSunForecastSensor(sun_manager, "west", "West"),
+            FassadeSunForecastTomorrowSensor(sun_manager, "nord", "Nord"),
+            FassadeSunForecastTomorrowSensor(sun_manager, "ost", "Ost"),
+            FassadeSunForecastTomorrowSensor(sun_manager, "sued", "Süd"),
+            FassadeSunForecastTomorrowSensor(sun_manager, "west", "West"),
+            GlobalShadingNeededSensor(sun_manager),
+            GlobalShadingNeededTomorrowSensor(sun_manager),
         ])
         if store:
             entities.extend([
@@ -62,6 +72,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         BlindSunriseOpenTimeSensor(hass, store, blinds_manager, entity_id),
                         BlindSunsetCloseTimeSensor(hass, store, blinds_manager, entity_id),
                         BlindNextActionSensor(hass, store, blinds_manager, entity_id),
+                        BlindMorningBlockTodaySensor(hass, store, blinds_manager, entity_id),
+                        BlindMorningBlockTomorrowSensor(hass, store, blinds_manager, entity_id),
                     ]
                 )
                 added_blind_entities.add(entity_id)
@@ -423,6 +435,129 @@ class FassadeSunSensor(SensorEntity):
     async def _handle_update(self, event):
         self.async_write_ha_state()
 
+class FassadeSunForecastSensor(SensorEntity):
+    def __init__(self, sun_manager, direction_id, direction_name):
+        self.sun_manager = sun_manager
+        self._direction_id = direction_id
+        self._attr_name = f"Haus {direction_name} Helligkeit (Max Heute)"
+        self._attr_unique_id = f"smarthome_companion_sun_intensity_forecast_{direction_id}"
+        self._attr_native_unit_of_measurement = "W/m²"
+        self._attr_icon = "mdi:sun-wireless"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "hub")},
+            name="SmartHome Companion",
+            manufacturer="SmartHome Companion",
+            model="Hub & Einstellungen",
+        )
+
+    @property
+    def native_value(self):
+        return round(self.sun_manager.forecast_max_intensities.get(self._direction_id, 0), 1)
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "smarthome_companion_sun_updated", self._handle_update
+            )
+        )
+
+    async def _handle_update(self, event):
+        self.async_write_ha_state()
+
+class GlobalShadingNeededSensor(SensorEntity):
+    def __init__(self, sun_manager):
+        self.sun_manager = sun_manager
+        self._attr_name = "Beschattung heute erforderlich"
+        self._attr_unique_id = "smarthome_companion_global_shading_needed"
+        self._attr_icon = "mdi:shield-sun"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "hub")},
+            name="SmartHome Companion",
+            manufacturer="SmartHome Companion",
+            model="Hub & Einstellungen",
+        )
+
+    @property
+    def native_value(self):
+        return "Ja" if self.sun_manager.global_shading_needed else "Nein"
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "smarthome_companion_sun_updated", self._handle_update
+            )
+        )
+
+    async def _handle_update(self, event):
+        self.async_write_ha_state()
+
+class FassadeSunForecastTomorrowSensor(SensorEntity):
+    def __init__(self, sun_manager, direction_id, direction_name):
+        self.sun_manager = sun_manager
+        self._direction_id = direction_id
+        self._attr_name = f"Haus {direction_name} Helligkeit (Max Morgen)"
+        self._attr_unique_id = f"smarthome_companion_sun_intensity_forecast_tomorrow_{direction_id}"
+        self._attr_native_unit_of_measurement = "W/m²"
+        self._attr_icon = "mdi:sun-wireless"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "hub")},
+            name="SmartHome Companion",
+            manufacturer="SmartHome Companion",
+            model="Hub & Einstellungen",
+        )
+
+    @property
+    def native_value(self):
+        return round(self.sun_manager.forecast_max_intensities_tomorrow.get(self._direction_id, 0), 1)
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "smarthome_companion_sun_updated", self._handle_update
+            )
+        )
+
+    async def _handle_update(self, event):
+        self.async_write_ha_state()
+
+class GlobalShadingNeededTomorrowSensor(SensorEntity):
+    def __init__(self, sun_manager):
+        self.sun_manager = sun_manager
+        self._attr_name = "Beschattung morgen erforderlich"
+        self._attr_unique_id = "smarthome_companion_global_shading_needed_tomorrow"
+        self._attr_icon = "mdi:shield-sun"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "hub")},
+            name="SmartHome Companion",
+            manufacturer="SmartHome Companion",
+            model="Hub & Einstellungen",
+        )
+
+    @property
+    def native_value(self):
+        return "Ja" if self.sun_manager.global_shading_needed_tomorrow else "Nein"
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "smarthome_companion_sun_updated", self._handle_update
+            )
+        )
+
+    async def _handle_update(self, event):
+        self.async_write_ha_state()
 
 class _BlindBaseSensor(SensorEntity):
     def __init__(self, hass, store, blinds_manager, blind_id, sensor_type):
@@ -644,6 +779,114 @@ class BlindNextActionSensor(_BlindBaseSensor):
             "next_time": next_dt.strftime("%H:%M"),
             "next_datetime": next_dt.isoformat(),
             "offset_minutes": offset,
+        }
+
+class BlindMorningBlockTodaySensor(_BlindBaseSensor):
+    def __init__(self, hass, store, blinds_manager, blind_id):
+        super().__init__(hass, store, blinds_manager, blind_id, "morning_block_today")
+        self._attr_name = "Morgendliche Hitzesperre (Heute)"
+        self._attr_unique_id = f"smarthome_companion_sensor_morning_block_today_{blind_id}"
+        self._attr_icon = "mdi:shield-sun"
+
+    @property
+    def native_value(self):
+        config = self.store.get_blinds().get(self._blind_id)
+        if not config or not config.get("enable_morning_shading_block", True):
+            return "Deaktiviert"
+            
+        direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
+        card_dir = config.get("cardinal_direction", "sueden").lower()
+        if card_dir == "genau" or card_dir == "genaue angabe":
+            card_dir = "sueden"
+        direction = direction_map.get(card_dir, "sued")
+        
+        block_intensity = config.get("morning_shading_block_intensity")
+        if block_intensity is None:
+            block_intensity = float(self.store.data.get(f"_global_shading_block_open_intensity_{card_dir}", 800.0))
+        else:
+            block_intensity = float(block_intensity)
+            
+        sun_manager = self.hass.data[DOMAIN].get("sun_manager")
+        if not sun_manager: return "Unbekannt"
+        
+        forecast_peak = sun_manager.forecast_max_intensities.get(direction, 0.0)
+        return "Aktiv" if forecast_peak >= block_intensity else "Inaktiv"
+
+    @property
+    def extra_state_attributes(self):
+        config = self.store.get_blinds().get(self._blind_id)
+        if not config: return {}
+        direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
+        card_dir = config.get("cardinal_direction", "sueden").lower()
+        if card_dir == "genau" or card_dir == "genaue angabe": card_dir = "sueden"
+        direction = direction_map.get(card_dir, "sued")
+        block_intensity = config.get("morning_shading_block_intensity")
+        if block_intensity is None:
+            block_intensity = float(self.store.data.get(f"_global_shading_block_open_intensity_{card_dir}", 800.0))
+        else:
+            block_intensity = float(block_intensity)
+            
+        sun_manager = self.hass.data[DOMAIN].get("sun_manager")
+        forecast_peak = sun_manager.forecast_max_intensities.get(direction, 0.0) if sun_manager else 0.0
+        
+        return {
+            "threshold": block_intensity,
+            "forecast_peak": round(forecast_peak, 1),
+            "position_if_blocked": int(config.get("morning_shading_block_position", 0))
+        }
+
+class BlindMorningBlockTomorrowSensor(_BlindBaseSensor):
+    def __init__(self, hass, store, blinds_manager, blind_id):
+        super().__init__(hass, store, blinds_manager, blind_id, "morning_block_tomorrow")
+        self._attr_name = "Morgendliche Hitzesperre (Morgen)"
+        self._attr_unique_id = f"smarthome_companion_sensor_morning_block_tomorrow_{blind_id}"
+        self._attr_icon = "mdi:shield-sun-outline"
+
+    @property
+    def native_value(self):
+        config = self.store.get_blinds().get(self._blind_id)
+        if not config or not config.get("enable_morning_shading_block", True):
+            return "Deaktiviert"
+            
+        direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
+        card_dir = config.get("cardinal_direction", "sueden").lower()
+        if card_dir == "genau" or card_dir == "genaue angabe":
+            card_dir = "sueden"
+        direction = direction_map.get(card_dir, "sued")
+        
+        block_intensity = config.get("morning_shading_block_intensity")
+        if block_intensity is None:
+            block_intensity = float(self.store.data.get(f"_global_shading_block_open_intensity_{card_dir}", 800.0))
+        else:
+            block_intensity = float(block_intensity)
+            
+        sun_manager = self.hass.data[DOMAIN].get("sun_manager")
+        if not sun_manager: return "Unbekannt"
+        
+        forecast_peak = sun_manager.forecast_max_intensities_tomorrow.get(direction, 0.0)
+        return "Aktiv" if forecast_peak >= block_intensity else "Inaktiv"
+
+    @property
+    def extra_state_attributes(self):
+        config = self.store.get_blinds().get(self._blind_id)
+        if not config: return {}
+        direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
+        card_dir = config.get("cardinal_direction", "sueden").lower()
+        if card_dir == "genau" or card_dir == "genaue angabe": card_dir = "sueden"
+        direction = direction_map.get(card_dir, "sued")
+        block_intensity = config.get("morning_shading_block_intensity")
+        if block_intensity is None:
+            block_intensity = float(self.store.data.get(f"_global_shading_block_open_intensity_{card_dir}", 800.0))
+        else:
+            block_intensity = float(block_intensity)
+            
+        sun_manager = self.hass.data[DOMAIN].get("sun_manager")
+        forecast_peak = sun_manager.forecast_max_intensities_tomorrow.get(direction, 0.0) if sun_manager else 0.0
+        
+        return {
+            "threshold": block_intensity,
+            "forecast_peak": round(forecast_peak, 1),
+            "position_if_blocked": int(config.get("morning_shading_block_position", 0))
         }
 
 class _IrrigationZoneBaseSensor(SensorEntity):

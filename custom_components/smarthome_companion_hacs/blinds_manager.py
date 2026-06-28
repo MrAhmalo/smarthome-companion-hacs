@@ -644,46 +644,72 @@ class BlindsManager:
             target_position = 0
             action_type = "close"
         else:
-            # Lüftung Morgens
-            vent_until = self._parse_time(config.get("ventilation_until"), time(10, 0))
-            if config.get("enable_ventilation", False) and now.time() <= vent_until:
-                target_position = int(config.get("ventilation_position", 59))
-                action_type = "ventilation"
+            direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
+            card_dir = config.get("cardinal_direction", "sueden").lower()
+            if card_dir == "genau" or card_dir == "genaue angabe":
+                card_dir = "sueden"
+            direction = direction_map.get(card_dir, "sued")
+            
+            is_blocked = False
+            enable_morning_block = config.get("enable_morning_shading_block", True)
+            if enable_morning_block:
+                block_intensity = config.get("morning_shading_block_intensity")
+                if block_intensity is None:
+                    block_intensity = float(self.store.data.get(f"_global_shading_block_open_intensity_{card_dir}", 800.0))
+                else:
+                    block_intensity = float(block_intensity)
+                    
+                forecast_peak = self.sun_manager.forecast_max_intensities.get(direction, 0.0)
+                if forecast_peak >= block_intensity:
+                    is_blocked = True
+            
+            if is_blocked:
+                target_position = int(config.get("morning_shading_block_position", 0))
+                action_type = "morning_block"
             else:
-                # Beschattung mit globalem Außentemperatur-Check
-                if config.get("enable_shading", False):
-                    settings = self.store.data.get("settings", {})
-                    temp_sensor_id = settings.get("temp_sensor", "sensor.weather_temperature")
-                    shading_temp_threshold = float(settings.get("shading_temp_threshold", 23.0))
-                    
-                    current_temp = None
-                    temp_state = self.hass.states.get(temp_sensor_id)
-                    if temp_state:
-                        if temp_state.domain == "weather":
-                            try:
-                                current_temp = float(temp_state.attributes.get("temperature"))
-                            except (ValueError, TypeError):
-                                pass
-                        else:
-                            try:
-                                current_temp = float(temp_state.state)
-                            except (ValueError, TypeError):
-                                pass
-                    
-                    temp_allows_shading = True
-                    if current_temp is not None:
-                        if current_temp < shading_temp_threshold:
-                            temp_allows_shading = False
-                            
-                    if temp_allows_shading:
-                        direction = config.get("cardinal_direction", "sued").lower()
-                        sun_intensity = self.sun_manager.intensities.get(direction, 0.0)
-                        shading_int = float(config.get("shading_intensity_threshold", 600.0))
+                # Lüftung Morgens
+                vent_until = self._parse_time(config.get("ventilation_until"), time(10, 0))
+                if config.get("enable_ventilation", False) and now.time() <= vent_until:
+                    target_position = int(config.get("ventilation_position", 59))
+                    action_type = "ventilation"
+                else:
+                    # Beschattung mit globalem Außentemperatur-Check
+                    if config.get("enable_shading", False):
+                        settings = self.store.data.get("settings", {})
+                        temp_sensor_id = settings.get("temp_sensor", "sensor.weather_temperature")
+                        shading_temp_threshold = float(settings.get("shading_temp_threshold", 23.0))
                         
-                        if sun_intensity >= shading_int:
-                            shading_pos = int(config.get("shading_position", 30))
-                            target_position = shading_pos
-                            action_type = "shading"
+                        current_temp = None
+                        temp_state = self.hass.states.get(temp_sensor_id)
+                        if temp_state:
+                            if temp_state.domain == "weather":
+                                try:
+                                    current_temp = float(temp_state.attributes.get("temperature"))
+                                except (ValueError, TypeError):
+                                    pass
+                            else:
+                                try:
+                                    current_temp = float(temp_state.state)
+                                except (ValueError, TypeError):
+                                    pass
+                        
+                        temp_allows_shading = True
+                        if current_temp is not None:
+                            if current_temp < shading_temp_threshold:
+                                temp_allows_shading = False
+                                
+                        if temp_allows_shading:
+                            sun_intensity = self.sun_manager.intensities.get(direction, 0.0)
+                            shading_int = config.get("shading_intensity_threshold")
+                            if shading_int is None:
+                                shading_int = float(self.store.data.get(f"_global_shading_intensity_{card_dir}", 600.0))
+                            else:
+                                shading_int = float(shading_int)
+                            
+                            if sun_intensity >= shading_int:
+                                shading_pos = int(config.get("shading_position", 30))
+                                target_position = shading_pos
+                                action_type = "shading"
                             
                 # Hitzeschutz: Belüftung beibehalten statt komplett zu öffnen, wenn Temperatur-Vorhersage für heute zu hoch
                 if action_type in ["open", "shading"] and config.get("enable_heat_protection_ventilation", False):
@@ -694,22 +720,23 @@ class BlindsManager:
                         mem["heat_protection_ventilation_triggered_today"] = now.date().isoformat()
                         
                         # Neue Option: Nach dem Lüften später komplett schließen?
-                        close_enabled = self.store.data.get("_global_heat_protection_close_enabled", False)
-                        close_active = False
-                        if close_enabled:
-                            offset_minutes = int(self.store.data.get("_global_heat_protection_close_offset", 120))
-                            
-                            vent_until_time = self._parse_time(config.get("ventilation_until"), time(10, 0))
-                            vent_until_dt = datetime.combine(now.date(), vent_until_time, now.tzinfo)
-                            close_time_dt = vent_until_dt + timedelta(minutes=offset_minutes)
-                            
-                            if now >= close_time_dt:
-                                close_active = True
-                                
-                        if close_active:
-                            target_position = int(self.store.data.get("_global_heat_protection_close_position", 0))
-                            action_type = "heat_protection_close"
-                        elif action_type == "open":
+                        # close_enabled = self.store.data.get("_global_heat_protection_close_enabled", False)
+                        # close_active = False
+                        # if close_enabled:
+                        #     offset_minutes = int(self.store.data.get("_global_heat_protection_close_offset", 120))
+                        #     
+                        #     vent_until_time = self._parse_time(config.get("ventilation_until"), time(10, 0))
+                        #     vent_until_dt = datetime.combine(now.date(), vent_until_time, now.tzinfo)
+                        #     close_time_dt = vent_until_dt + timedelta(minutes=offset_minutes)
+                        #     
+                        #     if now >= close_time_dt:
+                        #         close_active = True
+                        #         
+                        # if close_active:
+                        #     target_position = int(self.store.data.get("_global_heat_protection_close_position", 0))
+                        #     action_type = "heat_protection_close"
+                        # elif action_type == "open":
+                        if action_type == "open":
                             target_position = int(config.get("ventilation_position", 59))
                             action_type = "ventilation"
                         
