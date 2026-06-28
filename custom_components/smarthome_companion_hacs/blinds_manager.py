@@ -519,23 +519,20 @@ class BlindsManager:
         # Retrieve manual override configurations (enable_manual_pause is removed and always True)
         enable_manual_pause = True
 
-        override_allow_scheduled = config.get("manual_override_allow_scheduled", True)
+        override_allow_scheduled = config.get("manual_override_allow_scheduled")
         if override_allow_scheduled is None:
-            override_allow_scheduled = True
-        else:
-            override_allow_scheduled = bool(override_allow_scheduled)
+            override_allow_scheduled = self.store.get_blinds().get("_global_manual_override_allow_scheduled", True)
+        override_allow_scheduled = bool(override_allow_scheduled)
 
-        override_allow_shading = config.get("manual_override_allow_shading", True)
+        override_allow_shading = config.get("manual_override_allow_shading")
         if override_allow_shading is None:
-            override_allow_shading = True
-        else:
-            override_allow_shading = bool(override_allow_shading)
+            override_allow_shading = self.store.get_blinds().get("_global_manual_override_allow_shading", True)
+        override_allow_shading = bool(override_allow_shading)
 
-        override_allow_watchdog = config.get("manual_override_allow_watchdog", True)
+        override_allow_watchdog = config.get("manual_override_allow_watchdog")
         if override_allow_watchdog is None:
-            override_allow_watchdog = True
-        else:
-            override_allow_watchdog = bool(override_allow_watchdog)
+            override_allow_watchdog = self.store.get_blinds().get("_global_manual_override_allow_watchdog", True)
+        override_allow_watchdog = bool(override_allow_watchdog)
 
         # Handle automatic transit timeout
         last_cmd_time_str = mem.get("last_command_time")
@@ -655,7 +652,7 @@ class BlindsManager:
             if enable_morning_block:
                 block_intensity = config.get("morning_shading_block_intensity")
                 if block_intensity is None:
-                    block_intensity = float(self.store.data.get(f"_global_shading_block_open_intensity_{card_dir}", 800.0))
+                    block_intensity = float(self.store.get_blinds().get(f"_global_shading_block_open_intensity_{card_dir}", 800.0))
                 else:
                     block_intensity = float(block_intensity)
                     
@@ -702,7 +699,7 @@ class BlindsManager:
                             sun_intensity = self.sun_manager.intensities.get(direction, 0.0)
                             shading_int = config.get("shading_intensity_threshold")
                             if shading_int is None:
-                                shading_int = float(self.store.data.get(f"_global_shading_intensity_{card_dir}", 600.0))
+                                shading_int = float(self.store.get_blinds().get(f"_global_shading_intensity_{card_dir}", 600.0))
                             else:
                                 shading_int = float(shading_int)
                             
@@ -713,7 +710,7 @@ class BlindsManager:
                             
                 # Hitzeschutz: Belüftung beibehalten statt komplett zu öffnen, wenn Temperatur-Vorhersage für heute zu hoch
                 if action_type in ["open", "shading"] and config.get("enable_heat_protection_ventilation", False):
-                    threshold = float(self.store.data.get("_global_heat_protection_max_temp_threshold", 25.0))
+                    threshold = float(self.store.get_blinds().get("_global_heat_protection_max_temp_threshold", 25.0))
                     heat_protection_triggered = mem.get("heat_protection_ventilation_triggered_today") == now.date().isoformat()
                     
                     if heat_protection_triggered or (self._today_max_temp is not None and getattr(self, "_today_max_temp_date", None) == now.date() and self._today_max_temp >= threshold):
