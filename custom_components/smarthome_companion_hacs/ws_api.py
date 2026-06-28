@@ -48,7 +48,10 @@ async def handle_save_settings(hass, connection, msg):
     
     # Notify manager to reload config and trigger state update
     blinds_manager = hass.data[DOMAIN]["blinds_manager"]
-    await blinds_manager.async_reload()
+    try:
+        await blinds_manager.async_reload()
+    except Exception as e:
+        _LOGGER.error("Error reloading blinds manager after settings save: %s", e, exc_info=True)
     
     connection.send_result(msg["id"], {"success": True})
 
@@ -63,7 +66,10 @@ async def handle_save_blinds_config(hass, connection, msg):
     
     # Notify manager to reload config
     blinds_manager = hass.data[DOMAIN]["blinds_manager"]
-    await blinds_manager.async_reload()
+    try:
+        await blinds_manager.async_reload()
+    except Exception as e:
+        _LOGGER.error("Error reloading blinds manager: %s", e, exc_info=True)
     
     connection.send_result(msg["id"], {"success": True})
 
