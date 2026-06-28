@@ -16,10 +16,22 @@ async def async_setup_entry(hass, entry, async_add_entities):
     module = entry.data.get("module", "legacy")
 
     if module in ("blinds", "legacy") and store and blinds_manager:
-        # Add global watchdog interval setting
-        async_add_entities([
-            WatchdogIntervalNumber(hass, store, blinds_manager)
-        ])
+        # Add global watchdog interval setting and global blinds settings
+        global_entities = [
+            WatchdogIntervalNumber(hass, store, blinds_manager),
+            _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_heat_protection_max_temp_threshold", "Hitzeschutz Vorhersage Schwelle", "smarthome_companion_global_heat_protection_max_temp_threshold", "mdi:thermometer-high", 15, 40, 0.5, "°C", 25.0),
+            
+            _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_intensity_norden", "Standard Sonnenintensität Norden", "smarthome_companion_global_shading_intensity_norden", "mdi:white-balance-sunny", 100, 1000, 10, "W/m²", 300.0),
+            _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_intensity_osten", "Standard Sonnenintensität Osten", "smarthome_companion_global_shading_intensity_osten", "mdi:white-balance-sunny", 100, 1000, 10, "W/m²", 300.0),
+            _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_intensity_sueden", "Standard Sonnenintensität Süden", "smarthome_companion_global_shading_intensity_sueden", "mdi:white-balance-sunny", 100, 1000, 10, "W/m²", 600.0),
+            _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_intensity_westen", "Standard Sonnenintensität Westen", "smarthome_companion_global_shading_intensity_westen", "mdi:white-balance-sunny", 100, 1000, 10, "W/m²", 600.0),
+
+            _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_block_open_intensity_norden", "Gar nicht erst öffnen ab Peak Norden", "smarthome_companion_global_shading_block_open_intensity_norden", "mdi:window-shutter-alert", 100, 1000, 10, "W/m²", 800.0),
+            _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_block_open_intensity_osten", "Gar nicht erst öffnen ab Peak Osten", "smarthome_companion_global_shading_block_open_intensity_osten", "mdi:window-shutter-alert", 100, 1000, 10, "W/m²", 800.0),
+            _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_block_open_intensity_sueden", "Gar nicht erst öffnen ab Peak Süden", "smarthome_companion_global_shading_block_open_intensity_sueden", "mdi:window-shutter-alert", 100, 1000, 10, "W/m²", 800.0),
+            _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_block_open_intensity_westen", "Gar nicht erst öffnen ab Peak Westen", "smarthome_companion_global_shading_block_open_intensity_westen", "mdi:window-shutter-alert", 100, 1000, 10, "W/m²", 800.0),
+        ]
+        async_add_entities(global_entities)
 
     added_blind_entities = set()
 
@@ -97,6 +109,62 @@ class WatchdogIntervalNumber(NumberEntity):
         await self.store.async_save(self.store.data)
         
         # Reload schedulers
+        await self.blinds_manager.async_reload()
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "smarthome_companion_blinds_updated", self._handle_update
+            )
+        )
+
+    async def _handle_update(self, event):
+        self.async_write_ha_state()
+
+
+class _GlobalBlindsSettingsNumber(NumberEntity):
+    def __init__(self, hass, store, blinds_manager, key, name, unique_id, icon, min_val, max_val, step, unit, default_value):
+        self.hass = hass
+        self.store = store
+        self.blinds_manager = blinds_manager
+        self._key = key
+        self._attr_name = name
+        self._attr_unique_id = unique_id
+        self._attr_icon = icon
+        self._attr_native_min_value = min_val
+        self._attr_native_max_value = max_val
+        self._attr_native_step = step
+        self._attr_native_unit_of_measurement = unit
+        self._attr_mode = "box"
+        self._default_value = default_value
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "hub")},
+            name="SmartHome Companion",
+            manufacturer="SmartHome Companion",
+            model="Hub & Einstellungen",
+        )
+
+    @property
+    def native_value(self):
+        blinds = self.store.get_blinds()
+        try:
+            val = blinds.get(self._key, self._default_value)
+            if val is None or val == "":
+                return self._default_value
+            return float(val)
+        except (ValueError, TypeError):
+            return self._default_value
+
+    async def async_set_native_value(self, value: float) -> None:
+        blinds = self.store.get_blinds()
+        if isinstance(self._default_value, int):
+            blinds[self._key] = int(value)
+        else:
+            blinds[self._key] = float(value)
+        await self.store.async_save(self.store.data)
         await self.blinds_manager.async_reload()
 
     async def async_added_to_hass(self):
