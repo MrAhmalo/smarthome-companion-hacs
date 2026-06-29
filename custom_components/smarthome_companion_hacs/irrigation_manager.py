@@ -14,8 +14,8 @@ class IrrigationManager:
         self.config = {}
         self.running_zones = {}
         self.sensor_history = {}
-        self._timer_unsub = None
         self._sensor_unsub = None
+        self._fast_timer_unsub = None
         self._last_checked_date = None
         self._heat_override_active_yesterday = False
         self._heat_override_active_today = False
@@ -92,12 +92,19 @@ class IrrigationManager:
         """Initial setup of the irrigation manager."""
         self.config = self.store.get_irrigation()
         
-        # Check every minute
         self._timer_unsub = async_track_time_interval(
             self.hass, self._async_check_irrigation, timedelta(minutes=1)
         )
+        self._fast_timer_unsub = async_track_time_interval(
+            self.hass, self._async_fast_update, timedelta(seconds=15)
+        )
         self._update_sensor_listeners()
         _LOGGER.info("IrrigationManager setup complete.")
+
+    async def _async_fast_update(self, now):
+        """Fast update loop for progress sensors."""
+        if self.running_zones:
+            self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
 
     async def async_reload(self):
         """Reload configuration from store."""
@@ -143,6 +150,9 @@ class IrrigationManager:
                     
         if zones_to_stop:
             await self._stop_zones(zones_to_stop)
+            
+        # Fire event so UI/sensors update with the new soil moisture immediately
+        self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
 
     async def _stop_zones(self, zones_to_stop):
         config_changed = False
@@ -158,6 +168,8 @@ class IrrigationManager:
         
         if config_changed:
             await self.store.save_irrigation(self.config)
+            
+        self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
         
     async def async_force_check(self):
         """Force an immediate check of the irrigation logic."""
@@ -199,6 +211,7 @@ class IrrigationManager:
             "target_moisture_percent": zone.get("target_moisture_percent", 100),
             "is_manual": True
         }
+        self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
 
     async def async_manual_toggle(self, zone_id, state):
         """Toggle a zone indefinitely."""
@@ -225,11 +238,13 @@ class IrrigationManager:
                 "target_moisture_percent": zone.get("target_moisture_percent", 100),
                 "is_manual": True
             }
+            self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
         else:
             _LOGGER.info(f"Toggling OFF zone {zone_id}.")
             await self._turn_off_valve(valve_entity)
             if zone_id in self.running_zones:
                 del self.running_zones[zone_id]
+            self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
 
     async def _async_check_irrigation(self, now):
         """Main loop that runs every minute to check schedules and turn off running zones."""
@@ -399,6 +414,9 @@ class IrrigationManager:
 
         if config_changed:
             await self.store.save_irrigation(self.config)
+            
+        if self.running_zones:
+            self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
 
     async def _turn_on_valve(self, entity_id):
         domain = entity_id.split(".")[0]

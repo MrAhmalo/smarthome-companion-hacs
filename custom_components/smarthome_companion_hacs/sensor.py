@@ -109,9 +109,13 @@ async def async_setup_entry(hass, entry, async_add_entities):
             if zone_id not in added_irrigation_zones:
                 new_entities.extend([
                     IrrigationZoneLastWateredSensor(hass, store, irrigation_manager, zone_id),
-                    IrrigationZoneNextPlannedSensor(hass, store, irrigation_manager, zone_id),
+                    IrrigationZoneNextRunSensor(hass, store, irrigation_manager, zone_id),
                     IrrigationZoneStatusSensor(hass, store, irrigation_manager, zone_id),
+                    IrrigationZoneDurationSensor(hass, store, irrigation_manager, zone_id),
+                    IrrigationZoneProgressSensor(hass, store, irrigation_manager, zone_id),
                 ])
+                if zone.get("soil_sensor_entity_id"):
+                    new_entities.append(IrrigationZoneTargetMoistureSensor(hass, store, irrigation_manager, zone_id))
                 added_irrigation_zones.add(zone_id)
 
         if new_entities:
@@ -949,10 +953,10 @@ class IrrigationZoneLastWateredSensor(_IrrigationZoneBaseSensor):
         except:
             return "Nie"
 
-class IrrigationZoneNextPlannedSensor(_IrrigationZoneBaseSensor):
+class IrrigationZoneNextRunSensor(_IrrigationZoneBaseSensor):
     def __init__(self, hass, store, irrigation_manager, zone_id):
         super().__init__(hass, store, irrigation_manager, zone_id, "next_planned")
-        self._attr_name = "Nächste geplante Prüfung"
+        self._attr_name = "Nächste Bewässerung"
         self._attr_unique_id = f"smarthome_companion_sensor_irr_next_planned_{zone_id}"
         self._attr_icon = "mdi:calendar-clock"
 
@@ -1059,3 +1063,61 @@ class IrrigationZoneStatusSensor(_IrrigationZoneBaseSensor):
                 
         return "Wartet"
 
+class IrrigationZoneDurationSensor(_IrrigationZoneBaseSensor):
+    def __init__(self, hass, store, irrigation_manager, zone_id):
+        super().__init__(hass, store, irrigation_manager, zone_id, "duration")
+        zone = self._get_zone()
+        if zone and zone.get("soil_sensor_entity_id"):
+            self._attr_name = "Maximale Länge"
+        else:
+            self._attr_name = "Eingestellte Zeit"
+        self._attr_unique_id = f"smarthome_companion_sensor_irr_duration_{zone_id}"
+        self._attr_icon = "mdi:timer-sand"
+        self._attr_native_unit_of_measurement = "min"
+
+    @property
+    def native_value(self):
+        zone = self._get_zone()
+        if not zone: return 0
+        return zone.get("scheduled_duration_minutes", 30)
+
+class IrrigationZoneTargetMoistureSensor(_IrrigationZoneBaseSensor):
+    def __init__(self, hass, store, irrigation_manager, zone_id):
+        super().__init__(hass, store, irrigation_manager, zone_id, "target_moisture")
+        self._attr_name = "Zielfeuchtigkeit"
+        self._attr_unique_id = f"smarthome_companion_sensor_irr_target_moisture_{zone_id}"
+        self._attr_icon = "mdi:water-percent"
+        self._attr_native_unit_of_measurement = "%"
+
+    @property
+    def native_value(self):
+        zone = self._get_zone()
+        if not zone: return 0
+        return zone.get("target_moisture_percent", 40.0)
+
+class IrrigationZoneProgressSensor(_IrrigationZoneBaseSensor):
+    def __init__(self, hass, store, irrigation_manager, zone_id):
+        super().__init__(hass, store, irrigation_manager, zone_id, "progress")
+        self._attr_name = "Fortschritt"
+        self._attr_unique_id = f"smarthome_companion_sensor_irr_progress_{zone_id}"
+        self._attr_icon = "mdi:progress-clock"
+        self._attr_native_unit_of_measurement = "%"
+
+    @property
+    def native_value(self):
+        if not self.irrigation_manager or self._zone_id not in self.irrigation_manager.running_zones:
+            return 0
+            
+        data = self.irrigation_manager.running_zones[self._zone_id]
+        start_time = data.get("start_time")
+        duration = data.get("duration")
+        
+        if not start_time or not duration or duration.total_seconds() == 0:
+            return 0
+            
+        now = dt_util.now()
+        elapsed = (now - start_time).total_seconds()
+        total = duration.total_seconds()
+        
+        progress = (elapsed / total) * 100
+        return round(max(0, min(100, progress)))
