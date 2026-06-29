@@ -563,7 +563,7 @@ class BlindsManager:
                         is_morning_ventilation = config.get("enable_ventilation", False) and now.time() <= self._parse_time(config.get("ventilation_until"), time(10, 0))
                         is_opening = current_position > last_known
                         
-                        if is_morning_ventilation and is_opening:
+                        if is_morning_ventilation and is_opening and mem.get("ventilation_stopped_today") != now.date().isoformat():
                             _LOGGER.info("Manual opening during morning ventilation timeframe detected for %s. Not setting manual override.", entity_id)
                         else:
                             mem["manual_override_today"] = now.date().isoformat()
@@ -586,7 +586,7 @@ class BlindsManager:
             elif last_known_pos is not None and current_position > last_known_pos:
                 is_opening_detected = True
                 
-            if is_opening_detected:
+            if is_opening_detected and current_position < ventilation_position:
                 mem["ventilation_initiated_today"] = now.date().isoformat()
                 self._add_trace(entity_id, "Lüftungsposition gesendet (Präventiv)", ventilation_position)
                 if mem.get("ventilation_logged_today") != now.date().isoformat():
@@ -737,6 +737,10 @@ class BlindsManager:
                             target_position = int(config.get("ventilation_position", 59))
                             action_type = "ventilation"
                         
+        # Prevent correcting downwards during morning/heat protection ventilation
+        if action_type == "ventilation" and current_position >= target_position:
+            target_position = current_position
+
         # Transition and watchdog logs decoupling
         last_target_pos = mem.get("last_target_position")
         mem["last_target_position"] = target_position
@@ -781,7 +785,13 @@ class BlindsManager:
                 return
 
         # Automatisierung und Watchdog
-        if abs(current_position - target_position) > 5:
+        settings = self.store.data.get("settings", {})
+        if action_type in ["open", "close"]:
+            position_threshold = 0
+        else:
+            position_threshold = int(settings.get("position_threshold", 5))
+
+        if abs(current_position - target_position) > position_threshold:
             # Wenn es eine reguläre scheduled Automation Transition ist
             if is_transition:
                 self._add_trace(entity_id, "Automation", target_position)

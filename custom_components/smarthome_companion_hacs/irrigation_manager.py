@@ -2,7 +2,7 @@ import logging
 import asyncio
 from datetime import timedelta
 import homeassistant.util.dt as dt_util
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_track_time_interval, async_track_state_change_event
 from homeassistant.components.weather import ATTR_FORECAST_PRECIPITATION_PROBABILITY
 
 _LOGGER = logging.getLogger(__name__)
@@ -15,6 +15,7 @@ class IrrigationManager:
         self.running_zones = {}
         self.sensor_history = {}
         self._timer_unsub = None
+        self._sensor_unsub = None
         self._last_checked_date = None
         self._heat_override_active_yesterday = False
         self._heat_override_active_today = False
@@ -95,12 +96,68 @@ class IrrigationManager:
         self._timer_unsub = async_track_time_interval(
             self.hass, self._async_check_irrigation, timedelta(minutes=1)
         )
+        self._update_sensor_listeners()
         _LOGGER.info("IrrigationManager setup complete.")
 
     async def async_reload(self):
         """Reload configuration from store."""
         self.config = self.store.get_irrigation()
+        self._update_sensor_listeners()
         _LOGGER.info("Irrigation configuration reloaded.")
+
+    def _update_sensor_listeners(self):
+        if self._sensor_unsub:
+            self._sensor_unsub()
+            self._sensor_unsub = None
+
+        sensor_ids = set()
+        for zone in self.config.get("zones", []):
+            sensor_id = zone.get("soil_sensor_entity_id")
+            if sensor_id:
+                sensor_ids.add(sensor_id)
+
+        if sensor_ids:
+            self._sensor_unsub = async_track_state_change_event(
+                self.hass, list(sensor_ids), self._async_sensor_changed
+            )
+
+    async def _async_sensor_changed(self, event):
+        """Handle soil sensor state changes."""
+        entity_id = event.data.get("entity_id")
+        new_state = event.data.get("new_state")
+        
+        if not new_state:
+            return
+            
+        try:
+            moisture = float(new_state.state)
+        except ValueError:
+            return
+            
+        zones_to_stop = []
+        for zone_id, data in self.running_zones.items():
+            if data.get("soil_sensor_entity_id") == entity_id and not data.get("is_manual", False):
+                target = data.get("target_moisture_percent", 100)
+                if moisture >= target:
+                    zones_to_stop.append((zone_id, "Ziel-Feuchtigkeit erreicht"))
+                    
+        if zones_to_stop:
+            await self._stop_zones(zones_to_stop)
+
+    async def _stop_zones(self, zones_to_stop):
+        config_changed = False
+        for zone_id, reason in zones_to_stop:
+            if zone_id not in self.running_zones:
+                continue
+            valve = self.running_zones[zone_id]["valve_entity"]
+            _LOGGER.info(f"Zone {zone_id} stopped. Reason: {reason}.")
+            await self._turn_off_valve(valve)
+            del self.running_zones[zone_id]
+            
+            # Update last_watered_at etc could be done here if needed
+        
+        if config_changed:
+            await self.store.save_irrigation(self.config)
         
     async def async_force_check(self):
         """Force an immediate check of the irrigation logic."""
@@ -176,6 +233,8 @@ class IrrigationManager:
 
     async def _async_check_irrigation(self, now):
         """Main loop that runs every minute to check schedules and turn off running zones."""
+        now = dt_util.as_local(now) # Fix timezone issue (UTC vs Local)
+        
         # 1. Check running zones
         zones_to_stop = []
         for zone_id, data in self.running_zones.items():
@@ -184,82 +243,14 @@ class IrrigationManager:
             
             if elapsed >= data["duration"]:
                 stop_reason = "Zeit abgelaufen (Timeout)"
-                
-            soil_sensor = data.get("soil_sensor_entity_id")
-            if not stop_reason and soil_sensor and not data.get("is_manual", False):
-                s_state = self.hass.states.get(soil_sensor)
-                if s_state:
-                    try:
-                        moisture = float(s_state.state)
-                        target = data.get("target_moisture_percent", 100)
-                        if moisture >= target:
-                            stop_reason = "Ziel-Feuchtigkeit erreicht"
-                    except ValueError:
-                        pass
                         
             if stop_reason:
                 zones_to_stop.append((zone_id, stop_reason))
         
+        if zones_to_stop:
+            await self._stop_zones(zones_to_stop)
+        
         config_changed = False
-        
-        for zone_id, reason in zones_to_stop:
-            valve = self.running_zones[zone_id]["valve_entity"]
-            _LOGGER.info(f"Zone {zone_id} stopped. Reason: {reason}.")
-            await self._turn_off_valve(valve)
-            
-            # Virtual zone update
-            zones = self.config.get("zones", [])
-            z = next((z for z in zones if z.get("id") == zone_id), None)
-            if z and not z.get("soil_sensor_entity_id"):
-                z["virtual_moisture_percent"] = z.get("target_moisture_percent", 100.0)
-                config_changed = True
-                
-            del self.running_zones[zone_id]
-
-        # Smart Algorithm: Virtual Moisture & Precipitation Detection
-        current_sensor_values = {}
-        for zone in self.config.get("zones", []):
-            sensor_id = zone.get("soil_sensor_entity_id")
-            if sensor_id:
-                state = self.hass.states.get(sensor_id)
-                if state:
-                    try:
-                        current_sensor_values[sensor_id] = float(state.state)
-                    except ValueError:
-                        pass
-                        
-        global_delta_m = 0.0
-        
-        for sensor_id, current_val in current_sensor_values.items():
-            prev_val = self.sensor_history.get(sensor_id)
-            if prev_val is not None:
-                delta = current_val - prev_val
-                is_watering = False
-                for z_id, r_data in self.running_zones.items():
-                    if r_data.get("soil_sensor_entity_id") == sensor_id:
-                        is_watering = True
-                        break
-                        
-                if not is_watering and delta > 0:
-                    global_delta_m = max(global_delta_m, delta)
-                    
-            self.sensor_history[sensor_id] = current_val
-
-        # Update virtual zones
-        for zone in self.config.get("zones", []):
-            if not zone.get("soil_sensor_entity_id"):
-                current_virt = zone.get("virtual_moisture_percent", 50.0)
-                new_virt = current_virt
-                if global_delta_m > 0:
-                    new_virt = min(100.0, new_virt + global_delta_m)
-                # Virtual evaporation (e.g. lose 1% every 2 hours -> ~0.0083% per min)
-                new_virt = max(0.0, new_virt - 0.0083)
-                
-                if abs(new_virt - current_virt) > 0.001:
-                    zone["virtual_moisture_percent"] = new_virt
-                    # Only save if we crossed a whole percentage point to avoid DB spam
-                    if int(new_virt) != int(current_virt):
-                        config_changed = True
 
         # 2. Check schedules for zones that should start
         if not self.config.get("zones"):
@@ -380,11 +371,9 @@ class IrrigationManager:
                             moisture = float(s_state.state)
                         except ValueError:
                             pass
-                else:
-                    moisture = zone.get("virtual_moisture_percent", 50.0)
-                    
-                if moisture is not None and moisture > start_moisture:
-                    _LOGGER.info(f"Skipping scheduled zone {name} due to soil/virtual moisture {moisture}% > start threshold {start_moisture}%.")
+                            
+                if moisture is not None and moisture >= start_moisture:
+                    _LOGGER.info(f"Skipping scheduled zone {name} due to soil moisture {moisture}% >= start threshold {start_moisture}%.")
                     zone["last_skipped_at"] = now.isoformat()
                     zone["last_skipped_reason"] = "Noch feucht genug"
                     config_changed = True

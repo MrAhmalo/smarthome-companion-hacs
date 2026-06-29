@@ -19,6 +19,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         # Add global watchdog interval setting and global blinds settings
         global_entities = [
             WatchdogIntervalNumber(hass, store, blinds_manager),
+            BlindsPositionThresholdNumber(hass, store, blinds_manager),
             _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_heat_protection_max_temp_threshold", "Hitzeschutz Vorhersage Schwelle", "smarthome_companion_global_heat_protection_max_temp_threshold", "mdi:thermometer-high", 15, 40, 0.5, "°C", 25.0),
             
             _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_intensity_norden", "Standard Sonnenintensität Norden", "smarthome_companion_global_shading_intensity_norden", "mdi:white-balance-sunny", 100, 1000, 10, "W/m²", 300.0),
@@ -109,6 +110,59 @@ class WatchdogIntervalNumber(NumberEntity):
         await self.store.async_save(self.store.data)
         
         # Reload schedulers
+        await self.blinds_manager.async_reload()
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "smarthome_companion_blinds_updated", self._handle_update
+            )
+        )
+
+    async def _handle_update(self, event):
+        self.async_write_ha_state()
+
+
+class BlindsPositionThresholdNumber(NumberEntity):
+    def __init__(self, hass, store, blinds_manager):
+        self.hass = hass
+        self.store = store
+        self.blinds_manager = blinds_manager
+        self._attr_name = "SmartHome Companion Positions-Schwellenwert"
+        self._attr_unique_id = "smarthome_companion_number_position_threshold"
+        self._attr_icon = "mdi:angle-acute"
+        self._attr_native_min_value = 0
+        self._attr_native_max_value = 25
+        self._attr_native_step = 1
+        self._attr_native_unit_of_measurement = "%"
+        self._attr_mode = "box"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "hub")},
+            name="SmartHome Companion",
+            manufacturer="SmartHome Companion",
+            model="Hub & Einstellungen",
+        )
+
+    @property
+    def native_value(self):
+        settings = self.store.data.get("settings", {})
+        return int(settings.get("position_threshold", 5))
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Update settings with new value."""
+        _LOGGER.info("Updating blinds position threshold to %s percent", int(value))
+        
+        # Ensure 'settings' exists
+        if "settings" not in self.store.data:
+            self.store.data["settings"] = {}
+        
+        self.store.data["settings"]["position_threshold"] = int(value)
+        await self.store.async_save(self.store.data)
+        
+        # Reload blinds manager
         await self.blinds_manager.async_reload()
 
     async def async_added_to_hass(self):
