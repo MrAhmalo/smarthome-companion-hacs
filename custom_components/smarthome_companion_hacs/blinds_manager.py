@@ -258,6 +258,12 @@ class BlindsManager:
 
     async def async_reload(self):
         _LOGGER.info("Blinds Manager reloading config...")
+        
+        # Re-sync _states reference in case store.data was replaced
+        if "states" not in self.store.data:
+            self.store.data["states"] = {}
+        self._states = self.store.data["states"]
+        
         await self._async_setup_schedulers()
         
         # Trigger immediate sun manager update in case cloud sensor updated
@@ -447,6 +453,10 @@ class BlindsManager:
         if entity_id in blinds:
             # We evaluate on cover state changes to instantly intercept ventilation positioning
             await self._evaluate_blind(entity_id, blinds[entity_id], is_watchdog_check=False, is_state_change=True)
+            try:
+                await self.store.async_save()
+            except Exception as e:
+                _LOGGER.error("Error saving store after state change for %s: %s", entity_id, e)
 
     async def _evaluate_all(self, is_watchdog_check=False, force_correction=False):
         blinds = self.store.get_blinds()
@@ -454,6 +464,12 @@ class BlindsManager:
             if not entity_id.startswith("cover."):
                 continue
             await self._evaluate_blind(entity_id, config, is_watchdog_check, force_correction=force_correction)
+        
+        # Save states once after evaluating all blinds (not per-blind)
+        try:
+            await self.store.async_save()
+        except Exception as e:
+            _LOGGER.error("Error saving store data after evaluate_all: %s", e)
 
     async def _evaluate_blind(self, entity_id, config, is_watchdog_check=False, is_state_change=False, force_correction=False):
         """
@@ -781,7 +797,6 @@ class BlindsManager:
 
             if not allow_bypass:
                 # Manual override blocks automation changes
-                await self.store.async_save(self.store.data)
                 return
 
         # Automatisierung und Watchdog
@@ -812,4 +827,4 @@ class BlindsManager:
             # Watchdog successfully verifying correct state (no log trace)
             pass
 
-        await self.store.async_save(self.store.data)
+        # States are saved once in _evaluate_all after all blinds are processed

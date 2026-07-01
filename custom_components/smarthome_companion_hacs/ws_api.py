@@ -61,6 +61,7 @@ async def handle_save_settings(hass, connection, msg):
 })
 @websocket_api.async_response
 async def handle_save_blinds_config(hass, connection, msg):
+    _LOGGER.info(f"Received blinds config save request: {msg['blinds']}")
     store = hass.data[DOMAIN]["store"]
     await store.save_blinds(msg["blinds"])
     

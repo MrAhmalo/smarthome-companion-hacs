@@ -246,188 +246,252 @@ class IrrigationManager:
                 del self.running_zones[zone_id]
             self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
 
+    def _is_raining(self):
+        """Check the global rain sensor. Returns True if rain is detected."""
+        global_rain_sensor = self.config.get("global_rain_sensor")
+        if not global_rain_sensor:
+            return False
+        state = self.hass.states.get(global_rain_sensor)
+        if not state:
+            return False
+        if state.domain == "binary_sensor":
+            return state.state == "on"
+        try:
+            prob = float(state.state)
+            return prob > 50
+        except (ValueError, TypeError):
+            pass
+        # Weather entity state strings
+        rainy_conditions = {"rainy", "pouring", "lightning-rainy", "snowy-rainy"}
+        return state.state.lower() in rainy_conditions
+
+    async def _fetch_daily_max_temp(self, now):
+        """Fetch today's forecast max temperature. Returns float or None."""
+        # 1. Check custom temp sensor
+        temp_sensor = self.config.get("global_temp_sensor")
+        if temp_sensor and not temp_sensor.startswith("weather."):
+            state = self.hass.states.get(temp_sensor)
+            if state:
+                try:
+                    temp = float(state.state)
+                    self._last_forecast_temperature = temp
+                    return temp
+                except ValueError:
+                    pass
+            # If temp_sensor is configured but invalid, fallback to weather
+            
+        global_rain_sensor = self.config.get("global_rain_sensor", "")
+        weather_entity = (
+            temp_sensor if temp_sensor and temp_sensor.startswith("weather.")
+            else global_rain_sensor if global_rain_sensor.startswith("weather.")
+            else "weather.forecast_home"
+        )
+        try:
+            response = await self.hass.services.async_call(
+                "weather",
+                "get_forecasts",
+                {"entity_id": weather_entity, "type": "daily"},
+                blocking=True,
+                return_response=True,
+            )
+            if response and weather_entity in response:
+                forecasts = response[weather_entity].get("forecast", [])
+                for f in forecasts:
+                    dt_str = f.get("datetime")
+                    if dt_str:
+                        f_dt = dt_util.parse_datetime(dt_str)
+                        if f_dt and dt_util.as_local(f_dt).date() == now.date():
+                            temp = float(f.get("temperature", 0))
+                            self._last_forecast_temperature = temp
+                            return temp
+        except Exception as e:
+            _LOGGER.warning(f"Could not fetch weather forecast: {e}")
+        return None
+
     async def _async_check_irrigation(self, now):
-        """Main loop that runs every minute to check schedules and turn off running zones."""
-        now = dt_util.as_local(now) # Fix timezone issue (UTC vs Local)
-        
-        # 1. Check running zones
+        """Main loop every minute: check timeouts, then start zones if conditions are met."""
+        now = dt_util.as_local(now)
+
+        # ── 1. Stop zones that timed out ─────────────────────────────────────
         zones_to_stop = []
         for zone_id, data in self.running_zones.items():
-            elapsed = now - data["start_time"]
-            stop_reason = None
-            
-            if elapsed >= data["duration"]:
-                stop_reason = "Zeit abgelaufen (Timeout)"
-                        
-            if stop_reason:
-                zones_to_stop.append((zone_id, stop_reason))
-        
+            if now - data["start_time"] >= data["duration"]:
+                zones_to_stop.append((zone_id, "Maximale Laufzeit erreicht"))
         if zones_to_stop:
             await self._stop_zones(zones_to_stop)
-        
-        config_changed = False
 
-        # 2. Check schedules for zones that should start
         if not self.config.get("zones"):
             return
 
-        # Check rain forecast logic (simplified)
-        global_rain_sensor = self.config.get("global_rain_sensor")
-        is_raining_or_forecast = False
-        if global_rain_sensor:
-            state = self.hass.states.get(global_rain_sensor)
-            if state:
-                if state.domain == "binary_sensor" and state.state == "on":
-                    is_raining_or_forecast = True
-                else:
-                    try:
-                        prob = float(state.state)
-                        if prob > 50: # Threshold could be configurable
-                            is_raining_or_forecast = True
-                    except ValueError:
-                        pass
-
-        # Fetch weather forecast for heat override
+        # ── 2. Once-per-day: fetch heat override temperature ─────────────────
         if self._last_checked_date != now.date():
             self._heat_override_active_yesterday = self._heat_override_active_today
             self._heat_override_active_today = False
             self._last_checked_date = now.date()
-            
-        heat_override_active = False
-        any_heat_override = any(z.get("enableHeatOverride") or z.get("enable_heat_override") for z in self.config.get("zones", []))
-        weather_entity = global_rain_sensor if global_rain_sensor and global_rain_sensor.startswith("weather.") else "weather.forecast_home"
-        
-        if any_heat_override:
-            try:
-                # Need to use return_response=True for modern HA service calls
-                response = await self.hass.services.async_call(
-                    "weather",
-                    "get_forecasts",
-                    {"entity_id": weather_entity, "type": "daily"},
-                    blocking=True,
-                    return_response=True
-                )
-                if response and weather_entity in response:
-                    forecasts = response[weather_entity].get("forecast", [])
-                    for f in forecasts:
-                        dt_str = f.get("datetime")
-                        if dt_str:
-                            f_dt = dt_util.parse_datetime(dt_str)
-                            if f_dt and f_dt.date() == now.date():
-                                max_temp = float(f.get("temperature", 0))
-                                self._last_forecast_temperature = max_temp
-                                threshold = self.config.get("heat_override_threshold", 30.0)
-                                if max_temp > threshold:
-                                    heat_override_active = True
-                                    self._heat_override_active_today = True
-                                break
-            except Exception as e:
-                _LOGGER.error(f"Failed to fetch weather forecast for heat override: {e}")
 
-        # We will iterate and check if it's time to run
+            any_heat = any(
+                z.get("enable_heat_override") for z in self.config.get("zones", [])
+            )
+            if any_heat:
+                temp = await self._fetch_daily_max_temp(now)
+                if temp is not None:
+                    threshold = float(self.config.get("heat_override_threshold", 30.0))
+                    if temp > threshold:
+                        self._heat_override_active_today = True
+                        _LOGGER.info(f"Heat override ACTIVE: {temp}°C > {threshold}°C")
+
+        # ── 3. Global rain check ─────────────────────────────────────────────
+        is_raining = self._is_raining()
+
+        # ── 4. Per-zone logic ────────────────────────────────────────────────
+        config_changed = False
+
         for zone in self.config.get("zones", []):
             zone_id = zone.get("id")
             valve_entity = zone.get("valve_entity_id")
-            
-            # Detect manual turn on outside of the automation
+            name = zone.get("name", zone_id)
+
+            # Detect externally-toggled manual run
             if valve_entity and zone_id not in self.running_zones:
                 valve_state = self.hass.states.get(valve_entity)
                 if valve_state and valve_state.state == "on":
-                    _LOGGER.info(f"Detected manual turn on for {zone.get('name')}. Tracking it now.")
+                    _LOGGER.info(f"Detected external manual turn-on for '{name}'.")
                     max_runtime = self.config.get("max_manual_runtime_minutes", 60)
                     self.running_zones[zone_id] = {
                         "start_time": now,
                         "duration": timedelta(minutes=max_runtime),
                         "valve_entity": valve_entity,
                         "soil_sensor_entity_id": zone.get("soil_sensor_entity_id"),
-                        "target_moisture_percent": zone.get("target_moisture_percent", 100)
+                        "target_moisture_percent": zone.get("target_moisture_percent", 100),
+                        "is_manual": True,
                     }
 
             if zone_id in self.running_zones:
-                continue # Already running
-            
-            weekdays = zone.get("weekday_schedule", [False]*7)
-            is_heat_override = self.is_heat_override_today(zone)
-            
-            # now.weekday() returns 0 for Monday, 6 for Sunday, which perfectly matches our UI array
-            if not weekdays[now.weekday()] and not is_heat_override:
                 continue
-                
+
+            # Check if it's the scheduled time
             time_str = zone.get("scheduled_time", "00:00")
             try:
                 parts = time_str.split(":")
-                sched_h = int(parts[0])
-                sched_m = int(parts[1])
+                sched_h, sched_m = int(parts[0]), int(parts[1])
             except Exception:
                 continue
-                
-            if now.hour == sched_h and now.minute == sched_m:
-                # It's time to run!
-                name = zone.get("name", "Unknown")
-                
-                # Check Global Rain Override
-                if is_raining_or_forecast:
-                    _LOGGER.info(f"Skipping scheduled zone {name} due to global rain sensor.")
-                    zone["last_skipped_at"] = now.isoformat()
-                    zone["last_skipped_reason"] = "Regen"
-                    config_changed = True
-                    continue
-                    
-                # Check Soil Moisture Override
-                soil_sensor = zone.get("soil_sensor_entity_id")
-                target_moisture = zone.get("target_moisture_percent", 100)
-                start_moisture = zone.get("start_moisture_percent", target_moisture - 5)
-                
+
+            if now.hour != sched_h or now.minute != sched_m:
+                continue
+
+            # ── Rain pre-check (both modes) ───────────────────────────────────
+            if is_raining:
+                _LOGGER.info(f"Skipping '{name}': rain detected.")
+                zone["last_skipped_at"] = now.isoformat()
+                zone["last_skipped_reason"] = "Regen"
+                config_changed = True
+                continue
+
+            # ── Determine heat override for this zone ─────────────────────────
+            enable_heat = zone.get("enable_heat_override", False)
+            heat_override = enable_heat and self.is_heat_override_today(zone)
+
+            soil_sensor = zone.get("soil_sensor_entity_id")
+            has_sensor = bool(soil_sensor)
+
+            if has_sensor:
+                # ════ SMART MODE ═════════════════════════════════════════════
+                min_rest_days = int(zone.get("min_rest_days", 2))
+
+                # Check minimum rest days (heat override bypasses this)
+                last_watered_str = zone.get("last_watered_at")
+                if last_watered_str and not heat_override:
+                    try:
+                        lw = dt_util.parse_datetime(last_watered_str)
+                        if lw:
+                            days_since = (now.date() - dt_util.as_local(lw).date()).days
+                            if days_since < min_rest_days:
+                                _LOGGER.debug(
+                                    f"Skipping '{name}': only {days_since}d since last water "
+                                    f"(min rest: {min_rest_days}d)."
+                                )
+                                zone["last_skipped_at"] = now.isoformat()
+                                zone["last_skipped_reason"] = "Mindestpause"
+                                config_changed = True
+                                continue
+                    except Exception:
+                        pass
+
+                # Check soil moisture
+                start_threshold = float(zone.get("start_moisture_percent", 35))
                 moisture = None
-                if soil_sensor:
-                    s_state = self.hass.states.get(soil_sensor)
-                    if s_state:
-                        try:
-                            moisture = float(s_state.state)
-                        except ValueError:
-                            pass
-                            
-                if moisture is not None and moisture >= start_moisture:
-                    _LOGGER.info(f"Skipping scheduled zone {name} due to soil moisture {moisture}% >= start threshold {start_moisture}%.")
+                s_state = self.hass.states.get(soil_sensor)
+                if s_state:
+                    try:
+                        moisture = float(s_state.state)
+                    except (ValueError, TypeError):
+                        pass
+
+                if moisture is not None and moisture >= start_threshold:
+                    _LOGGER.info(f"Skipping '{name}': moisture {moisture}% >= threshold {start_threshold}%.")
                     zone["last_skipped_at"] = now.isoformat()
-                    zone["last_skipped_reason"] = "Noch feucht genug"
+                    zone["last_skipped_reason"] = "Noch feucht"
                     config_changed = True
                     continue
-                
-                # Start zone
-                valve_entity = zone.get("valve_entity_id")
-                duration = zone.get("scheduled_duration_minutes", 30)
-                if valve_entity:
-                    _LOGGER.info(f"Starting scheduled zone {name} for {duration} minutes.")
-                    await self._turn_on_valve(valve_entity)
-                    self.running_zones[zone_id] = {
-                        "start_time": now,
-                        "duration": timedelta(minutes=duration),
-                        "valve_entity": valve_entity,
-                        "soil_sensor_entity_id": soil_sensor,
-                        "target_moisture_percent": target_moisture
-                    }
-                    
-                    zone["last_watered_at"] = now.isoformat()
-                    zone["last_skipped_reason"] = None
-                    config_changed = True
+
+                # All checks passed → start (safety timeout = scheduledDurationMinutes)
+                duration = int(zone.get("scheduled_duration_minutes", 30))
+
+            else:
+                # ════ SCHEDULE MODE ══════════════════════════════════════════
+                weekdays = zone.get("weekday_schedule", [False] * 7)
+                today_idx = now.weekday()  # 0=Mon, 6=Sun
+                is_scheduled_today = (
+                    today_idx < len(weekdays) and weekdays[today_idx]
+                )
+                if not is_scheduled_today and not heat_override:
+                    continue
+
+                duration = int(zone.get("scheduled_duration_minutes", 30))
+
+            # ── Start the zone ────────────────────────────────────────────────
+            if valve_entity:
+                _LOGGER.info(
+                    f"Starting zone '{name}' for {duration} min"
+                    f"{' [heat override]' if heat_override else ''}."
+                )
+                await self._turn_on_valve(valve_entity)
+                self.running_zones[zone_id] = {
+                    "start_time": now,
+                    "duration": timedelta(minutes=duration),
+                    "valve_entity": valve_entity,
+                    "soil_sensor_entity_id": soil_sensor,
+                    "target_moisture_percent": float(zone.get("target_moisture_percent", 100)),
+                    "is_manual": False,
+                }
+                zone["last_watered_at"] = now.isoformat()
+                zone["last_skipped_reason"] = None
+                config_changed = True
 
         if config_changed:
             await self.store.save_irrigation(self.config)
-            
+
         if self.running_zones:
             self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
 
     async def _turn_on_valve(self, entity_id):
         domain = entity_id.split(".")[0]
         try:
-            await self.hass.services.async_call(domain, "turn_on", {"entity_id": entity_id}, blocking=False)
+            await self.hass.services.async_call(
+                domain, "turn_on", {"entity_id": entity_id}, blocking=False
+            )
         except Exception as e:
             _LOGGER.error(f"Failed to turn on {entity_id}: {e}")
 
     async def _turn_off_valve(self, entity_id):
         domain = entity_id.split(".")[0]
         try:
-            await self.hass.services.async_call(domain, "turn_off", {"entity_id": entity_id}, blocking=False)
+            await self.hass.services.async_call(
+                domain, "turn_off", {"entity_id": entity_id}, blocking=False
+            )
         except Exception as e:
             _LOGGER.error(f"Failed to turn off {entity_id}: {e}")
+
+
+
