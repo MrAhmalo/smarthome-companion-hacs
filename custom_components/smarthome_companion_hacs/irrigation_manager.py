@@ -406,7 +406,7 @@ class IrrigationManager:
                         lw = dt_util.parse_datetime(last_watered_str)
                         if lw:
                             days_since = (now.date() - dt_util.as_local(lw).date()).days
-                            if days_since < min_rest_days:
+                            if days_since <= min_rest_days:
                                 _LOGGER.debug(
                                     f"Skipping '{name}': only {days_since}d since last water "
                                     f"(min rest: {min_rest_days}d)."
