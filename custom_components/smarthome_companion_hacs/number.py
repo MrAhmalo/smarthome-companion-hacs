@@ -20,17 +20,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
         global_entities = [
             WatchdogIntervalNumber(hass, store, blinds_manager),
             BlindsPositionThresholdNumber(hass, store, blinds_manager),
-            _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_heat_protection_max_temp_threshold", "Hitzeschutz Vorhersage Schwelle", "smarthome_companion_global_heat_protection_max_temp_threshold", "mdi:thermometer-high", 15, 40, 0.5, "°C", 25.0),
             
             _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_intensity_norden", "Standard Sonnenintensität Norden", "smarthome_companion_global_shading_intensity_norden", "mdi:white-balance-sunny", 100, 1000, 10, "W/m²", 300.0),
             _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_intensity_osten", "Standard Sonnenintensität Osten", "smarthome_companion_global_shading_intensity_osten", "mdi:white-balance-sunny", 100, 1000, 10, "W/m²", 300.0),
             _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_intensity_sueden", "Standard Sonnenintensität Süden", "smarthome_companion_global_shading_intensity_sueden", "mdi:white-balance-sunny", 100, 1000, 10, "W/m²", 600.0),
             _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_intensity_westen", "Standard Sonnenintensität Westen", "smarthome_companion_global_shading_intensity_westen", "mdi:white-balance-sunny", 100, 1000, 10, "W/m²", 600.0),
-
-            _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_block_open_intensity_norden", "Gar nicht erst öffnen ab Peak Norden", "smarthome_companion_global_shading_block_open_intensity_norden", "mdi:window-shutter-alert", 100, 1000, 10, "W/m²", 800.0),
-            _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_block_open_intensity_osten", "Gar nicht erst öffnen ab Peak Osten", "smarthome_companion_global_shading_block_open_intensity_osten", "mdi:window-shutter-alert", 100, 1000, 10, "W/m²", 800.0),
-            _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_block_open_intensity_sueden", "Gar nicht erst öffnen ab Peak Süden", "smarthome_companion_global_shading_block_open_intensity_sueden", "mdi:window-shutter-alert", 100, 1000, 10, "W/m²", 800.0),
-            _GlobalBlindsSettingsNumber(hass, store, blinds_manager, "_global_shading_block_open_intensity_westen", "Gar nicht erst öffnen ab Peak Westen", "smarthome_companion_global_shading_block_open_intensity_westen", "mdi:window-shutter-alert", 100, 1000, 10, "W/m²", 800.0),
         ]
         async_add_entities(global_entities)
 
@@ -52,7 +46,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "sunset_offset", "Schließen - Sonnenuntergang: Offset", "smarthome_companion_number_sunset_offset", "mdi:clock-fast", -120, 120, 1, "min", 0),
                     _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "ventilation_position", "Lüftung: Position", "smarthome_companion_number_ventilation_position", "mdi:window-shutter-open", 0, 100, 1, "%", 59),
                     _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "shading_position", "Beschattung: Position", "smarthome_companion_number_shading_position", "mdi:window-shutter", 0, 100, 1, "%", 30),
-                    _BlindBaseGenericNumber(hass, store, blinds_manager, entity_id, "shading_intensity_threshold", "Beschattung: Helligkeits-Schwellenwert", "smarthome_companion_number_shading_intensity_threshold", "mdi:white-balance-sunny", 0, 1000, 10, "W/m²", 600),
                 ])
                 added_blind_entities.add(entity_id)
         if new_entities:

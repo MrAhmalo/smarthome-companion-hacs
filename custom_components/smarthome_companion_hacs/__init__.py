@@ -82,6 +82,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "number", "button", "switch", "text", "select"])
 
+    # Clean up obsolete entities from the registry
+    from homeassistant.helpers import entity_registry as er
+    ent_reg = er.async_get(hass)
+    obsolete_unique_ids = [
+        "smarthome_companion_global_shading_block_open_intensity_norden",
+        "smarthome_companion_global_shading_block_open_intensity_osten",
+        "smarthome_companion_global_shading_block_open_intensity_sueden",
+        "smarthome_companion_global_shading_block_open_intensity_westen",
+        "smarthome_companion_global_heat_protection_max_temp_threshold",
+    ]
+    for entity in list(ent_reg.entities.values()):
+        if entity.platform == DOMAIN:
+            if entity.unique_id in obsolete_unique_ids or entity.unique_id.startswith("smarthome_companion_number_shading_intensity_threshold_"):
+                try:
+                    ent_reg.async_remove(entity.entity_id)
+                    _LOGGER.info(f"Removed obsolete entity from registry: {entity.entity_id}")
+                except Exception as e:
+                    _LOGGER.error(f"Failed to remove entity {entity.entity_id}: {e}")
+
     return True
 
 
