@@ -599,6 +599,11 @@ class _BlindBaseSensor(SensorEntity):
                 "smarthome_companion_blinds_updated", self._handle_update
             )
         )
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "smarthome_companion_sun_updated", self._handle_update
+            )
+        )
 
     async def _handle_update(self, event):
         self.async_write_ha_state()
@@ -822,7 +827,7 @@ class BlindShadingPredictionTodaySensor(_BlindBaseSensor):
         # A more advanced version would also fetch tomorrow max temp, but for now we use _today_max_temp
         today_max = getattr(self.blinds_manager, "_today_max_temp", None)
         
-        enable_solar_int = config.get("enable_solar_intensity_check", False)
+        enable_solar_int = self.store.get_blinds().get("_global_enable_solar_intensity_check", False)
         if enable_solar_int and forecast_peak < shading_int:
             return "Inaktiv (Zu wenig Sonne)", {
                 "forecast_peak": round(forecast_peak, 1),

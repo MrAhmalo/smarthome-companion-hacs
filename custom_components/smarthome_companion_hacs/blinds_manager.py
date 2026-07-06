@@ -717,7 +717,7 @@ class BlindsManager:
                                 shading_int = float(shading_int)
                             
                             cloud_ok = True
-                            if config.get("enable_cloud_check", False):
+                            if self.store.get_blinds().get("_global_enable_cloud_check", False):
                                 cloud_sensor_id = self.store.data.get("settings", {}).get("cloud_sensor", "weather.forecast_home")
                                 cloud_state = self.hass.states.get(cloud_sensor_id)
                                 cloud_coverage = 0.0
@@ -732,11 +732,11 @@ class BlindsManager:
                                             cloud_coverage = float(cloud_state.state)
                                         except (ValueError, TypeError):
                                             pass
-                                max_cloud = float(config.get("max_cloud_coverage", 70.0))
+                                max_cloud = float(self.store.get_blinds().get("_global_max_cloud_coverage", 70.0))
                                 if cloud_coverage > max_cloud:
                                     cloud_ok = False
 
-                            if cloud_ok and (not config.get("enable_solar_intensity_check", False) or sun_intensity >= shading_int):
+                            if cloud_ok and (not self.store.get_blinds().get("_global_enable_solar_intensity_check", False) or sun_intensity >= shading_int):
                                 ref_temp = today_max if (today_max is not None and getattr(self, "_today_max_temp_date", None) == now.date()) else current_temp
                                 
                                 t_factor = (ref_temp - shading_start_temp) / max(0.1, shading_max_temp - shading_start_temp)
