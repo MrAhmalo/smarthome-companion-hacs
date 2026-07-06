@@ -110,6 +110,9 @@ class IrrigationManager:
         """Reload configuration from store."""
         self.config = self.store.get_irrigation()
         self._update_sensor_listeners()
+        self._last_checked_date = None
+        await self._async_check_irrigation(dt_util.now())
+        self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
         _LOGGER.info("Irrigation configuration reloaded.")
 
     def _update_sensor_listeners(self):
@@ -174,7 +177,9 @@ class IrrigationManager:
     async def async_force_check(self):
         """Force an immediate check of the irrigation logic."""
         _LOGGER.info("Forcing immediate irrigation check.")
+        self._last_checked_date = None
         await self._async_check_irrigation(dt_util.now())
+        self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
 
     async def async_manual_start(self, zone_id, duration_minutes=None):
         """Manually start a zone based on its configured or specified duration."""

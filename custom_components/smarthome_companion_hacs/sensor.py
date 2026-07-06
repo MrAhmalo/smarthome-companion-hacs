@@ -72,8 +72,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         BlindSunriseOpenTimeSensor(hass, store, blinds_manager, entity_id),
                         BlindSunsetCloseTimeSensor(hass, store, blinds_manager, entity_id),
                         BlindNextActionSensor(hass, store, blinds_manager, entity_id),
-                        BlindMorningBlockTodaySensor(hass, store, blinds_manager, entity_id),
-                        BlindMorningBlockTomorrowSensor(hass, store, blinds_manager, entity_id),
+                        BlindShadingPredictionTodaySensor(hass, store, blinds_manager, entity_id),
+                        BlindShadingPredictionTomorrowSensor(hass, store, blinds_manager, entity_id),
                     ]
                 )
                 added_blind_entities.add(entity_id)
@@ -785,18 +785,17 @@ class BlindNextActionSensor(_BlindBaseSensor):
             "offset_minutes": offset,
         }
 
-class BlindMorningBlockTodaySensor(_BlindBaseSensor):
+class BlindShadingPredictionTodaySensor(_BlindBaseSensor):
     def __init__(self, hass, store, blinds_manager, blind_id):
-        super().__init__(hass, store, blinds_manager, blind_id, "morning_block_today")
-        self._attr_name = "Morgendliche Hitzesperre (Heute)"
-        self._attr_unique_id = f"smarthome_companion_sensor_morning_block_today_{blind_id}"
+        super().__init__(hass, store, blinds_manager, blind_id, "shading_prediction_today")
+        self._attr_name = "Beschattungs-Prognose (Heute)"
+        self._attr_unique_id = f"smarthome_companion_sensor_shading_prediction_today_{blind_id}"
         self._attr_icon = "mdi:shield-sun"
 
-    @property
-    def native_value(self):
+    def _calculate_prediction(self, is_tomorrow=False):
         config = self.store.get_blinds().get(self._blind_id)
-        if not config or not config.get("enable_morning_shading_block", True):
-            return "Deaktiviert"
+        if not config or not config.get("enable_shading", False):
+            return "Deaktiviert", {}
             
         direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
         card_dir = config.get("cardinal_direction", "sueden").lower()
@@ -804,94 +803,96 @@ class BlindMorningBlockTodaySensor(_BlindBaseSensor):
             card_dir = "sueden"
         direction = direction_map.get(card_dir, "sued")
         
-        block_intensity = config.get("morning_shading_block_intensity")
-        if block_intensity is None:
-            block_intensity = float(self.store.data.get(f"_global_shading_block_open_intensity_{card_dir}", 800.0))
-        else:
-            block_intensity = float(block_intensity)
-            
         sun_manager = self.hass.data[DOMAIN].get("sun_manager")
-        if not sun_manager: return "Unbekannt"
+        if not sun_manager: return "Unbekannt", {}
         
-        forecast_peak = sun_manager.forecast_max_intensities.get(direction, 0.0)
-        return "Aktiv" if forecast_peak >= block_intensity else "Inaktiv"
+        forecast_peak = sun_manager.forecast_max_intensities_tomorrow.get(direction, 0.0) if is_tomorrow else sun_manager.forecast_max_intensities.get(direction, 0.0)
+        
+        shading_int = config.get("shading_intensity_threshold")
+        if shading_int is None:
+            shading_int = float(self.store.get_blinds().get(f"_global_shading_intensity_{card_dir}", 600.0))
+        else:
+            shading_int = float(shading_int)
+            
+        shading_start_temp = float(self.store.get_blinds().get("_global_shading_start_temp", 24.0))
+        shading_max_temp = float(self.store.get_blinds().get("_global_shading_max_temp", 30.0))
+        
+        # Get forecast max temp
+        # Since weather_manager only stores today_max_temp right now we will use that for both
+        # A more advanced version would also fetch tomorrow max temp, but for now we use _today_max_temp
+        today_max = getattr(self.blinds_manager, "_today_max_temp", None)
+        
+        enable_solar_int = config.get("enable_solar_intensity_check", False)
+        if enable_solar_int and forecast_peak < shading_int:
+            return "Inaktiv (Zu wenig Sonne)", {
+                "forecast_peak": round(forecast_peak, 1),
+                "required_intensity": shading_int
+            }
+            
+        if today_max is None:
+            return "Wartet auf Wetterdaten", {
+                "forecast_peak": round(forecast_peak, 1),
+                "required_intensity": shading_int if enable_solar_int else "Aus"
+            }
+            
+        trigger_temp = shading_start_temp
+        if today_max > shading_start_temp:
+            trigger_temp = shading_start_temp - (today_max - shading_start_temp) * 0.5
+            trigger_temp = max(shading_start_temp - 5.0, trigger_temp)
+            
+        if today_max < trigger_temp:
+            return "Inaktiv (Zu kühl)", {
+                "forecast_peak": round(forecast_peak, 1),
+                "required_intensity": shading_int if enable_solar_int else "Aus",
+                "forecast_max_temp": round(today_max, 1),
+                "trigger_temp": round(trigger_temp, 1)
+            }
+            
+        t_factor = (today_max - shading_start_temp) / max(0.1, shading_max_temp - shading_start_temp)
+        t_factor = max(0.0, min(1.0, t_factor))
+        
+        start_pos = float(config.get("shading_start_position", 40.0))
+        target_pos = float(config.get("shading_target_position", 0.0))
+        
+        target_position = int(start_pos + t_factor * (target_pos - start_pos))
+        
+        return f"Geplant: {target_position}%", {
+            "forecast_peak": round(forecast_peak, 1),
+            "required_intensity": shading_int if enable_solar_int else "Aus",
+            "forecast_max_temp": round(today_max, 1),
+            "trigger_temp": round(trigger_temp, 1),
+            "calculated_target_position": target_position
+        }
+
+    @property
+    def native_value(self):
+        val, _ = self._calculate_prediction(is_tomorrow=False)
+        return val
 
     @property
     def extra_state_attributes(self):
-        config = self.store.get_blinds().get(self._blind_id)
-        if not config: return {}
-        direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
-        card_dir = config.get("cardinal_direction", "sueden").lower()
-        if card_dir == "genau" or card_dir == "genaue angabe": card_dir = "sueden"
-        direction = direction_map.get(card_dir, "sued")
-        block_intensity = config.get("morning_shading_block_intensity")
-        if block_intensity is None:
-            block_intensity = float(self.store.data.get(f"_global_shading_block_open_intensity_{card_dir}", 800.0))
-        else:
-            block_intensity = float(block_intensity)
-            
-        sun_manager = self.hass.data[DOMAIN].get("sun_manager")
-        forecast_peak = sun_manager.forecast_max_intensities.get(direction, 0.0) if sun_manager else 0.0
-        
-        return {
-            "threshold": block_intensity,
-            "forecast_peak": round(forecast_peak, 1),
-            "position_if_blocked": int(config.get("morning_shading_block_position", 0))
-        }
+        _, attr = self._calculate_prediction(is_tomorrow=False)
+        return attr
 
-class BlindMorningBlockTomorrowSensor(_BlindBaseSensor):
+class BlindShadingPredictionTomorrowSensor(_BlindBaseSensor):
     def __init__(self, hass, store, blinds_manager, blind_id):
-        super().__init__(hass, store, blinds_manager, blind_id, "morning_block_tomorrow")
-        self._attr_name = "Morgendliche Hitzesperre (Morgen)"
-        self._attr_unique_id = f"smarthome_companion_sensor_morning_block_tomorrow_{blind_id}"
+        super().__init__(hass, store, blinds_manager, blind_id, "shading_prediction_tomorrow")
+        self._attr_name = "Beschattungs-Prognose (Morgen)"
+        self._attr_unique_id = f"smarthome_companion_sensor_shading_prediction_tomorrow_{blind_id}"
         self._attr_icon = "mdi:shield-sun-outline"
 
     @property
     def native_value(self):
-        config = self.store.get_blinds().get(self._blind_id)
-        if not config or not config.get("enable_morning_shading_block", True):
-            return "Deaktiviert"
-            
-        direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
-        card_dir = config.get("cardinal_direction", "sueden").lower()
-        if card_dir == "genau" or card_dir == "genaue angabe":
-            card_dir = "sueden"
-        direction = direction_map.get(card_dir, "sued")
-        
-        block_intensity = config.get("morning_shading_block_intensity")
-        if block_intensity is None:
-            block_intensity = float(self.store.data.get(f"_global_shading_block_open_intensity_{card_dir}", 800.0))
-        else:
-            block_intensity = float(block_intensity)
-            
-        sun_manager = self.hass.data[DOMAIN].get("sun_manager")
-        if not sun_manager: return "Unbekannt"
-        
-        forecast_peak = sun_manager.forecast_max_intensities_tomorrow.get(direction, 0.0)
-        return "Aktiv" if forecast_peak >= block_intensity else "Inaktiv"
+        # We use today's temperature forecast logic until tomorrow is explicitly fetched in blinds_manager
+        today_sensor = BlindShadingPredictionTodaySensor(self.hass, self.store, self.blinds_manager, self._blind_id)
+        val, _ = today_sensor._calculate_prediction(is_tomorrow=True)
+        return val
 
     @property
     def extra_state_attributes(self):
-        config = self.store.get_blinds().get(self._blind_id)
-        if not config: return {}
-        direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
-        card_dir = config.get("cardinal_direction", "sueden").lower()
-        if card_dir == "genau" or card_dir == "genaue angabe": card_dir = "sueden"
-        direction = direction_map.get(card_dir, "sued")
-        block_intensity = config.get("morning_shading_block_intensity")
-        if block_intensity is None:
-            block_intensity = float(self.store.data.get(f"_global_shading_block_open_intensity_{card_dir}", 800.0))
-        else:
-            block_intensity = float(block_intensity)
-            
-        sun_manager = self.hass.data[DOMAIN].get("sun_manager")
-        forecast_peak = sun_manager.forecast_max_intensities_tomorrow.get(direction, 0.0) if sun_manager else 0.0
-        
-        return {
-            "threshold": block_intensity,
-            "forecast_peak": round(forecast_peak, 1),
-            "position_if_blocked": int(config.get("morning_shading_block_position", 0))
-        }
+        today_sensor = BlindShadingPredictionTodaySensor(self.hass, self.store, self.blinds_manager, self._blind_id)
+        _, attr = today_sensor._calculate_prediction(is_tomorrow=True)
+        return attr
 
 class _IrrigationZoneBaseSensor(SensorEntity):
     def __init__(self, hass, store, irrigation_manager, zone_id, sensor_type):

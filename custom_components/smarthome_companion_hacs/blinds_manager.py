@@ -71,7 +71,14 @@ class BlindsManager:
         elif action_type == "close":
             msg = f"geschlossen von der Integration um der Schließzeit nachzugehen{suffix}."
         elif action_type == "shading":
-            msg = f"von der Integration auf Beschattungsposition ({target_position}%) gefahren{suffix}."
+            details = mem.get("shading_log_details", {})
+            if details:
+                ct = details.get("current_temp", "?")
+                tt = details.get("trigger_temp", "?")
+                mx = details.get("today_max", "?")
+                msg = f"Hitzeschutz aktiviert: Fährt auf {target_position}% (Temperatur {ct} °C >= Schwelle {tt} °C. Tageshöchstwert: {mx} °C){suffix}."
+            else:
+                msg = f"von der Integration auf Beschattungsposition ({target_position}%) gefahren{suffix}."
         elif action_type == "ventilation":
             if mem.get("ventilation_logged_today") == now.date().isoformat():
                 return
@@ -663,55 +670,45 @@ class BlindsManager:
                 card_dir = "sueden"
             direction = direction_map.get(card_dir, "sued")
             
-            is_blocked = False
-            enable_morning_block = config.get("enable_morning_shading_block", True)
-            if enable_morning_block:
-                block_intensity = config.get("morning_shading_block_intensity")
-                if block_intensity is None:
-                    block_intensity = float(self.store.get_blinds().get(f"_global_shading_block_open_intensity_{card_dir}", 800.0))
-                else:
-                    block_intensity = float(block_intensity)
-                    
-                forecast_peak = self.sun_manager.forecast_max_intensities.get(direction, 0.0)
-                if forecast_peak >= block_intensity:
-                    is_blocked = True
-            
-            if is_blocked:
-                target_position = int(config.get("morning_shading_block_position", 0))
-                action_type = "morning_block"
+            # Lüftung Morgens
+            vent_until = self._parse_time(config.get("ventilation_until"), time(10, 0))
+            if config.get("enable_ventilation", False) and now.time() <= vent_until:
+                target_position = int(config.get("ventilation_position", 59))
+                action_type = "ventilation"
             else:
-                # Lüftung Morgens
-                vent_until = self._parse_time(config.get("ventilation_until"), time(10, 0))
-                if config.get("enable_ventilation", False) and now.time() <= vent_until:
-                    target_position = int(config.get("ventilation_position", 59))
-                    action_type = "ventilation"
-                else:
-                    # Beschattung mit globalem Außentemperatur-Check
-                    if config.get("enable_shading", False):
-                        settings = self.store.data.get("settings", {})
-                        temp_sensor_id = settings.get("temp_sensor", "sensor.weather_temperature")
-                        shading_temp_threshold = float(settings.get("shading_temp_threshold", 23.0))
+                # Beschattung mit dynamischem Temperatur-Check
+                if config.get("enable_shading", False):
+                    shading_start_temp = float(self.store.get_blinds().get("_global_shading_start_temp", 24.0))
+                    shading_max_temp = float(self.store.get_blinds().get("_global_shading_max_temp", 30.0))
+                    
+                    settings = self.store.data.get("settings", {})
+                    temp_sensor_id = settings.get("temp_sensor", "sensor.weather_temperature")
+                    
+                    current_temp = None
+                    temp_state = self.hass.states.get(temp_sensor_id)
+                    if temp_state:
+                        if temp_state.domain == "weather":
+                            try:
+                                current_temp = float(temp_state.attributes.get("temperature"))
+                            except (ValueError, TypeError):
+                                pass
+                        else:
+                            try:
+                                current_temp = float(temp_state.state)
+                            except (ValueError, TypeError):
+                                pass
+                    
+                    if current_temp is not None:
+                        # Frühwarn-System (Early Warning / Predictive Trigger)
+                        trigger_temp = shading_start_temp
+                        today_max = getattr(self, "_today_max_temp", None)
                         
-                        current_temp = None
-                        temp_state = self.hass.states.get(temp_sensor_id)
-                        if temp_state:
-                            if temp_state.domain == "weather":
-                                try:
-                                    current_temp = float(temp_state.attributes.get("temperature"))
-                                except (ValueError, TypeError):
-                                    pass
-                            else:
-                                try:
-                                    current_temp = float(temp_state.state)
-                                except (ValueError, TypeError):
-                                    pass
+                        if today_max is not None and getattr(self, "_today_max_temp_date", None) == now.date():
+                            if today_max > shading_start_temp:
+                                trigger_temp = shading_start_temp - (today_max - shading_start_temp) * 0.5
+                                trigger_temp = max(shading_start_temp - 5.0, trigger_temp)
                         
-                        temp_allows_shading = True
-                        if current_temp is not None:
-                            if current_temp < shading_temp_threshold:
-                                temp_allows_shading = False
-                                
-                        if temp_allows_shading:
+                        if current_temp >= trigger_temp:
                             sun_intensity = self.sun_manager.intensities.get(direction, 0.0)
                             shading_int = config.get("shading_intensity_threshold")
                             if shading_int is None:
@@ -719,10 +716,42 @@ class BlindsManager:
                             else:
                                 shading_int = float(shading_int)
                             
-                            if sun_intensity >= shading_int:
-                                shading_pos = int(config.get("shading_position", 30))
-                                target_position = shading_pos
+                            cloud_ok = True
+                            if config.get("enable_cloud_check", False):
+                                cloud_sensor_id = self.store.data.get("settings", {}).get("cloud_sensor", "weather.forecast_home")
+                                cloud_state = self.hass.states.get(cloud_sensor_id)
+                                cloud_coverage = 0.0
+                                if cloud_state:
+                                    if cloud_state.domain == "weather":
+                                        try:
+                                            cloud_coverage = float(cloud_state.attributes.get("cloud_coverage", 0))
+                                        except (ValueError, TypeError):
+                                            pass
+                                    else:
+                                        try:
+                                            cloud_coverage = float(cloud_state.state)
+                                        except (ValueError, TypeError):
+                                            pass
+                                max_cloud = float(config.get("max_cloud_coverage", 70.0))
+                                if cloud_coverage > max_cloud:
+                                    cloud_ok = False
+
+                            if cloud_ok and (not config.get("enable_solar_intensity_check", False) or sun_intensity >= shading_int):
+                                ref_temp = today_max if (today_max is not None and getattr(self, "_today_max_temp_date", None) == now.date()) else current_temp
+                                
+                                t_factor = (ref_temp - shading_start_temp) / max(0.1, shading_max_temp - shading_start_temp)
+                                t_factor = max(0.0, min(1.0, t_factor))
+                                
+                                start_pos = float(config.get("shading_start_position", 40.0))
+                                target_pos = float(config.get("shading_target_position", 0.0))
+                                
+                                target_position = int(start_pos + t_factor * (target_pos - start_pos))
                                 action_type = "shading"
+                                mem["shading_log_details"] = {
+                                    "current_temp": round(current_temp, 1),
+                                    "trigger_temp": round(trigger_temp, 1),
+                                    "today_max": round(today_max, 1) if today_max else "Unbekannt"
+                                }
                             
                 # Hitzeschutz: Belüftung beibehalten statt komplett zu öffnen, wenn Temperatur-Vorhersage für heute zu hoch
                 if action_type in ["open", "shading"] and config.get("enable_heat_protection_ventilation", False):
