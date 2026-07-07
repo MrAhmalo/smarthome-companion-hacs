@@ -420,6 +420,11 @@ class IrrigationManager:
 
             if has_sensor:
                 # ════ SMART MODE ═════════════════════════════════════════════
+                weekday_schedule = zone.get("weekday_schedule", [True]*7)
+                if now.weekday() < len(weekday_schedule) and not weekday_schedule[now.weekday()] and not heat_override:
+                    _LOGGER.debug(f"Skipping '{name}': day disabled in schedule.")
+                    continue
+
                 min_rest_days = int(zone.get("min_rest_days", 2))
 
                 # Check minimum rest days (heat override bypasses this)
