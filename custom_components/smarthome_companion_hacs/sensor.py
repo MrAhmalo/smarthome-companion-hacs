@@ -56,7 +56,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     # Track dynamically added blind unique IDs
     added_blind_entities = set()
 
-    def add_blind_sensors(event=None):
+    def _add_blind_sensors_sync(event=None):
         if not store or not blinds_manager:
             return
         blinds = store.get_blinds()
@@ -81,9 +81,12 @@ async def async_setup_entry(hass, entry, async_add_entities):
         if new_entities:
             async_add_entities(new_entities)
 
+    async def add_blind_sensors(event=None):
+        _add_blind_sensors_sync(event)
+
     if module in ("blinds", "legacy"):
         # Initial register
-        add_blind_sensors()
+        _add_blind_sensors_sync()
 
         # Dynamic registration upon config reloads/updates
         entry.async_on_unload(
@@ -94,7 +97,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     added_irrigation_zones = set()
 
-    def add_irrigation_sensors(event=None):
+    def _add_irrigation_sensors_sync(event=None):
         if not store or not irrigation_manager:
             return
         irrigation_data = store.get_irrigation()
@@ -121,14 +124,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
         if new_entities:
             async_add_entities(new_entities)
 
-    def update_irrigation_sensors(event=None):
-        add_irrigation_sensors()
+    async def update_irrigation_sensors(event=None):
+        _add_irrigation_sensors_sync()
         for entity in entities:
             if isinstance(entity, (ConfiguredIrrigationSensor, UnconfiguredIrrigationSensor, IrrigationMaxManualRuntimeSensor, IrrigationSimultaneousModeSensor)):
                 entity.async_write_ha_state()
 
     if module in ("irrigation", "legacy"):
-        add_irrigation_sensors()
+        _add_irrigation_sensors_sync()
         entry.async_on_unload(
             hass.bus.async_listen(
                 "smarthome_companion_irrigation_updated", update_irrigation_sensors

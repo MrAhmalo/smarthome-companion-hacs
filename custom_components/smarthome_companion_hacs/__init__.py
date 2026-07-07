@@ -91,6 +91,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "smarthome_companion_global_shading_block_open_intensity_sueden",
         "smarthome_companion_global_shading_block_open_intensity_westen",
         "smarthome_companion_global_heat_protection_max_temp_threshold",
+        "smarthome_companion_global_shading_intensity_norden",
+        "smarthome_companion_global_shading_intensity_osten",
+        "smarthome_companion_global_shading_intensity_sueden",
+        "smarthome_companion_global_shading_intensity_westen",
     ]
     for entity in list(ent_reg.entities.values()):
         if entity.platform == DOMAIN:
