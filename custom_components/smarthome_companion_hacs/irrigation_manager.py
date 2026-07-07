@@ -146,8 +146,11 @@ class IrrigationManager:
             
         zones_to_stop = []
         for zone_id, data in self.running_zones.items():
-            if data.get("soil_sensor_entity_id") == entity_id and not data.get("is_manual", False):
-                target = data.get("target_moisture_percent", 100)
+            if data.get("soil_sensor_entity_id") == entity_id:
+                try:
+                    target = float(data.get("target_moisture_percent", 100))
+                except (ValueError, TypeError):
+                    target = 100.0
                 if moisture >= target:
                     zones_to_stop.append((zone_id, "Ziel-Feuchtigkeit erreicht"))
                     
@@ -317,11 +320,26 @@ class IrrigationManager:
         """Main loop every minute: check timeouts, then start zones if conditions are met."""
         now = dt_util.as_local(now)
 
-        # ── 1. Stop zones that timed out ─────────────────────────────────────
+        # ── 1. Stop zones that timed out or reached target moisture ──────────
         zones_to_stop = []
         for zone_id, data in self.running_zones.items():
             if now - data["start_time"] >= data["duration"]:
                 zones_to_stop.append((zone_id, "Maximale Laufzeit erreicht"))
+            elif data.get("soil_sensor_entity_id"):
+                sensor_id = data.get("soil_sensor_entity_id")
+                state = self.hass.states.get(sensor_id)
+                if state:
+                    try:
+                        moisture = float(state.state)
+                        try:
+                            target = float(data.get("target_moisture_percent", 100.0))
+                        except (ValueError, TypeError):
+                            target = 100.0
+                        if moisture >= target:
+                            zones_to_stop.append((zone_id, "Ziel-Feuchtigkeit erreicht"))
+                    except (ValueError, TypeError):
+                        pass
+
         if zones_to_stop:
             await self._stop_zones(zones_to_stop)
 

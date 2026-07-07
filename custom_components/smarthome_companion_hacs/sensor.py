@@ -95,7 +95,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             )
         )
 
-    added_irrigation_zones = set()
+    added_irrigation_entities = set()
 
     def _add_irrigation_sensors_sync(event=None):
         if not store or not irrigation_manager:
@@ -109,17 +109,26 @@ async def async_setup_entry(hass, entry, async_add_entities):
             zone_id = zone.get("id")
             if not zone_id:
                 continue
-            if zone_id not in added_irrigation_zones:
-                new_entities.extend([
-                    IrrigationZoneLastWateredSensor(hass, store, irrigation_manager, zone_id),
-                    IrrigationZoneNextRunSensor(hass, store, irrigation_manager, zone_id),
-                    IrrigationZoneStatusSensor(hass, store, irrigation_manager, zone_id),
-                    IrrigationZoneDurationSensor(hass, store, irrigation_manager, zone_id),
-                    IrrigationZoneProgressSensor(hass, store, irrigation_manager, zone_id),
-                ])
-                if zone.get("soil_sensor_entity_id"):
+                
+            base_sensors = [
+                ("last_watered", IrrigationZoneLastWateredSensor),
+                ("next_planned", IrrigationZoneNextRunSensor),
+                ("status", IrrigationZoneStatusSensor),
+                ("duration", IrrigationZoneDurationSensor),
+                ("progress", IrrigationZoneProgressSensor),
+            ]
+            
+            for sensor_key, sensor_class in base_sensors:
+                unique_id = f"{zone_id}_{sensor_key}"
+                if unique_id not in added_irrigation_entities:
+                    new_entities.append(sensor_class(hass, store, irrigation_manager, zone_id))
+                    added_irrigation_entities.add(unique_id)
+                    
+            if zone.get("soil_sensor_entity_id"):
+                unique_id = f"{zone_id}_target_moisture"
+                if unique_id not in added_irrigation_entities:
                     new_entities.append(IrrigationZoneTargetMoistureSensor(hass, store, irrigation_manager, zone_id))
-                added_irrigation_zones.add(zone_id)
+                    added_irrigation_entities.add(unique_id)
 
         if new_entities:
             async_add_entities(new_entities)
@@ -1071,6 +1080,20 @@ class IrrigationZoneStatusSensor(_IrrigationZoneBaseSensor):
                 pass
                 
         return "Wartet"
+
+    @property
+    def extra_state_attributes(self):
+        zone = self._get_zone()
+        if not zone: return {}
+        attrs = {}
+        if zone.get("id") in self.irrigation_manager.running_zones:
+            run_data = self.irrigation_manager.running_zones[zone.get("id")]
+            attrs["is_manual"] = run_data.get("is_manual", False)
+            if run_data.get("duration"):
+                attrs["duration_minutes"] = run_data["duration"].total_seconds() / 60
+            if run_data.get("start_time"):
+                attrs["start_time"] = run_data["start_time"].isoformat()
+        return attrs
 
 class IrrigationZoneDurationSensor(_IrrigationZoneBaseSensor):
     def __init__(self, hass, store, irrigation_manager, zone_id):
