@@ -668,7 +668,209 @@ class BlindsManager:
             except Exception:
                 mem["automatic_transit"] = False
 
-# scratch file for evaluate_blind.py
+        # Idle state position and manual action tracking
+        if cover_state not in ["opening", "closing"]:
+            if mem.get("automatic_transit", False):
+                last_managed = mem.get("last_managed_position", current_position)
+                if abs(current_position - last_managed) <= 5:
+                    mem["automatic_transit"] = False
+                    mem["last_known_position"] = current_position
+            else:
+                last_known = mem.get("last_known_position")
+                if last_known is None:
+                    last_known = current_position
+                    mem["last_known_position"] = current_position
+                
+                if abs(current_position - last_known) > 5:
+                    if enable_manual_pause:
+                        is_opening = current_position > last_known
+                        is_manual_ventilation_shading_trigger = False
+                        
+                        # Custom Logic: If manually opening and shading plan is active and position is 0%
+                        plan = self.store.data.get("blinds_daily_plan", {}).get(entity_id, {})
+                        if plan.get("shading_active"):
+                            s_time_str = plan.get("start_time")
+                            if s_time_str:
+                                s_time = dt_util.parse_datetime(s_time_str)
+                                if s_time and now >= s_time and plan.get("target_position") == 0:
+                                    if is_opening and mem.get("ventilation_stopped_today") != now.date().isoformat():
+                                        _LOGGER.info("Manual opening during 0%% heat protection detected for %s. Executing ventilation instead of manual override.", entity_id)
+                                        is_manual_ventilation_shading_trigger = True
+                                        mem["ventilation_initiated_today"] = now.date().isoformat()
+                                        ventilation_position = int(config.get("ventilation_position", 59))
+                                        self._add_trace(entity_id, "Lüftungsposition gesendet (Manuell)", ventilation_position)
+                                        mem["last_managed_position"] = ventilation_position
+                                        mem["automatic_transit"] = True
+                                        mem["last_command_time"] = now.isoformat()
+                                        await self.hass.services.async_call("cover", "set_cover_position", {"entity_id": entity_id, "position": ventilation_position}, blocking=False, context=Context())
+                        
+                        if not is_manual_ventilation_shading_trigger:
+                            is_morning_ventilation = config.get("enable_ventilation", False) and now.time() <= self._parse_time(config.get("ventilation_until"), time(10, 0))
+                            
+                            if is_morning_ventilation and is_opening and mem.get("ventilation_stopped_today") != now.date().isoformat():
+                                _LOGGER.info("Manual opening during morning ventilation timeframe detected for %s. Not setting manual override.", entity_id)
+                            else:
+                                mem["manual_override_today"] = now.date().isoformat()
+                                _LOGGER.info("Manual override detected for %s. Active for the rest of today", entity_id)
+                    mem["last_known_position"] = current_position
+        
+        last_known_pos = mem.get("last_known_position", current_position)
+
+        # 1. Lüftungsstopp bei manueller oder automatischer Fahrt am Morgen (beim ersten Mal heute)
+        vent_until = self._parse_time(config.get("ventilation_until"), time(10, 0))
+        is_morning_ventilation_time = config.get("enable_ventilation", False) and now.time() <= vent_until
+        ventilation_position = int(config.get("ventilation_position", 59))
+
+        # Backup-Sicherheit: Wenn zum ersten Mal am Morgen ein Öffnungsversuch erkannt wird,
+        # senden wir direkt den Befehl, gezielt auf die Lüftungsposition zu fahren.
+        if is_morning_ventilation_time and mem.get("ventilation_initiated_today") != now.date().isoformat():
+            is_opening_detected = False
+            if cover_state == "opening":
+                is_opening_detected = True
+            elif last_known_pos is not None and current_position > last_known_pos:
+                is_opening_detected = True
+                
+            if is_opening_detected and current_position < ventilation_position:
+                mem["ventilation_initiated_today"] = now.date().isoformat()
+                self._add_trace(entity_id, "Lüftungsposition gesendet (Präventiv)", ventilation_position)
+                if mem.get("ventilation_logged_today") != now.date().isoformat():
+                    await self._log_to_logbook(entity_id, "Der Rollladen wird gelüftet.")
+                    mem["ventilation_logged_today"] = now.date().isoformat()
+                mem["last_managed_position"] = ventilation_position
+                mem["automatic_transit"] = True
+                mem["last_command_time"] = now.isoformat()
+                await self.hass.services.async_call("cover", "set_cover_position", {"entity_id": entity_id, "position": ventilation_position}, blocking=False, context=Context())
+
+        if is_morning_ventilation_time and mem.get("ventilation_stopped_today") != now.date().isoformat():
+            is_crossing = False
+            if cover_state == "opening" and current_position >= (ventilation_position - 3):
+                is_crossing = True
+            elif last_known_pos is not None and last_known_pos < ventilation_position and current_position >= ventilation_position:
+                is_crossing = True
+
+            if is_crossing:
+                is_manual = cover_state != "opening" and abs(mem.get("last_managed_position", current_position) - current_position) > 5
+                reason = "Lüftungsstopp (manuell)" if is_manual else "Lüftungsstopp"
+                
+                self._add_trace(entity_id, reason, ventilation_position)
+                mem["last_managed_position"] = ventilation_position
+                mem["ventilation_stopped_today"] = now.date().isoformat()
+                
+                if mem.get("ventilation_logged_today") != now.date().isoformat():
+                    await self._log_to_logbook(entity_id, "Der Rollladen wird gelüftet.")
+                    mem["ventilation_logged_today"] = now.date().isoformat()
+                mem["automatic_transit"] = False
+                mem["last_known_position"] = current_position
+                await self.hass.services.async_call("cover", "stop_cover", {"entity_id": entity_id}, blocking=False, context=Context())
+                return
+
+        has_active_override = mem.get("manual_override_today") == now.date().isoformat()
+
+        times = self.calculate_times(entity_id, config)
+        open_time_dt = times["open_time"]
+        close_time_dt = times["close_time"]
+
+        target_position = 100
+        action_type = "open"
+        
+        is_night = False
+        if open_time_dt <= close_time_dt:
+            if now < open_time_dt or now >= close_time_dt:
+                is_night = True
+        else:
+            if now >= close_time_dt and now < open_time_dt:
+                is_night = True
+                
+        if is_night:
+            target_position = 0
+            action_type = "close"
+        else:
+            # Daytime Logic
+            plan = self.store.data.get("blinds_daily_plan", {}).get(entity_id, {})
+            is_shading = plan.get("shading_active", False)
+            shading_target = plan.get("target_position", 0)
+            shading_start = None
+            shading_end = None
+            if is_shading:
+                shading_start = dt_util.parse_datetime(plan.get("start_time"))
+                shading_end = dt_util.parse_datetime(plan.get("end_time"))
+            
+            is_shading_time = is_shading and shading_start and shading_end and shading_start <= now < shading_end
+            
+            # Lüftung Morgens
+            vent_until = self._parse_time(config.get("ventilation_until"), time(10, 0))
+            is_morning_ventilation = config.get("enable_ventilation", False) and now.time() <= vent_until
+            
+            if is_morning_ventilation:
+                ventilation_pos = int(config.get("ventilation_position", 59))
+                # Fall B: Hitze ist schon da
+                if is_shading_time:
+                    if ventilation_pos < shading_target:
+                        # Lüftung ist weiter ZU als Hitzeschutz: Erst lüften
+                        target_position = ventilation_pos
+                        action_type = "ventilation"
+                    else:
+                        # Lüftung ist weiter AUF als Hitzeschutz: Überspringen
+                        target_position = shading_target
+                        action_type = "shading"
+                        mem["shading_log_details"] = {
+                            "Temperatur Max Heute": f"{plan.get('today_max')} °C",
+                            "Sonnenintensität": f"{plan.get('max_intensity'):.0f} W/m²"
+                        }
+                else:
+                    target_position = ventilation_pos
+                    action_type = "ventilation"
+            else:
+                if is_shading_time:
+                    target_position = shading_target
+                    action_type = "shading"
+                    mem["shading_log_details"] = {
+                        "Temperatur Max Heute": f"{plan.get('today_max')} °C",
+                        "Sonnenintensität": f"{plan.get('max_intensity'):.0f} W/m²"
+                    }
+                else:
+                    target_position = 100
+                    action_type = "open"
+
+        last_target_pos = mem.get("last_target_position")
+        mem["last_target_position"] = target_position
+        
+        is_transition = last_target_pos is not None and last_target_pos != target_position
+        
+        # Evaluate manual override exceptions
+        if has_active_override:
+            allow_bypass = False
+            
+            # Exception 1: Scheduled closing times
+            if is_transition and action_type in ["open", "close", "ventilation", "heat_protection_close"]:
+                if override_allow_scheduled:
+                    # Only bypass manual overrides when the schedule says to close (night time or heat protection close).
+                    if action_type in ["close", "heat_protection_close"]:
+                        allow_bypass = True
+                        mem["manual_override_today"] = None
+                        _LOGGER.info("Bypassing manual override for scheduled close action on %s", entity_id)
+                    
+            # Exception 2: Shading activated or deactivated (transition to or from shading)
+            elif is_transition and (action_type == "shading" or last_target_pos == int(config.get("shading_position", 30))):
+                if override_allow_shading:
+                    allow_bypass = True
+                    mem["manual_override_today"] = None
+                    _LOGGER.info("Bypassing manual override for shading action on %s", entity_id)
+                    
+            # Exception 3: Watchdog error correction (when offline/recovering etc.)
+            elif is_watchdog_check and override_allow_watchdog:
+                ha_recovering = (dt_util.now() - self._started_at) < timedelta(minutes=15)
+                if ha_recovering or shutter_was_offline or force_correction:
+                    allow_bypass = True
+                    _LOGGER.info(
+                        "Bypassing manual override for watchdog error correction on %s (HA recovering: %s, shutter was offline: %s, forced: %s)",
+                        entity_id, ha_recovering, shutter_was_offline, force_correction
+                    )
+
+            if not allow_bypass:
+                # Manual override blocks automation changes
+                return
+
 
         # Automatisierung und Watchdog
         settings = self.store.data.get("settings", {})
