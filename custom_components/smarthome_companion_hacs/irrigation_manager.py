@@ -403,80 +403,90 @@ class IrrigationManager:
             if now.hour != sched_h or now.minute != sched_m:
                 continue
 
-            # ── Rain pre-check (both modes) ───────────────────────────────────
-            if is_raining:
-                _LOGGER.info(f"Skipping '{name}': rain detected.")
+            manual_overrides = zone.get("manual_overrides", ["auto"] * 7)
+            today_idx = now.weekday()
+            override_state = manual_overrides[today_idx] if today_idx < len(manual_overrides) else "auto"
+            
+            duration = int(zone.get("scheduled_duration_minutes", 30))
+            
+            if override_state == "force_pause":
+                _LOGGER.info(f"Skipping '{name}': manual override force_pause.")
                 zone["last_skipped_at"] = now.isoformat()
-                zone["last_skipped_reason"] = "Regen"
+                zone["last_skipped_reason"] = "Manuell pausiert"
                 config_changed = True
                 continue
-
-            # ── Determine heat override for this zone ─────────────────────────
-            enable_heat = zone.get("enable_heat_override", False)
-            heat_override = enable_heat and self.is_heat_override_today(zone)
-
+                
+            heat_override = False
             soil_sensor = zone.get("soil_sensor_entity_id")
-            has_sensor = bool(soil_sensor)
-
-            if has_sensor:
-                # ════ SMART MODE ═════════════════════════════════════════════
-                weekday_schedule = zone.get("weekday_schedule", [True]*7)
-                if now.weekday() < len(weekday_schedule) and not weekday_schedule[now.weekday()] and not heat_override:
-                    _LOGGER.debug(f"Skipping '{name}': day disabled in schedule.")
-                    continue
-
-                min_rest_days = int(zone.get("min_rest_days", 2))
-
-                # Check minimum rest days (heat override bypasses this)
-                last_watered_str = zone.get("last_watered_at")
-                if last_watered_str and not heat_override:
-                    try:
-                        lw = dt_util.parse_datetime(last_watered_str)
-                        if lw:
-                            days_since = (now.date() - dt_util.as_local(lw).date()).days
-                            if days_since <= min_rest_days:
-                                _LOGGER.debug(
-                                    f"Skipping '{name}': only {days_since}d since last water "
-                                    f"(min rest: {min_rest_days}d)."
-                                )
-                                zone["last_skipped_at"] = now.isoformat()
-                                zone["last_skipped_reason"] = "Mindestpause"
-                                config_changed = True
-                                continue
-                    except Exception:
-                        pass
-
-                # Check soil moisture
-                start_threshold = float(zone.get("start_moisture_percent", 35))
-                moisture = None
-                s_state = self.hass.states.get(soil_sensor)
-                if s_state:
-                    try:
-                        moisture = float(s_state.state)
-                    except (ValueError, TypeError):
-                        pass
-
-                if moisture is not None and moisture >= start_threshold:
-                    _LOGGER.info(f"Skipping '{name}': moisture {moisture}% >= threshold {start_threshold}%.")
+            
+            if override_state != "force_water":
+                # ── Rain pre-check (both modes) ───────────────────────────────────
+                if is_raining:
+                    _LOGGER.info(f"Skipping '{name}': rain detected.")
                     zone["last_skipped_at"] = now.isoformat()
-                    zone["last_skipped_reason"] = "Noch feucht"
+                    zone["last_skipped_reason"] = "Regen"
                     config_changed = True
                     continue
-
-                # All checks passed → start (safety timeout = scheduledDurationMinutes)
-                duration = int(zone.get("scheduled_duration_minutes", 30))
-
-            else:
-                # ════ SCHEDULE MODE ══════════════════════════════════════════
-                weekdays = zone.get("weekday_schedule", [False] * 7)
-                today_idx = now.weekday()  # 0=Mon, 6=Sun
-                is_scheduled_today = (
-                    today_idx < len(weekdays) and weekdays[today_idx]
-                )
-                if not is_scheduled_today and not heat_override:
-                    continue
-
-                duration = int(zone.get("scheduled_duration_minutes", 30))
+    
+                # ── Determine heat override for this zone ─────────────────────────
+                enable_heat = zone.get("enable_heat_override", False)
+                heat_override = enable_heat and self.is_heat_override_today(zone)
+    
+                has_sensor = bool(soil_sensor)
+    
+                if has_sensor:
+                    # ════ SMART MODE ═════════════════════════════════════════════
+                    weekday_schedule = zone.get("weekday_schedule", [True]*7)
+                    if now.weekday() < len(weekday_schedule) and not weekday_schedule[now.weekday()] and not heat_override:
+                        _LOGGER.debug(f"Skipping '{name}': day disabled in schedule.")
+                        continue
+    
+                    min_rest_days = int(zone.get("min_rest_days", 2))
+    
+                    # Check minimum rest days (heat override bypasses this)
+                    last_watered_str = zone.get("last_watered_at")
+                    if last_watered_str and not heat_override:
+                        try:
+                            lw = dt_util.parse_datetime(last_watered_str)
+                            if lw:
+                                days_since = (now.date() - dt_util.as_local(lw).date()).days
+                                if days_since <= min_rest_days:
+                                    _LOGGER.debug(
+                                        f"Skipping '{name}': only {days_since}d since last water "
+                                        f"(min rest: {min_rest_days}d)."
+                                    )
+                                    zone["last_skipped_at"] = now.isoformat()
+                                    zone["last_skipped_reason"] = "Mindestpause"
+                                    config_changed = True
+                                    continue
+                        except Exception:
+                            pass
+    
+                    # Check soil moisture
+                    start_threshold = float(zone.get("start_moisture_percent", 35))
+                    moisture = None
+                    s_state = self.hass.states.get(soil_sensor)
+                    if s_state:
+                        try:
+                            moisture = float(s_state.state)
+                        except (ValueError, TypeError):
+                            pass
+    
+                    if moisture is not None and moisture >= start_threshold:
+                        _LOGGER.info(f"Skipping '{name}': moisture {moisture}% >= threshold {start_threshold}%.")
+                        zone["last_skipped_at"] = now.isoformat()
+                        zone["last_skipped_reason"] = "Noch feucht"
+                        config_changed = True
+                        continue
+    
+                else:
+                    # ════ SCHEDULE MODE ══════════════════════════════════════════
+                    weekdays = zone.get("weekday_schedule", [False] * 7)
+                    is_scheduled_today = (
+                        today_idx < len(weekdays) and weekdays[today_idx]
+                    )
+                    if not is_scheduled_today and not heat_override:
+                        continue
 
             # ── Start the zone ────────────────────────────────────────────────
             if valve_entity:

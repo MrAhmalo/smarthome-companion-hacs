@@ -389,39 +389,32 @@ class BlindsManager:
             return
             
         try:
-            response = None
-            try:
-                response = await self.hass.services.async_call(
-                    "weather",
-                    "get_forecasts",
-                    {"entity_id": weather_entity, "type": "daily"},
-                    blocking=True,
-                    return_response=True,
-                )
-            except Exception:
-                # Fallback zu hourly, falls daily nicht unterstützt wird
-                response = await self.hass.services.async_call(
-                    "weather",
-                    "get_forecasts",
-                    {"entity_id": weather_entity, "type": "hourly"},
-                    blocking=True,
-                    return_response=True,
-                )
+            response = await self.hass.services.async_call(
+                "weather",
+                "get_forecasts",
+                {"entity_id": weather_entity, "type": "hourly"},
+                blocking=True,
+                return_response=True,
+            )
 
             if response and weather_entity in response:
                 forecasts = response[weather_entity].get("forecast", [])
                 if forecasts:
                     today_temps = []
+                    today_hourly = []
                     for f in forecasts:
                         dt_str = f.get("datetime")
                         if dt_str:
                             try:
-                                f_date = dt_util.parse_datetime(dt_str).date()
-                                if f_date == now.date():
-                                    # Hole die Temperatur, teste verschiedene mögliche Keys
+                                f_dt = dt_util.parse_datetime(dt_str)
+                                f_date = f_dt.date()
+                                if f_date == now.date() or f_date == (now + timedelta(days=1)).date():
                                     for t_key in ["temperature", "max_temp", "native_temperature"]:
                                         if t_key in f and f[t_key] is not None:
-                                            today_temps.append(float(f[t_key]))
+                                            val = float(f[t_key])
+                                            today_hourly.append((f_dt, val))
+                                            if f_date == now.date():
+                                                today_temps.append(val)
                                             break
                             except Exception:
                                 pass
@@ -429,6 +422,9 @@ class BlindsManager:
                     if today_temps:
                         self._today_max_temp = max(today_temps)
                         self._today_max_temp_date = now.date()
+                    if today_hourly:
+                        self._today_hourly_forecast = today_hourly
+                        self._today_hourly_forecast_date = now.date()
                         
                     self._last_weather_update_hour = now.hour
         except Exception as e:
@@ -440,7 +436,111 @@ class BlindsManager:
             self._last_holiday_update_hour = now.hour
             await self._update_holidays()
         await self._update_weather_forecast()
+        await self._generate_daily_plan(now)
         await self._evaluate_all(is_watchdog_check=False)
+
+    async def _generate_daily_plan(self, now):
+        if "blinds_daily_plan" not in self.store.data:
+            self.store.data["blinds_daily_plan"] = {}
+            
+        plan_date = now.date().isoformat()
+        if self.store.data.get("blinds_daily_plan_date") == plan_date and not getattr(self, "_force_plan_regeneration", False):
+            return
+            
+        _LOGGER.info("Generating daily shading plan for %s", plan_date)
+        
+        self.store.data["blinds_daily_plan_date"] = plan_date
+        self.store.data["blinds_daily_plan"] = {}
+        
+        blinds = self.store.get_blinds()
+        today_max = getattr(self, "_today_max_temp", None)
+        today_hourly = getattr(self, "_today_hourly_forecast", [])
+        
+        for entity_id, config in blinds.items():
+            if not entity_id.startswith("cover.") or not config.get("enable_shading", False):
+                continue
+                
+            shading_start_temp = float(self.store.get_blinds().get("_global_shading_start_temp", 24.0))
+            shading_max_temp = float(self.store.get_blinds().get("_global_shading_max_temp", 30.0))
+            
+            trigger_temp = shading_start_temp
+            if today_max is not None and today_max > shading_start_temp:
+                trigger_temp = shading_start_temp - (today_max - shading_start_temp) * 0.5
+                trigger_temp = max(shading_start_temp - 5.0, trigger_temp)
+                
+            # Find the time when the forecast temp exceeds trigger_temp
+            time_temp_exceeds = None
+            if today_hourly:
+                for i in range(len(today_hourly) - 1):
+                    t1, temp1 = today_hourly[i]
+                    t2, temp2 = today_hourly[i+1]
+                    if temp1 < trigger_temp and temp2 >= trigger_temp:
+                        if temp1 == temp2:
+                            time_temp_exceeds = t1
+                        else:
+                            factor = (trigger_temp - temp1) / (temp2 - temp1)
+                            diff = t2 - t1
+                            time_temp_exceeds = t1 + timedelta(seconds=diff.total_seconds() * factor)
+                        break
+                    elif temp1 >= trigger_temp:
+                        time_temp_exceeds = t1
+                        break
+                        
+            card_dir = config.get("direction", "sueden")
+            direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
+            direction = direction_map.get(card_dir, "sued")
+            
+            sun_intensity = self.sun_manager.forecast_max_intensities.get(direction, 0.0)
+            shading_int = config.get("shading_intensity_threshold")
+            if shading_int is None:
+                shading_int = float(self.store.get_blinds().get(f"_global_shading_intensity_{card_dir}", 600.0))
+            else:
+                shading_int = float(shading_int)
+                
+            enters = self.sun_manager.facade_times.get("today", {}).get(direction, {}).get("enters")
+            leaves = self.sun_manager.facade_times.get("today", {}).get(direction, {}).get("leaves")
+            
+            cloud_ok = True
+            # For the daily plan, we assume cloud_ok is True if sun_intensity is above threshold,
+            # because sun_manager's forecast_max_intensities already factor in cloud coverage.
+            
+            is_shading = False
+            target_position = None
+            start_time = None
+            end_time = None
+            
+            if today_max is not None and today_max >= shading_start_temp and time_temp_exceeds and enters and leaves:
+                if not self.store.get_blinds().get("_global_enable_solar_intensity_check", False) or sun_intensity >= shading_int:
+                    start_time = max(enters, time_temp_exceeds)
+                    if start_time < leaves:
+                        is_shading = True
+                        end_time = leaves
+                        
+                        t_factor = (today_max - shading_start_temp) / max(0.1, shading_max_temp - shading_start_temp)
+                        t_factor = max(0.0, min(1.0, t_factor))
+                        
+                        start_pos = float(config.get("shading_start_position", 40.0))
+                        target_pos = float(config.get("shading_target_position", 0.0))
+                        target_position = int(start_pos + t_factor * (target_pos - start_pos))
+                        
+            if is_shading:
+                self.store.data["blinds_daily_plan"][entity_id] = {
+                    "shading_active": True,
+                    "target_position": target_position,
+                    "start_time": start_time.isoformat(),
+                    "end_time": end_time.isoformat(),
+                    "trigger_temp": trigger_temp,
+                    "today_max": today_max,
+                    "max_intensity": sun_intensity
+                }
+            else:
+                self.store.data["blinds_daily_plan"][entity_id] = {
+                    "shading_active": False
+                }
+                
+        self._force_plan_regeneration = False
+        self.hass.async_create_task(self.store.async_save())
+        self.hass.bus.async_fire("smarthome_companion_blinds_updated")
 
     async def _watchdog_loop(self, now):
         await self._evaluate_all(is_watchdog_check=True)
@@ -568,265 +668,7 @@ class BlindsManager:
             except Exception:
                 mem["automatic_transit"] = False
 
-        # Idle state position and manual action tracking
-        if cover_state not in ["opening", "closing"]:
-            if mem.get("automatic_transit", False):
-                last_managed = mem.get("last_managed_position", current_position)
-                if abs(current_position - last_managed) <= 5:
-                    mem["automatic_transit"] = False
-                    mem["last_known_position"] = current_position
-            else:
-                last_known = mem.get("last_known_position")
-                if last_known is None:
-                    last_known = current_position
-                    mem["last_known_position"] = current_position
-                
-                if abs(current_position - last_known) > 5:
-                    if enable_manual_pause:
-                        is_morning_ventilation = config.get("enable_ventilation", False) and now.time() <= self._parse_time(config.get("ventilation_until"), time(10, 0))
-                        is_opening = current_position > last_known
-                        
-                        if is_morning_ventilation and is_opening and mem.get("ventilation_stopped_today") != now.date().isoformat():
-                            _LOGGER.info("Manual opening during morning ventilation timeframe detected for %s. Not setting manual override.", entity_id)
-                        else:
-                            mem["manual_override_today"] = now.date().isoformat()
-                            _LOGGER.info("Manual override detected for %s. Active for the rest of today", entity_id)
-                    mem["last_known_position"] = current_position
-        
-        last_known_pos = mem.get("last_known_position", current_position)
-
-        # 1. Lüftungsstopp bei manueller oder automatischer Fahrt am Morgen (beim ersten Mal heute)
-        vent_until = self._parse_time(config.get("ventilation_until"), time(10, 0))
-        is_morning_ventilation_time = config.get("enable_ventilation", False) and now.time() <= vent_until
-        ventilation_position = int(config.get("ventilation_position", 59))
-
-        # Backup-Sicherheit: Wenn zum ersten Mal am Morgen ein Öffnungsversuch erkannt wird,
-        # senden wir direkt den Befehl, gezielt auf die Lüftungsposition zu fahren.
-        if is_morning_ventilation_time and mem.get("ventilation_initiated_today") != now.date().isoformat():
-            is_opening_detected = False
-            if cover_state == "opening":
-                is_opening_detected = True
-            elif last_known_pos is not None and current_position > last_known_pos:
-                is_opening_detected = True
-                
-            if is_opening_detected and current_position < ventilation_position:
-                mem["ventilation_initiated_today"] = now.date().isoformat()
-                self._add_trace(entity_id, "Lüftungsposition gesendet (Präventiv)", ventilation_position)
-                if mem.get("ventilation_logged_today") != now.date().isoformat():
-                    await self._log_to_logbook(entity_id, "Der Rollladen wird gelüftet.")
-                    mem["ventilation_logged_today"] = now.date().isoformat()
-                mem["last_managed_position"] = ventilation_position
-                mem["automatic_transit"] = True
-                mem["last_command_time"] = now.isoformat()
-                await self.hass.services.async_call("cover", "set_cover_position", {"entity_id": entity_id, "position": ventilation_position}, blocking=False, context=Context())
-
-        if is_morning_ventilation_time and mem.get("ventilation_stopped_today") != now.date().isoformat():
-            is_crossing = False
-            if cover_state == "opening" and current_position >= (ventilation_position - 3):
-                is_crossing = True
-            elif last_known_pos is not None and last_known_pos < ventilation_position and current_position >= ventilation_position:
-                is_crossing = True
-
-            if is_crossing:
-                is_manual = cover_state != "opening" and abs(mem.get("last_managed_position", current_position) - current_position) > 5
-                reason = "Lüftungsstopp (manuell)" if is_manual else "Lüftungsstopp"
-                
-                self._add_trace(entity_id, reason, ventilation_position)
-                mem["last_managed_position"] = ventilation_position
-                mem["ventilation_stopped_today"] = now.date().isoformat()
-                
-                if mem.get("ventilation_logged_today") != now.date().isoformat():
-                    await self._log_to_logbook(entity_id, "Der Rollladen wird gelüftet.")
-                    mem["ventilation_logged_today"] = now.date().isoformat()
-                mem["automatic_transit"] = False
-                mem["last_known_position"] = current_position
-                await self.hass.services.async_call("cover", "stop_cover", {"entity_id": entity_id}, blocking=False, context=Context())
-                return
-
-        has_active_override = mem.get("manual_override_today") == now.date().isoformat()
-
-        times = self.calculate_times(entity_id, config)
-        open_time_dt = times["open_time"]
-        close_time_dt = times["close_time"]
-
-        target_position = 100
-        action_type = "open"
-        
-        is_night = False
-        if open_time_dt <= close_time_dt:
-            if now < open_time_dt or now >= close_time_dt:
-                is_night = True
-        else:
-            if now >= close_time_dt and now < open_time_dt:
-                is_night = True
-                
-        if is_night:
-            target_position = 0
-            action_type = "close"
-        else:
-            direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
-            card_dir = config.get("cardinal_direction", "sueden").lower()
-            if card_dir == "genau" or card_dir == "genaue angabe":
-                card_dir = "sueden"
-            direction = direction_map.get(card_dir, "sued")
-            
-            # Lüftung Morgens
-            vent_until = self._parse_time(config.get("ventilation_until"), time(10, 0))
-            if config.get("enable_ventilation", False) and now.time() <= vent_until:
-                target_position = int(config.get("ventilation_position", 59))
-                action_type = "ventilation"
-            else:
-                # Beschattung mit dynamischem Temperatur-Check
-                if config.get("enable_shading", False):
-                    shading_start_temp = float(self.store.get_blinds().get("_global_shading_start_temp", 24.0))
-                    shading_max_temp = float(self.store.get_blinds().get("_global_shading_max_temp", 30.0))
-                    
-                    settings = self.store.data.get("settings", {})
-                    temp_sensor_id = settings.get("temp_sensor", "sensor.weather_temperature")
-                    
-                    current_temp = None
-                    temp_state = self.hass.states.get(temp_sensor_id)
-                    if temp_state:
-                        if temp_state.domain == "weather":
-                            try:
-                                current_temp = float(temp_state.attributes.get("temperature"))
-                            except (ValueError, TypeError):
-                                pass
-                        else:
-                            try:
-                                current_temp = float(temp_state.state)
-                            except (ValueError, TypeError):
-                                pass
-                    
-                    if current_temp is not None:
-                        # Frühwarn-System (Early Warning / Predictive Trigger)
-                        trigger_temp = shading_start_temp
-                        today_max = getattr(self, "_today_max_temp", None)
-                        
-                        if today_max is not None and getattr(self, "_today_max_temp_date", None) == now.date():
-                            if today_max > shading_start_temp:
-                                trigger_temp = shading_start_temp - (today_max - shading_start_temp) * 0.5
-                                trigger_temp = max(shading_start_temp - 5.0, trigger_temp)
-                        
-                        if current_temp >= trigger_temp:
-                            sun_intensity = self.sun_manager.intensities.get(direction, 0.0)
-                            shading_int = config.get("shading_intensity_threshold")
-                            if shading_int is None:
-                                shading_int = float(self.store.get_blinds().get(f"_global_shading_intensity_{card_dir}", 600.0))
-                            else:
-                                shading_int = float(shading_int)
-                            
-                            cloud_ok = True
-                            if self.store.get_blinds().get("_global_enable_cloud_check", False):
-                                cloud_sensor_id = self.store.data.get("settings", {}).get("cloud_sensor", "weather.forecast_home")
-                                cloud_state = self.hass.states.get(cloud_sensor_id)
-                                cloud_coverage = 0.0
-                                if cloud_state:
-                                    if cloud_state.domain == "weather":
-                                        try:
-                                            cloud_coverage = float(cloud_state.attributes.get("cloud_coverage", 0))
-                                        except (ValueError, TypeError):
-                                            pass
-                                    else:
-                                        try:
-                                            cloud_coverage = float(cloud_state.state)
-                                        except (ValueError, TypeError):
-                                            pass
-                                max_cloud = float(self.store.get_blinds().get("_global_max_cloud_coverage", 70.0))
-                                if cloud_coverage > max_cloud:
-                                    cloud_ok = False
-
-                            if cloud_ok and (not self.store.get_blinds().get("_global_enable_solar_intensity_check", False) or sun_intensity >= shading_int):
-                                ref_temp = today_max if (today_max is not None and getattr(self, "_today_max_temp_date", None) == now.date()) else current_temp
-                                
-                                t_factor = (ref_temp - shading_start_temp) / max(0.1, shading_max_temp - shading_start_temp)
-                                t_factor = max(0.0, min(1.0, t_factor))
-                                
-                                start_pos = float(config.get("shading_start_position", 40.0))
-                                target_pos = float(config.get("shading_target_position", 0.0))
-                                
-                                target_position = int(start_pos + t_factor * (target_pos - start_pos))
-                                action_type = "shading"
-                                mem["shading_log_details"] = {
-                                    "current_temp": round(current_temp, 1),
-                                    "trigger_temp": round(trigger_temp, 1),
-                                    "today_max": round(today_max, 1) if today_max else "Unbekannt"
-                                }
-                            
-                # Hitzeschutz: Belüftung beibehalten statt komplett zu öffnen, wenn Temperatur-Vorhersage für heute zu hoch
-                if action_type in ["open", "shading"] and config.get("enable_heat_protection_ventilation", False):
-                    threshold = float(self.store.get_blinds().get("_global_heat_protection_max_temp_threshold", 25.0))
-                    heat_protection_triggered = mem.get("heat_protection_ventilation_triggered_today") == now.date().isoformat()
-                    
-                    if heat_protection_triggered or (self._today_max_temp is not None and getattr(self, "_today_max_temp_date", None) == now.date() and self._today_max_temp >= threshold):
-                        mem["heat_protection_ventilation_triggered_today"] = now.date().isoformat()
-                        
-                        # Neue Option: Nach dem Lüften später komplett schließen?
-                        # close_enabled = self.store.data.get("_global_heat_protection_close_enabled", False)
-                        # close_active = False
-                        # if close_enabled:
-                        #     offset_minutes = int(self.store.data.get("_global_heat_protection_close_offset", 120))
-                        #     
-                        #     vent_until_time = self._parse_time(config.get("ventilation_until"), time(10, 0))
-                        #     vent_until_dt = datetime.combine(now.date(), vent_until_time, now.tzinfo)
-                        #     close_time_dt = vent_until_dt + timedelta(minutes=offset_minutes)
-                        #     
-                        #     if now >= close_time_dt:
-                        #         close_active = True
-                        #         
-                        # if close_active:
-                        #     target_position = int(self.store.data.get("_global_heat_protection_close_position", 0))
-                        #     action_type = "heat_protection_close"
-                        # elif action_type == "open":
-                        if action_type == "open":
-                            target_position = int(config.get("ventilation_position", 59))
-                            action_type = "ventilation"
-                        
-        # Prevent correcting downwards during morning/heat protection ventilation
-        if action_type == "ventilation" and current_position >= target_position:
-            target_position = current_position
-
-        # Transition and watchdog logs decoupling
-        last_target_pos = mem.get("last_target_position")
-        mem["last_target_position"] = target_position
-        
-        is_transition = last_target_pos is not None and last_target_pos != target_position
-        
-        # Evaluate manual override exceptions
-        if has_active_override:
-            allow_bypass = False
-            
-            # Exception 1: Scheduled closing times
-            if is_transition and action_type in ["open", "close", "ventilation", "heat_protection_close"]:
-                if override_allow_scheduled:
-                    # Only bypass manual overrides when the schedule says to close (night time or heat protection close).
-                    if action_type in ["close", "heat_protection_close"]:
-                        allow_bypass = True
-                        mem["manual_override_today"] = None
-                        _LOGGER.info("Bypassing manual override for scheduled close action on %s", entity_id)
-                    
-            # Exception 2: Shading activated or deactivated (transition to or from shading)
-            elif is_transition and (action_type == "shading" or last_target_pos == int(config.get("shading_position", 30))):
-                if override_allow_shading:
-                    allow_bypass = True
-                    mem["manual_override_today"] = None
-                    _LOGGER.info("Bypassing manual override for shading action on %s", entity_id)
-                    
-            # Exception 3: Watchdog error correction (when offline/recovering etc.)
-            elif is_watchdog_check and override_allow_watchdog:
-                ha_recovering = (dt_util.now() - self._started_at) < timedelta(minutes=15)
-                if ha_recovering or shutter_was_offline or force_correction:
-                    # The watchdog is explicitly permitted to correct state even if manually overridden
-                    # but only if HA recently restarted or the shutter was offline/unavailable, or forced
-                    allow_bypass = True
-                    _LOGGER.info(
-                        "Bypassing manual override for watchdog error correction on %s (HA recovering: %s, shutter was offline: %s, forced: %s)",
-                        entity_id, ha_recovering, shutter_was_offline, force_correction
-                    )
-
-            if not allow_bypass:
-                # Manual override blocks automation changes
-                return
+# scratch file for evaluate_blind.py
 
         # Automatisierung und Watchdog
         settings = self.store.data.get("settings", {})

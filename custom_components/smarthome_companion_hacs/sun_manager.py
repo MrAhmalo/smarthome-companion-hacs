@@ -14,6 +14,7 @@ class SunManager:
         self.global_shading_needed = False
         self.forecast_max_intensities_tomorrow = {"nord": 0.0, "ost": 0.0, "sued": 0.0, "west": 0.0}
         self.global_shading_needed_tomorrow = False
+        self.facade_times = {"today": {}, "tomorrow": {}}
         self._remove_update_listener = None
 
     async def async_setup(self):
@@ -123,6 +124,10 @@ class SunManager:
         lat = self.hass.config.latitude
         lon = self.hass.config.longitude
         
+        # Calculate facade times
+        self.facade_times["today"] = self._calc_facade_times(datetime.combine(today, datetime.min.time(), tzinfo=dt_util.UTC), lat, lon)
+        self.facade_times["tomorrow"] = self._calc_facade_times(datetime.combine(tomorrow, datetime.min.time(), tzinfo=dt_util.UTC), lat, lon)
+
         max_f = {"nord": 0.0, "ost": 0.0, "sued": 0.0, "west": 0.0}
         max_f_tom = {"nord": 0.0, "ost": 0.0, "sued": 0.0, "west": 0.0}
         
@@ -157,26 +162,7 @@ class SunManager:
             
             # Approx sun position
             dt_utc = dt_util.as_utc(f_dt).replace(tzinfo=None)
-            days_since_2000 = (dt_utc - datetime(2000, 1, 1, 12, 0, 0)).total_seconds() / 86400.0
-            
-            L = (280.460 + 0.9856474 * days_since_2000) % 360
-            g = math.radians((357.528 + 0.9856003 * days_since_2000) % 360)
-            ecliptic_lon = math.radians((L + 1.915 * math.sin(g) + 0.02 * math.sin(2 * g)) % 360)
-            obliquity = math.radians(23.439 - 0.0000004 * days_since_2000)
-            
-            dec = math.asin(math.sin(obliquity) * math.sin(ecliptic_lon))
-            ra = math.atan2(math.cos(obliquity) * math.sin(ecliptic_lon), math.cos(ecliptic_lon))
-            
-            gmst = (18.697374558 + 24.06570982441908 * days_since_2000) % 24
-            lmst = (gmst * 15 + lon) % 360
-            hour_angle = math.radians(lmst) - ra
-            lat_rad = math.radians(lat)
-            
-            el_rad = math.asin(math.sin(lat_rad) * math.sin(dec) + math.cos(lat_rad) * math.cos(dec) * math.cos(hour_angle))
-            az_rad = math.atan2(-math.sin(hour_angle), math.cos(lat_rad) * math.tan(dec) - math.sin(lat_rad) * math.cos(hour_angle))
-            
-            el = math.degrees(el_rad)
-            az = (math.degrees(az_rad) + 360) % 360
+            el, az = self._calc_sun_pos(dt_utc, lat, lon)
             
             if el > 0:
                 temp_dict = {"nord": 0.0, "ost": 0.0, "sued": 0.0, "west": 0.0}
@@ -197,3 +183,38 @@ class SunManager:
         self.global_shading_needed_tomorrow = any(v >= 600.0 for v in max_f_tom.values())
         
         self.hass.bus.async_fire("smarthome_companion_sun_updated")
+
+    def _calc_sun_pos(self, dt_utc, lat, lon):
+        days_since_2000 = (dt_utc - datetime(2000, 1, 1, 12, 0, 0)).total_seconds() / 86400.0
+        L = (280.460 + 0.9856474 * days_since_2000) % 360
+        g = math.radians((357.528 + 0.9856003 * days_since_2000) % 360)
+        ecliptic_lon = math.radians((L + 1.915 * math.sin(g) + 0.02 * math.sin(2 * g)) % 360)
+        obliquity = math.radians(23.439 - 0.0000004 * days_since_2000)
+        dec = math.asin(math.sin(obliquity) * math.sin(ecliptic_lon))
+        ra = math.atan2(math.cos(obliquity) * math.sin(ecliptic_lon), math.cos(ecliptic_lon))
+        gmst = (18.697374558 + 24.06570982441908 * days_since_2000) % 24
+        lmst = (gmst * 15 + lon) % 360
+        hour_angle = math.radians(lmst) - ra
+        lat_rad = math.radians(lat)
+        el_rad = math.asin(math.sin(lat_rad) * math.sin(dec) + math.cos(lat_rad) * math.cos(dec) * math.cos(hour_angle))
+        az_rad = math.atan2(-math.sin(hour_angle), math.cos(lat_rad) * math.tan(dec) - math.sin(lat_rad) * math.cos(hour_angle))
+        el = math.degrees(el_rad)
+        az = (math.degrees(az_rad) + 360) % 360
+        return el, az
+
+    def _calc_facade_times(self, dt_day, lat, lon):
+        times = {"nord": {"enters": None, "leaves": None}, "ost": {"enters": None, "leaves": None}, "sued": {"enters": None, "leaves": None}, "west": {"enters": None, "leaves": None}}
+        for m in range(0, 24 * 60, 5):
+            dt = dt_day + timedelta(minutes=m)
+            dt_utc = dt.replace(tzinfo=None)
+            el, az = self._calc_sun_pos(dt_utc, lat, lon)
+            if el > 0:
+                for direction, d_azi in {"nord": 0, "ost": 90, "sued": 180, "west": 270}.items():
+                    diff = abs(az - d_azi) % 360
+                    if diff > 180:
+                        diff = 360 - diff
+                    if diff < 90:
+                        if times[direction]["enters"] is None:
+                            times[direction]["enters"] = dt
+                        times[direction]["leaves"] = dt
+        return times

@@ -724,82 +724,78 @@ class BlindNextActionSensor(_BlindBaseSensor):
         self._attr_unique_id = f"smarthome_companion_sensor_next_action_{blind_id}"
         self._attr_icon = "mdi:clock-check-outline"
 
-    @property
-    def native_value(self):
+    def _get_next_event(self):
         config = self.store.get_blinds().get(self._blind_id)
         if not config:
-            return None
-        
+            return None, None
+            
         now = dt_util.now()
-        times_today = self.blinds_manager.calculate_times(self._blind_id, config, now.date())
-        open_time = times_today.get("open_time")
-        close_time = times_today.get("close_time")
+        events = []
         
-        if not open_time or not close_time:
+        # Calculate for today and tomorrow
+        for day_offset in [0, 1]:
+            d = now.date() + timedelta(days=day_offset)
+            times = self.blinds_manager.calculate_times(self._blind_id, config, d)
+            open_dt = times.get("open_time")
+            close_dt = times.get("close_time")
+            
+            if open_dt:
+                vent_until = self.blinds_manager._parse_time(config.get("ventilation_until"), time(10, 0))
+                has_vent = config.get("enable_ventilation", False) and open_dt.time() <= vent_until
+                
+                plan = self.store.data.get("blinds_daily_plan", {}).get(self._blind_id, {}) if day_offset == 0 else {}
+                # For tomorrow, we don't have the exact plan yet, so we just say "Öffnen" or "Lüftung"
+                
+                action = "Lüftungsstopp" if has_vent else "Öffnen"
+                
+                if day_offset == 0 and plan.get("shading_active"):
+                    s_time = dt_util.parse_datetime(plan.get("start_time"))
+                    if s_time and s_time <= open_dt:
+                        target_pos = plan.get("target_position", 0)
+                        vent_pos = int(config.get("ventilation_position", 59))
+                        if has_vent and vent_pos < target_pos:
+                            action = "Lüftungsstopp"
+                        else:
+                            action = "Beschattung"
+                            
+                events.append((open_dt, action))
+                
+            if close_dt:
+                events.append((close_dt, "Schließen"))
+                
+            if day_offset == 0:
+                plan = self.store.data.get("blinds_daily_plan", {}).get(self._blind_id, {})
+                if plan.get("shading_active"):
+                    s_time = dt_util.parse_datetime(plan.get("start_time"))
+                    e_time = dt_util.parse_datetime(plan.get("end_time"))
+                    if s_time and s_time > open_dt:
+                        events.append((s_time, "Beschattung"))
+                    if e_time and e_time < close_dt:
+                        events.append((e_time, "Öffnen (Ende Beschattung)"))
+                        
+        events.sort(key=lambda x: x[0])
+        for dt, act in events:
+            if dt > now:
+                return dt, act
+                
+        return None, None
+
+    @property
+    def native_value(self):
+        dt, act = self._get_next_event()
+        if not dt:
             return None
-            
-        next_open = open_time
-        if next_open <= now:
-            times_tomorrow = self.blinds_manager.calculate_times(self._blind_id, config, now.date() + timedelta(days=1))
-            next_open = times_tomorrow.get("open_time")
-            
-        next_close = close_time
-        if next_close <= now:
-            times_tomorrow = self.blinds_manager.calculate_times(self._blind_id, config, now.date() + timedelta(days=1))
-            next_close = times_tomorrow.get("close_time")
-            
-        if not next_open or not next_close:
-            return None
-            
-        if next_open < next_close:
-            return f"Öffnen um {next_open.strftime('%H:%M')}"
-        else:
-            return f"Schließen um {next_close.strftime('%H:%M')}"
+        return f"{act} um {dt.strftime('%H:%M')}"
 
     @property
     def extra_state_attributes(self):
-        config = self.store.get_blinds().get(self._blind_id)
-        if not config:
+        dt, act = self._get_next_event()
+        if not dt:
             return {}
-        
-        now = dt_util.now()
-        times_today = self.blinds_manager.calculate_times(self._blind_id, config, now.date())
-        open_time = times_today.get("open_time")
-        close_time = times_today.get("close_time")
-        
-        if not open_time or not close_time:
-            return {}
-            
-        next_open = open_time
-        if next_open <= now:
-            times_tomorrow = self.blinds_manager.calculate_times(self._blind_id, config, now.date() + timedelta(days=1))
-            next_open = times_tomorrow.get("open_time")
-            open_offset = times_tomorrow.get("open_offset", 0)
-        else:
-            open_offset = times_today.get("open_offset", 0)
-            
-        next_close = close_time
-        if next_close <= now:
-            times_tomorrow = self.blinds_manager.calculate_times(self._blind_id, config, now.date() + timedelta(days=1))
-            next_close = times_tomorrow.get("close_time")
-            close_offset = times_tomorrow.get("close_offset", 0)
-        else:
-            close_offset = times_today.get("close_offset", 0)
-            
-        if next_open < next_close:
-            action = "Öffnen"
-            next_dt = next_open
-            offset = open_offset
-        else:
-            action = "Schließen"
-            next_dt = next_close
-            offset = close_offset
-            
         return {
-            "next_action": action,
-            "next_time": next_dt.strftime("%H:%M"),
-            "next_datetime": next_dt.isoformat(),
-            "offset_minutes": offset,
+            "next_action": act,
+            "next_time": dt.strftime("%H:%M"),
+            "next_datetime": dt.isoformat(),
         }
 
 class BlindShadingPredictionTodaySensor(_BlindBaseSensor):
@@ -809,87 +805,37 @@ class BlindShadingPredictionTodaySensor(_BlindBaseSensor):
         self._attr_unique_id = f"smarthome_companion_sensor_shading_prediction_today_{blind_id}"
         self._attr_icon = "mdi:shield-sun"
 
-    def _calculate_prediction(self, is_tomorrow=False):
-        config = self.store.get_blinds().get(self._blind_id)
-        if not config or not config.get("enable_shading", False):
-            return "Deaktiviert", {}
-            
-        direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
-        card_dir = config.get("cardinal_direction", "sueden").lower()
-        if card_dir == "genau" or card_dir == "genaue angabe":
-            card_dir = "sueden"
-        direction = direction_map.get(card_dir, "sued")
-        
-        sun_manager = self.hass.data[DOMAIN].get("sun_manager")
-        if not sun_manager: return "Unbekannt", {}
-        
-        forecast_peak = sun_manager.forecast_max_intensities_tomorrow.get(direction, 0.0) if is_tomorrow else sun_manager.forecast_max_intensities.get(direction, 0.0)
-        
-        shading_int = config.get("shading_intensity_threshold")
-        if shading_int is None:
-            shading_int = float(self.store.get_blinds().get(f"_global_shading_intensity_{card_dir}", 600.0))
-        else:
-            shading_int = float(shading_int)
-            
-        shading_start_temp = float(self.store.get_blinds().get("_global_shading_start_temp", 24.0))
-        shading_max_temp = float(self.store.get_blinds().get("_global_shading_max_temp", 30.0))
-        
-        # Get forecast max temp
-        # Since weather_manager only stores today_max_temp right now we will use that for both
-        # A more advanced version would also fetch tomorrow max temp, but for now we use _today_max_temp
-        today_max = getattr(self.blinds_manager, "_today_max_temp", None)
-        
-        enable_solar_int = self.store.get_blinds().get("_global_enable_solar_intensity_check", False)
-        if enable_solar_int and forecast_peak < shading_int:
-            return "Inaktiv (Zu wenig Sonne)", {
-                "forecast_peak": round(forecast_peak, 1),
-                "required_intensity": shading_int
-            }
-            
-        if today_max is None:
-            return "Wartet auf Wetterdaten", {
-                "forecast_peak": round(forecast_peak, 1),
-                "required_intensity": shading_int if enable_solar_int else "Aus"
-            }
-            
-        trigger_temp = shading_start_temp
-        if today_max > shading_start_temp:
-            trigger_temp = shading_start_temp - (today_max - shading_start_temp) * 0.5
-            trigger_temp = max(shading_start_temp - 5.0, trigger_temp)
-            
-        if today_max < trigger_temp:
-            return "Inaktiv (Zu kühl)", {
-                "forecast_peak": round(forecast_peak, 1),
-                "required_intensity": shading_int if enable_solar_int else "Aus",
-                "forecast_max_temp": round(today_max, 1),
-                "trigger_temp": round(trigger_temp, 1)
-            }
-            
-        t_factor = (today_max - shading_start_temp) / max(0.1, shading_max_temp - shading_start_temp)
-        t_factor = max(0.0, min(1.0, t_factor))
-        
-        start_pos = float(config.get("shading_start_position", 40.0))
-        target_pos = float(config.get("shading_target_position", 0.0))
-        
-        target_position = int(start_pos + t_factor * (target_pos - start_pos))
-        
-        return f"Geplant: {target_position}%", {
-            "forecast_peak": round(forecast_peak, 1),
-            "required_intensity": shading_int if enable_solar_int else "Aus",
-            "forecast_max_temp": round(today_max, 1),
-            "trigger_temp": round(trigger_temp, 1),
-            "calculated_target_position": target_position
-        }
-
     @property
     def native_value(self):
-        val, _ = self._calculate_prediction(is_tomorrow=False)
-        return val
+        config = self.store.get_blinds().get(self._blind_id)
+        if not config or not config.get("enable_shading", False):
+            return "Deaktiviert"
+            
+        plan = self.store.data.get("blinds_daily_plan", {}).get(self._blind_id, {})
+        if not plan:
+            return "Wartet auf Planung..."
+            
+        if not plan.get("shading_active"):
+            return "Inaktiv heute"
+            
+        pos = plan.get("target_position", 0)
+        return f"Geplant: {pos}%"
 
     @property
     def extra_state_attributes(self):
-        _, attr = self._calculate_prediction(is_tomorrow=False)
-        return attr
+        plan = self.store.data.get("blinds_daily_plan", {}).get(self._blind_id, {})
+        if not plan:
+            return {}
+        
+        return {
+            "shading_active": plan.get("shading_active"),
+            "target_position": plan.get("target_position"),
+            "start_time": plan.get("start_time"),
+            "end_time": plan.get("end_time"),
+            "trigger_temp": plan.get("trigger_temp"),
+            "forecast_max_temp": plan.get("today_max"),
+            "forecast_peak_intensity": plan.get("max_intensity")
+        }
 
 class BlindShadingPredictionTomorrowSensor(_BlindBaseSensor):
     def __init__(self, hass, store, blinds_manager, blind_id):
@@ -900,16 +846,11 @@ class BlindShadingPredictionTomorrowSensor(_BlindBaseSensor):
 
     @property
     def native_value(self):
-        # We use today's temperature forecast logic until tomorrow is explicitly fetched in blinds_manager
-        today_sensor = BlindShadingPredictionTodaySensor(self.hass, self.store, self.blinds_manager, self._blind_id)
-        val, _ = today_sensor._calculate_prediction(is_tomorrow=True)
-        return val
+        return "Berechnung am Morgen"
 
     @property
     def extra_state_attributes(self):
-        today_sensor = BlindShadingPredictionTodaySensor(self.hass, self.store, self.blinds_manager, self._blind_id)
-        _, attr = today_sensor._calculate_prediction(is_tomorrow=True)
-        return attr
+        return {}
 
 class _IrrigationZoneBaseSensor(SensorEntity):
     def __init__(self, hass, store, irrigation_manager, zone_id, sensor_type):
