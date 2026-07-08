@@ -73,17 +73,16 @@ class BlindsManager:
         elif action_type == "shading":
             details = mem.get("shading_log_details", {})
             if details:
-                ct = details.get("current_temp", "?")
-                tt = details.get("trigger_temp", "?")
-                mx = details.get("today_max", "?")
-                msg = f"Hitzeschutz aktiviert: Fährt auf {target_position}% (Temperatur {ct} °C >= Schwelle {tt} °C. Tageshöchstwert: {mx} °C){suffix}."
+                mx = details.get("Temperatur Max Heute", "?")
+                intensity = details.get("Sonnenintensität", "?")
+                msg = f"Hitzeschutz aktiviert gemäß Tagesplan: Fährt auf {target_position}% (Heutiges Maximum: {mx}, Sonne: {intensity}){suffix}."
             else:
                 msg = f"von der Integration auf Beschattungsposition ({target_position}%) gefahren{suffix}."
         elif action_type == "ventilation":
             if mem.get("ventilation_logged_today") == now.date().isoformat():
                 return
             mem["ventilation_logged_today"] = now.date().isoformat()
-            msg = f"Der Rollladen wird gelüftet."
+            msg = f"Der Rollladen wird zum Lüften auf {target_position}% gefahren."
         else:
             msg = f"von der Integration gesteuert auf {target_position}%{suffix}."
         
