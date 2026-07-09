@@ -1,5 +1,5 @@
 import logging
-from datetime import timedelta
+from datetime import timedelta, time, datetime
 import homeassistant.util.dt as dt_util
 
 from homeassistant.components.sensor import SensorEntity
@@ -720,19 +720,18 @@ class BlindSunsetCloseTimeSensor(_BlindBaseSensor):
 class BlindNextActionSensor(_BlindBaseSensor):
     def __init__(self, hass, store, blinds_manager, blind_id):
         super().__init__(hass, store, blinds_manager, blind_id, "next_action")
-        self._attr_name = "Nächste Aktion"
+        self._attr_name = "Nächste Aktion(en)"
         self._attr_unique_id = f"smarthome_companion_sensor_next_action_{blind_id}"
         self._attr_icon = "mdi:clock-check-outline"
 
-    def _get_next_event(self):
+    def _get_events(self):
         config = self.store.get_blinds().get(self._blind_id)
         if not config:
-            return None, None
+            return []
             
         now = dt_util.now()
         events = []
         
-        # Calculate for today and tomorrow
         for day_offset in [0, 1]:
             d = now.date() + timedelta(days=day_offset)
             times = self.blinds_manager.calculate_times(self._blind_id, config, d)
@@ -744,9 +743,7 @@ class BlindNextActionSensor(_BlindBaseSensor):
                 has_vent = config.get("enable_ventilation", False) and open_dt.time() <= vent_until
                 
                 plan = self.store.data.get("blinds_daily_plan", {}).get(self._blind_id, {}) if day_offset == 0 else {}
-                # For tomorrow, we don't have the exact plan yet, so we just say "Öffnen" or "Lüftung"
-                
-                action = "Lüftungsstopp" if has_vent else "Öffnen"
+                action = "Lüften" if has_vent else "Öffnen"
                 
                 if day_offset == 0 and plan.get("shading_active"):
                     s_time = dt_util.parse_datetime(plan.get("start_time"))
@@ -754,7 +751,7 @@ class BlindNextActionSensor(_BlindBaseSensor):
                         target_pos = plan.get("target_position", 0)
                         vent_pos = int(config.get("ventilation_position", 59))
                         if has_vent and vent_pos < target_pos:
-                            action = "Lüftungsstopp"
+                            action = "Lüften"
                         else:
                             action = "Beschattung"
                             
@@ -771,27 +768,28 @@ class BlindNextActionSensor(_BlindBaseSensor):
                     if s_time and s_time > open_dt:
                         events.append((s_time, "Beschattung"))
                     if e_time and e_time < close_dt:
-                        events.append((e_time, "Öffnen (Ende Beschattung)"))
+                        events.append((e_time, "Öffnen"))
                         
         events.sort(key=lambda x: x[0])
-        for dt, act in events:
-            if dt > now:
-                return dt, act
-                
-        return None, None
+        return events
 
     @property
     def native_value(self):
-        dt, act = self._get_next_event()
-        if not dt:
-            return None
-        return f"{act} um {dt.strftime('%H:%M')}"
+        events = self._get_events()
+        now = dt_util.now()
+        future_events = [f"{act} ({dt.strftime('%H:%M')})" for dt, act in events if dt > now]
+        if not future_events:
+            return "Keine Aktionen"
+        return " ➔ ".join(future_events[:3])
 
     @property
     def extra_state_attributes(self):
-        dt, act = self._get_next_event()
-        if not dt:
+        events = self._get_events()
+        now = dt_util.now()
+        future = [e for e in events if e[0] > now]
+        if not future:
             return {}
+        dt, act = future[0]
         return {
             "next_action": act,
             "next_time": dt.strftime("%H:%M"),
@@ -819,6 +817,13 @@ class BlindShadingPredictionTodaySensor(_BlindBaseSensor):
             return "Inaktiv heute"
             
         pos = plan.get("target_position", 0)
+        s_time_str = plan.get("start_time")
+        e_time_str = plan.get("end_time")
+        if s_time_str and e_time_str:
+            s_dt = dt_util.parse_datetime(s_time_str)
+            e_dt = dt_util.parse_datetime(e_time_str)
+            if s_dt and e_dt:
+                return f"Geplant: {pos}% ({s_dt.strftime('%H:%M')} - {e_dt.strftime('%H:%M')})"
         return f"Geplant: {pos}%"
 
     @property
