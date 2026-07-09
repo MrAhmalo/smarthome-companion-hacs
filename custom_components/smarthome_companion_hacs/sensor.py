@@ -1,5 +1,8 @@
 import logging
+import os
+import json
 from datetime import timedelta, time, datetime
+# pyrefly: ignore [missing-import]
 import homeassistant.util.dt as dt_util
 
 from homeassistant.components.sensor import SensorEntity
@@ -9,6 +12,32 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+class IntegrationInfoSensor(SensorEntity):
+    def __init__(self, hass):
+        self.hass = hass
+        self._attr_name = "SmartHome Companion"
+        self._attr_unique_id = "smarthome_companion_integration_info"
+        self._attr_icon = "mdi:home-assistant"
+        
+        self._version = "Unbekannt"
+        try:
+            manifest_path = os.path.join(os.path.dirname(__file__), "manifest.json")
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+                self._version = manifest.get("version", "Unbekannt")
+        except Exception as e:
+            _LOGGER.error(f"Fehler beim Lesen der manifest.json: {e}")
+
+    @property
+    def native_value(self):
+        return self._version
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "integration": "SmartHome Companion HACS Backend",
+            "author": "Julian & Antigravity"
+        }
 
 async def async_setup_entry(hass, entry, async_add_entities):
     sun_manager = hass.data[DOMAIN].get("sun_manager")
@@ -18,7 +47,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     
     module = entry.data.get("module", "legacy")
 
-    entities = []
+    entities = [IntegrationInfoSensor(hass)]
     if module in ("blinds", "legacy") and sun_manager:
         entities.extend([
             FassadeSunSensor(sun_manager, "nord", "Nord"),
@@ -584,6 +613,13 @@ class _BlindBaseSensor(SensorEntity):
         self._sensor_type = sensor_type
 
     @property
+    def extra_state_attributes(self):
+        return {
+            "blind_id": self._blind_id,
+            "sensor_type": self._sensor_type,
+        }
+
+    @property
     def available(self):
          return self._blind_id in self.store.get_blinds()
 
@@ -616,6 +652,7 @@ class _BlindBaseSensor(SensorEntity):
                 "smarthome_companion_sun_updated", self._handle_update
             )
         )
+        self.async_write_ha_state()
 
     async def _handle_update(self, event):
         self.async_write_ha_state()
@@ -784,17 +821,19 @@ class BlindNextActionSensor(_BlindBaseSensor):
 
     @property
     def extra_state_attributes(self):
+        attrs = super().extra_state_attributes
         events = self._get_events()
         now = dt_util.now()
         future = [e for e in events if e[0] > now]
         if not future:
-            return {}
+            return attrs
         dt, act = future[0]
-        return {
+        attrs.update({
             "next_action": act,
             "next_time": dt.strftime("%H:%M"),
             "next_datetime": dt.isoformat(),
-        }
+        })
+        return attrs
 
 class BlindShadingPredictionTodaySensor(_BlindBaseSensor):
     def __init__(self, hass, store, blinds_manager, blind_id):
@@ -828,11 +867,12 @@ class BlindShadingPredictionTodaySensor(_BlindBaseSensor):
 
     @property
     def extra_state_attributes(self):
+        attrs = super().extra_state_attributes
         plan = self.store.data.get("blinds_daily_plan", {}).get(self._blind_id, {})
         if not plan:
-            return {}
+            return attrs
         
-        return {
+        attrs.update({
             "shading_active": plan.get("shading_active"),
             "target_position": plan.get("target_position"),
             "start_time": plan.get("start_time"),
@@ -840,7 +880,8 @@ class BlindShadingPredictionTodaySensor(_BlindBaseSensor):
             "trigger_temp": plan.get("trigger_temp"),
             "forecast_max_temp": plan.get("today_max"),
             "forecast_peak_intensity": plan.get("max_intensity")
-        }
+        })
+        return attrs
 
 class BlindShadingPredictionTomorrowSensor(_BlindBaseSensor):
     def __init__(self, hass, store, blinds_manager, blind_id):
@@ -855,7 +896,7 @@ class BlindShadingPredictionTomorrowSensor(_BlindBaseSensor):
 
     @property
     def extra_state_attributes(self):
-        return {}
+        return super().extra_state_attributes
 
 class _IrrigationZoneBaseSensor(SensorEntity):
     def __init__(self, hass, store, irrigation_manager, zone_id, sensor_type):
@@ -895,6 +936,7 @@ class _IrrigationZoneBaseSensor(SensorEntity):
                 "smarthome_companion_irrigation_updated", self._handle_update
             )
         )
+        self.async_write_ha_state()
 
     async def _handle_update(self, event):
         self.async_write_ha_state()

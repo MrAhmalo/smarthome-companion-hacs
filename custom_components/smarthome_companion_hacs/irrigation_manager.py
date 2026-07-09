@@ -340,7 +340,9 @@ class IrrigationManager:
                     except (ValueError, TypeError):
                         pass
 
+        stopped_zone_ids = set()
         if zones_to_stop:
+            stopped_zone_ids = {z[0] for z in zones_to_stop}
             await self._stop_zones(zones_to_stop)
 
         if not self.config.get("zones"):
@@ -375,7 +377,7 @@ class IrrigationManager:
             name = zone.get("name", zone_id)
 
             # Detect externally-toggled manual run
-            if valve_entity and zone_id not in self.running_zones:
+            if valve_entity and zone_id not in self.running_zones and zone_id not in stopped_zone_ids:
                 valve_state = self.hass.states.get(valve_entity)
                 if valve_state and valve_state.state == "on":
                     _LOGGER.info(f"Detected external manual turn-on for '{name}'.")
