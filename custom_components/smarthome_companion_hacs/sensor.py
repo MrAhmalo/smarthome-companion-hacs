@@ -826,12 +826,17 @@ class BlindNextActionSensor(_BlindBaseSensor):
         now = dt_util.now()
         future = [e for e in events if e[0] > now]
         if not future:
+            attrs.update({"events_list": []})
             return attrs
         dt, act = future[0]
+        
+        events_list = [{"action": a, "time": d.strftime("%H:%M"), "is_today": d.date() == now.date()} for d, a in future]
+        
         attrs.update({
             "next_action": act,
             "next_time": dt.strftime("%H:%M"),
             "next_datetime": dt.isoformat(),
+            "events_list": events_list,
         })
         return attrs
 

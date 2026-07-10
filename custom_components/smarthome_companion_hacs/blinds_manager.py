@@ -83,6 +83,8 @@ class BlindsManager:
                 return
             mem["ventilation_logged_today"] = now.date().isoformat()
             msg = f"Der Rollladen wird zum Lüften auf {target_position}% gefahren."
+        elif action_type == "cloud_pause":
+            msg = f"Hitzeschutz aufgrund von Bewölkung pausiert. Fährt auf {target_position}%{suffix}."
         else:
             msg = f"von der Integration gesteuert auf {target_position}%{suffix}."
         
@@ -408,10 +410,11 @@ class BlindsManager:
                                 f_dt = dt_util.parse_datetime(dt_str)
                                 f_date = f_dt.date()
                                 if f_date == now.date() or f_date == (now + timedelta(days=1)).date():
+                                    cloud_cov = float(f.get("cloud_coverage", 0))
                                     for t_key in ["temperature", "max_temp", "native_temperature"]:
                                         if t_key in f and f[t_key] is not None:
                                             val = float(f[t_key])
-                                            today_hourly.append((f_dt, val))
+                                            today_hourly.append({"time": f_dt, "temp": val, "cloud": cloud_cov})
                                             if f_date == now.date():
                                                 today_temps.append(val)
                                             break
@@ -471,8 +474,8 @@ class BlindsManager:
             time_temp_exceeds = None
             if today_hourly:
                 for i in range(len(today_hourly) - 1):
-                    t1, temp1 = today_hourly[i]
-                    t2, temp2 = today_hourly[i+1]
+                    t1, temp1 = today_hourly[i]["time"], today_hourly[i]["temp"]
+                    t2, temp2 = today_hourly[i+1]["time"], today_hourly[i+1]["temp"]
                     if temp1 < trigger_temp and temp2 >= trigger_temp:
                         if temp1 == temp2:
                             time_temp_exceeds = t1
@@ -484,6 +487,23 @@ class BlindsManager:
                     elif temp1 >= trigger_temp:
                         time_temp_exceeds = t1
                         break
+                        
+            # Evaluate daily average cloud coverage
+            cloud_ok = True
+            if self.store.get_blinds().get("_global_enable_cloud_check", False) and today_hourly:
+                cloud_sum = 0.0
+                cloud_count = 0
+                for hour_data in today_hourly:
+                    dt = hour_data["time"]
+                    if 8 <= dt.hour <= 18:
+                        cloud_sum += hour_data["cloud"]
+                        cloud_count += 1
+                if cloud_count > 0:
+                    avg_cloud = cloud_sum / cloud_count
+                    max_cloud = float(self.store.get_blinds().get("_global_max_cloud_coverage", 70.0))
+                    if avg_cloud > max_cloud:
+                        cloud_ok = False
+                        _LOGGER.info("Shading aborted for %s: Average daily cloud coverage (%.1f%%) > Max allowed (%.1f%%)", entity_id, avg_cloud, max_cloud)
                         
             card_dir = config.get("direction", "sueden")
             direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
@@ -499,16 +519,12 @@ class BlindsManager:
             enters = self.sun_manager.facade_times.get("today", {}).get(direction, {}).get("enters")
             leaves = self.sun_manager.facade_times.get("today", {}).get(direction, {}).get("leaves")
             
-            cloud_ok = True
-            # For the daily plan, we assume cloud_ok is True if sun_intensity is above threshold,
-            # because sun_manager's forecast_max_intensities already factor in cloud coverage.
-            
             is_shading = False
             target_position = None
             start_time = None
             end_time = None
             
-            if today_max is not None and today_max >= shading_start_temp and time_temp_exceeds and enters and leaves:
+            if today_max is not None and today_max >= shading_start_temp and time_temp_exceeds and enters and leaves and cloud_ok:
                 if not self.store.get_blinds().get("_global_enable_solar_intensity_check", False) or sun_intensity >= shading_int:
                     start_time = max(enters, time_temp_exceeds)
                     if start_time < leaves:
