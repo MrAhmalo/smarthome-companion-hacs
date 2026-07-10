@@ -462,96 +462,117 @@ class BlindsManager:
             if not entity_id.startswith("cover.") or not config.get("enable_shading", False):
                 continue
                 
-            shading_start_temp = float(self.store.get_blinds().get("_global_shading_start_temp", 24.0))
-            shading_max_temp = float(self.store.get_blinds().get("_global_shading_max_temp", 30.0))
-            
-            trigger_temp = shading_start_temp
-            if today_max is not None and today_max > shading_start_temp:
-                trigger_temp = shading_start_temp - (today_max - shading_start_temp) * 0.5
-                trigger_temp = max(shading_start_temp - 5.0, trigger_temp)
+            plan = self._generate_shading_plan(entity_id, config, now.date())
+            self.store.data["blinds_daily_plan"][entity_id] = plan
                 
-            # Find the time when the forecast temp exceeds trigger_temp
-            time_temp_exceeds = None
-            if today_hourly:
-                for i in range(len(today_hourly) - 1):
-                    t1, temp1 = today_hourly[i]["time"], today_hourly[i]["temp"]
-                    t2, temp2 = today_hourly[i+1]["time"], today_hourly[i+1]["temp"]
-                    if temp1 < trigger_temp and temp2 >= trigger_temp:
-                        if temp1 == temp2:
-                            time_temp_exceeds = t1
-                        else:
-                            factor = (trigger_temp - temp1) / (temp2 - temp1)
-                            diff = t2 - t1
-                            time_temp_exceeds = t1 + timedelta(seconds=diff.total_seconds() * factor)
-                        break
-                    elif temp1 >= trigger_temp:
+        self._force_plan_regeneration = False
+        self.hass.async_create_task(self.store.async_save())
+        self.hass.bus.async_fire("smarthome_companion_blinds_updated")
+
+    def _generate_shading_plan(self, entity_id, config, plan_date):
+        today_hourly = getattr(self, "_today_hourly_forecast", [])
+        
+        plan_max = None
+        plan_hourly = []
+        for h in today_hourly:
+            if h["time"].date() == plan_date:
+                plan_hourly.append(h)
+                if plan_max is None or h["temp"] > plan_max:
+                    plan_max = h["temp"]
+                    
+        shading_start_temp = float(self.store.get_blinds().get("_global_shading_start_temp", 24.0))
+        shading_max_temp = float(self.store.get_blinds().get("_global_shading_max_temp", 30.0))
+        
+        trigger_temp = shading_start_temp
+        if plan_max is not None and plan_max > shading_start_temp:
+            trigger_temp = shading_start_temp - (plan_max - shading_start_temp) * 0.5
+            trigger_temp = max(shading_start_temp - 5.0, trigger_temp)
+            
+        time_temp_exceeds = None
+        if plan_hourly:
+            for i in range(len(plan_hourly) - 1):
+                t1, temp1 = plan_hourly[i]["time"], plan_hourly[i]["temp"]
+                t2, temp2 = plan_hourly[i+1]["time"], plan_hourly[i+1]["temp"]
+                if temp1 < trigger_temp and temp2 >= trigger_temp:
+                    if temp1 == temp2:
                         time_temp_exceeds = t1
-                        break
-                        
-            # Evaluate daily average cloud coverage
-            cloud_ok = True
-            if self.store.get_blinds().get("_global_enable_cloud_check", False) and today_hourly:
-                cloud_sum = 0.0
-                cloud_count = 0
-                for hour_data in today_hourly:
-                    dt = hour_data["time"]
-                    if 8 <= dt.hour <= 18:
-                        cloud_sum += hour_data["cloud"]
-                        cloud_count += 1
-                if cloud_count > 0:
-                    avg_cloud = cloud_sum / cloud_count
-                    max_cloud = float(self.store.get_blinds().get("_global_max_cloud_coverage", 70.0))
-                    if avg_cloud > max_cloud:
-                        cloud_ok = False
-                        _LOGGER.info("Shading aborted for %s: Average daily cloud coverage (%.1f%%) > Max allowed (%.1f%%)", entity_id, avg_cloud, max_cloud)
-                        
-            card_dir = config.get("direction", "sueden")
-            direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
-            direction = direction_map.get(card_dir, "sued")
+                    else:
+                        factor = (trigger_temp - temp1) / (max(0.1, temp2 - temp1))
+                        diff = t2 - t1
+                        time_temp_exceeds = t1 + timedelta(seconds=diff.total_seconds() * factor)
+                    break
+                elif temp1 >= trigger_temp:
+                    time_temp_exceeds = t1
+                    break
+                    
+        cloud_ok = True
+        if self.store.get_blinds().get("_global_enable_cloud_check", False) and plan_hourly:
+            cloud_sum = 0.0
+            cloud_count = 0
+            for hour_data in plan_hourly:
+                dt = hour_data["time"]
+                if 8 <= dt.hour <= 18:
+                    cloud_sum += hour_data["cloud"]
+                    cloud_count += 1
+            if cloud_count > 0:
+                avg_cloud = cloud_sum / cloud_count
+                max_cloud = float(self.store.get_blinds().get("_global_max_cloud_coverage", 70.0))
+                if avg_cloud > max_cloud:
+                    cloud_ok = False
+                    
+        card_dir = config.get("direction", "sueden")
+        direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
+        direction = direction_map.get(card_dir, "sued")
+        
+        sun_intensity = self.sun_manager.forecast_max_intensities.get(direction, 0.0)
+        shading_int = config.get("shading_intensity_threshold")
+        if shading_int is None:
+            shading_int = float(self.store.get_blinds().get(f"_global_shading_intensity_{card_dir}", 600.0))
+        else:
+            shading_int = float(shading_int)
             
-            sun_intensity = self.sun_manager.forecast_max_intensities.get(direction, 0.0)
-            shading_int = config.get("shading_intensity_threshold")
-            if shading_int is None:
-                shading_int = float(self.store.get_blinds().get(f"_global_shading_intensity_{card_dir}", 600.0))
-            else:
-                shading_int = float(shading_int)
-                
-            enters = self.sun_manager.facade_times.get("today", {}).get(direction, {}).get("enters")
-            leaves = self.sun_manager.facade_times.get("today", {}).get(direction, {}).get("leaves")
+        enters = self.sun_manager.facade_times.get("today", {}).get(direction, {}).get("enters")
+        leaves = self.sun_manager.facade_times.get("today", {}).get(direction, {}).get("leaves")
+        
+        if enters and plan_date > enters.date():
+            enters = enters + timedelta(days=(plan_date - enters.date()).days)
+            leaves = leaves + timedelta(days=(plan_date - leaves.date()).days)
             
-            is_shading = False
-            target_position = None
-            start_time = None
-            end_time = None
-            
-            if today_max is not None and today_max >= shading_start_temp and time_temp_exceeds and enters and leaves and cloud_ok:
-                if not self.store.get_blinds().get("_global_enable_solar_intensity_check", False) or sun_intensity >= shading_int:
-                    start_time = max(enters, time_temp_exceeds)
-                    if start_time < leaves:
-                        is_shading = True
-                        end_time = leaves
-                        
-                        t_factor = (today_max - shading_start_temp) / max(0.1, shading_max_temp - shading_start_temp)
-                        t_factor = max(0.0, min(1.0, t_factor))
-                        
-                        start_pos = float(config.get("shading_start_position", 40.0))
-                        target_pos = float(config.get("shading_target_position", 0.0))
-                        target_position = int(start_pos + t_factor * (target_pos - start_pos))
-                        
-            if is_shading:
-                self.store.data["blinds_daily_plan"][entity_id] = {
-                    "shading_active": True,
-                    "target_position": target_position,
-                    "start_time": start_time.isoformat(),
-                    "end_time": end_time.isoformat(),
-                    "trigger_temp": trigger_temp,
-                    "today_max": today_max,
-                    "max_intensity": sun_intensity
-                }
-            else:
-                self.store.data["blinds_daily_plan"][entity_id] = {
-                    "shading_active": False
-                }
+        is_shading = False
+        target_position = None
+        start_time = None
+        end_time = None
+        
+        if plan_max is not None and plan_max >= shading_start_temp and time_temp_exceeds and enters and leaves and cloud_ok:
+            if not self.store.get_blinds().get("_global_enable_solar_intensity_check", False) or sun_intensity >= shading_int:
+                start_time = max(enters, time_temp_exceeds)
+                if start_time < leaves:
+                    is_shading = True
+                    end_time = leaves
+                    
+                    t_factor = (plan_max - shading_start_temp) / max(0.1, shading_max_temp - shading_start_temp)
+                    t_factor = max(0.0, min(1.0, t_factor))
+                    
+                    start_pos = float(config.get("shading_start_position", 40.0))
+                    target_pos = float(config.get("shading_target_position", 0.0))
+                    target_position = int(start_pos + t_factor * (target_pos - start_pos))
+                    
+        if is_shading:
+            return {
+                "shading_active": True,
+                "target_position": target_position,
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+                "trigger_temp": trigger_temp,
+                "today_max": plan_max,
+                "max_intensity": sun_intensity
+            }
+        else:
+            return {
+                "shading_active": False,
+                "today_max": plan_max,
+                "max_intensity": sun_intensity
+            }
                 
         self._force_plan_regeneration = False
         self.hass.async_create_task(self.store.async_save())
