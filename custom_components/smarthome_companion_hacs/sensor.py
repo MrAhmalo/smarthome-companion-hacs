@@ -13,10 +13,15 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 class IntegrationInfoSensor(SensorEntity):
-    def __init__(self, hass):
+    def __init__(self, hass, module="legacy"):
         self.hass = hass
-        self._attr_name = "SmartHome Companion"
-        self._attr_unique_id = "smarthome_companion_integration_info"
+        self._module = module
+        if module == "legacy":
+            self._attr_name = "SmartHome Companion"
+            self._attr_unique_id = "smarthome_companion_integration_info"
+        else:
+            self._attr_name = f"SmartHome Companion ({module.title()})"
+            self._attr_unique_id = f"smarthome_companion_integration_info_{module}"
         self._attr_icon = "mdi:home-assistant"
         
         self._version = "Unbekannt"
@@ -47,7 +52,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     
     module = entry.data.get("module", "legacy")
 
-    entities = [IntegrationInfoSensor(hass)]
+    entities = [IntegrationInfoSensor(hass, module)]
     if module in ("blinds", "legacy") and sun_manager:
         entities.extend([
             FassadeSunSensor(sun_manager, "nord", "Nord"),

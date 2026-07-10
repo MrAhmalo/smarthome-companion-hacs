@@ -340,29 +340,31 @@ class BlindsManager:
                 if holiday_sensor_id.startswith("calendar."):
                     start = datetime.combine(target_date, time(0, 0), now.tzinfo)
                     end = datetime.combine(target_date, time(23, 59, 59), now.tzinfo)
-                    try:
-                        response = await self.hass.services.async_call(
-                            "calendar",
-                            "get_events",
-                            {
-                                "entity_id": holiday_sensor_id,
-                                "start_date_time": start.isoformat(),
-                                "end_date_time": end.isoformat(),
-                            },
-                            blocking=True,
-                            return_response=True,
-                        )
-                        if response and holiday_sensor_id in response:
-                            events = response[holiday_sensor_id].get("events", [])
-                            for ev in events:
-                                ev_end = ev.get("end", "")
-                                # Home Assistant all-day events end at 00:00:00 of the next day (e.g. YYYY-MM-DD)
-                                if len(ev_end) == 10 and ev_end == target_date.isoformat():
-                                    continue
-                                is_holiday = True
-                                break
-                    except Exception as e:
-                        pass
+                    state_obj = self.hass.states.get(holiday_sensor_id)
+                    if state_obj is not None and state_obj.state not in ("unavailable", "unknown"):
+                        try:
+                            response = await self.hass.services.async_call(
+                                "calendar",
+                                "get_events",
+                                {
+                                    "entity_id": holiday_sensor_id,
+                                    "start_date_time": start.isoformat(),
+                                    "end_date_time": end.isoformat(),
+                                },
+                                blocking=True,
+                                return_response=True,
+                            )
+                            if response and holiday_sensor_id in response:
+                                events = response[holiday_sensor_id].get("events", [])
+                                for ev in events:
+                                    ev_end = ev.get("end", "")
+                                    # Home Assistant all-day events end at 00:00:00 of the next day (e.g. YYYY-MM-DD)
+                                    if len(ev_end) == 10 and ev_end == target_date.isoformat():
+                                        continue
+                                    is_holiday = True
+                                    break
+                        except Exception as e:
+                            pass
                 elif "workday" in holiday_sensor_id.lower():
                     if target_date == now.date():
                         sensor_state = self.hass.states.get(holiday_sensor_id)
