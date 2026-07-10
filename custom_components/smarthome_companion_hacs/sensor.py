@@ -895,13 +895,48 @@ class BlindShadingPredictionTomorrowSensor(_BlindBaseSensor):
         self._attr_unique_id = f"smarthome_companion_sensor_shading_prediction_tomorrow_{blind_id}"
         self._attr_icon = "mdi:shield-sun-outline"
 
+    def _get_tomorrow_plan(self):
+        config = self.store.get_blinds().get(self._blind_id)
+        if not config or not config.get("enable_shading", False):
+            return None
+        tomorrow = dt_util.now().date() + timedelta(days=1)
+        return self.blinds_manager._generate_shading_plan(self._blind_id, config, tomorrow)
+
     @property
     def native_value(self):
-        return "Berechnung am Morgen"
+        plan = self._get_tomorrow_plan()
+        if not plan:
+            return "Deaktiviert"
+        if not plan.get("shading_active"):
+            return "Inaktiv morgen"
+            
+        pos = plan.get("target_position", 0)
+        s_time_str = plan.get("start_time")
+        e_time_str = plan.get("end_time")
+        if s_time_str and e_time_str:
+            s_dt = dt_util.parse_datetime(s_time_str)
+            e_dt = dt_util.parse_datetime(e_time_str)
+            if s_dt and e_dt:
+                return f"Geplant: {pos}% ({s_dt.strftime('%H:%M')} - {e_dt.strftime('%H:%M')})"
+        return f"Geplant: {pos}%"
 
     @property
     def extra_state_attributes(self):
-        return super().extra_state_attributes
+        attrs = super().extra_state_attributes
+        plan = self._get_tomorrow_plan()
+        if not plan:
+            return attrs
+            
+        attrs.update({
+            "shading_active": plan.get("shading_active"),
+            "target_position": plan.get("target_position"),
+            "start_time": plan.get("start_time"),
+            "end_time": plan.get("end_time"),
+            "trigger_temp": plan.get("trigger_temp"),
+            "forecast_max_temp": plan.get("today_max"),
+            "forecast_peak_intensity": plan.get("max_intensity")
+        })
+        return attrs
 
 class _IrrigationZoneBaseSensor(SensorEntity):
     def __init__(self, hass, store, irrigation_manager, zone_id, sensor_type):
