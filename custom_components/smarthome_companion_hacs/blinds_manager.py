@@ -508,7 +508,8 @@ class BlindsManager:
                     break
                     
         cloud_ok = True
-        if self.store.get_blinds().get("_global_enable_cloud_check", False) and plan_hourly:
+        avg_cloud = None
+        if plan_hourly:
             cloud_sum = 0.0
             cloud_count = 0
             for hour_data in plan_hourly:
@@ -518,9 +519,11 @@ class BlindsManager:
                     cloud_count += 1
             if cloud_count > 0:
                 avg_cloud = cloud_sum / cloud_count
-                max_cloud = float(self.store.get_blinds().get("_global_max_cloud_coverage", 70.0))
-                if avg_cloud > max_cloud:
-                    cloud_ok = False
+
+        if self.store.get_blinds().get("_global_enable_cloud_check", False) and avg_cloud is not None:
+            max_cloud = float(self.store.get_blinds().get("_global_max_cloud_coverage", 70.0))
+            if avg_cloud > max_cloud:
+                cloud_ok = False
                     
         card_dir = config.get("direction", "sueden")
         direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
@@ -567,13 +570,15 @@ class BlindsManager:
                 "end_time": end_time.isoformat(),
                 "trigger_temp": trigger_temp,
                 "today_max": plan_max,
-                "max_intensity": sun_intensity
+                "max_intensity": sun_intensity,
+                "avg_cloud": avg_cloud if 'avg_cloud' in locals() else None
             }
         else:
             return {
                 "shading_active": False,
                 "today_max": plan_max,
-                "max_intensity": sun_intensity
+                "max_intensity": sun_intensity,
+                "avg_cloud": avg_cloud if 'avg_cloud' in locals() else None
             }
                 
         self._force_plan_regeneration = False

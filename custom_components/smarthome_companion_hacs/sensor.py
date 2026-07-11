@@ -762,7 +762,7 @@ class BlindSunsetCloseTimeSensor(_BlindBaseSensor):
 class BlindNextActionSensor(_BlindBaseSensor):
     def __init__(self, hass, store, blinds_manager, blind_id):
         super().__init__(hass, store, blinds_manager, blind_id, "next_action")
-        self._attr_name = "Nächste Aktion(en)"
+        self._attr_name = "Nächste Aktion"
         self._attr_unique_id = f"smarthome_companion_sensor_next_action_{blind_id}"
         self._attr_icon = "mdi:clock-check-outline"
 
@@ -822,7 +822,7 @@ class BlindNextActionSensor(_BlindBaseSensor):
         future_events = [f"{act} ({dt.strftime('%H:%M')})" for dt, act in events if dt > now]
         if not future_events:
             return "Keine Aktionen"
-        return " ➔ ".join(future_events[:3])
+        return future_events[0]
 
     @property
     def extra_state_attributes(self):
@@ -889,7 +889,8 @@ class BlindShadingPredictionTodaySensor(_BlindBaseSensor):
             "end_time": plan.get("end_time"),
             "trigger_temp": plan.get("trigger_temp"),
             "forecast_max_temp": plan.get("today_max"),
-            "forecast_peak_intensity": plan.get("max_intensity")
+            "forecast_peak_intensity": plan.get("max_intensity"),
+            "forecast_cloud_coverage": plan.get("avg_cloud")
         })
         return attrs
 
@@ -939,7 +940,8 @@ class BlindShadingPredictionTomorrowSensor(_BlindBaseSensor):
             "end_time": plan.get("end_time"),
             "trigger_temp": plan.get("trigger_temp"),
             "forecast_max_temp": plan.get("today_max"),
-            "forecast_peak_intensity": plan.get("max_intensity")
+            "forecast_peak_intensity": plan.get("max_intensity"),
+            "forecast_cloud_coverage": plan.get("avg_cloud")
         })
         return attrs
 

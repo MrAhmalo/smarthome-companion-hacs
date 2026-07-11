@@ -116,20 +116,80 @@ class IrrigationManager:
         _LOGGER.info("Irrigation configuration reloaded.")
 
     def _update_sensor_listeners(self):
-        if self._sensor_unsub:
+        if getattr(self, '_sensor_unsub', None):
             self._sensor_unsub()
             self._sensor_unsub = None
+            
+        if getattr(self, '_valve_unsub', None):
+            self._valve_unsub()
+            self._valve_unsub = None
 
         sensor_ids = set()
+        valve_ids = set()
         for zone in self.config.get("zones", []):
             sensor_id = zone.get("soil_sensor_entity_id")
             if sensor_id:
                 sensor_ids.add(sensor_id)
+            valve_id = zone.get("valve_entity_id")
+            if valve_id:
+                valve_ids.add(valve_id)
 
         if sensor_ids:
             self._sensor_unsub = async_track_state_change_event(
                 self.hass, list(sensor_ids), self._async_sensor_changed
             )
+            
+        if valve_ids:
+            self._valve_unsub = async_track_state_change_event(
+                self.hass, list(valve_ids), self._async_valve_changed
+            )
+
+    async def _async_valve_changed(self, event):
+        """Handle valve state changes (e.g. turned on outside the app)."""
+        entity_id = event.data.get("entity_id")
+        new_state = event.data.get("new_state")
+        old_state = event.data.get("old_state")
+        
+        if not new_state:
+            return
+            
+        # Consider 'on' or 'open' as running
+        is_running = new_state.state in ("on", "open")
+        was_running = old_state and old_state.state in ("on", "open")
+        
+        if is_running == was_running:
+            return
+            
+        zones = self.config.get("zones", [])
+        zone = next((z for z in zones if z.get("valve_entity_id") == entity_id), None)
+        if not zone:
+            return
+            
+        zone_id = zone.get("id")
+        
+        if is_running:
+            # Valve was turned on. If not in running_zones, it was turned on externally.
+            if zone_id not in self.running_zones:
+                _LOGGER.info(f"Valve {entity_id} turned on externally. Tracking as manual run.")
+                max_runtime = self.config.get("max_manual_runtime_minutes", 60)
+                self.running_zones[zone_id] = {
+                    "start_time": dt_util.now(),
+                    "duration": timedelta(minutes=max_runtime),
+                    "valve_entity": entity_id,
+                    "soil_sensor_entity_id": zone.get("soil_sensor_entity_id"),
+                    "target_moisture_percent": zone.get("target_moisture_percent", 100),
+                    "is_manual": True,
+                    "external": True
+                }
+                zone["last_watered_at"] = dt_util.now().isoformat()
+                await self.store.save_irrigation(self.config)
+                self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
+        else:
+            # Valve was turned off.
+            if zone_id in self.running_zones:
+                _LOGGER.info(f"Valve {entity_id} turned off externally. Removing from tracking.")
+                del self.running_zones[zone_id]
+                self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
 
     async def _async_sensor_changed(self, event):
         """Handle soil sensor state changes."""
@@ -146,6 +206,8 @@ class IrrigationManager:
             
         zones_to_stop = []
         for zone_id, data in self.running_zones.items():
+            if data.get("is_manual"):
+                continue
             if data.get("soil_sensor_entity_id") == entity_id:
                 try:
                     target = float(data.get("target_moisture_percent", 100))
@@ -219,6 +281,8 @@ class IrrigationManager:
             "target_moisture_percent": zone.get("target_moisture_percent", 100),
             "is_manual": True
         }
+        zone["last_watered_at"] = dt_util.now().isoformat()
+        await self.store.save_irrigation(self.config)
         self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
 
     async def async_manual_toggle(self, zone_id, state):
@@ -246,6 +310,8 @@ class IrrigationManager:
                 "target_moisture_percent": zone.get("target_moisture_percent", 100),
                 "is_manual": True
             }
+            zone["last_watered_at"] = dt_util.now().isoformat()
+            await self.store.save_irrigation(self.config)
             self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
         else:
             _LOGGER.info(f"Toggling OFF zone {zone_id}.")
@@ -325,7 +391,7 @@ class IrrigationManager:
         for zone_id, data in self.running_zones.items():
             if now - data["start_time"] >= data["duration"]:
                 zones_to_stop.append((zone_id, "Maximale Laufzeit erreicht"))
-            elif data.get("soil_sensor_entity_id"):
+            elif not data.get("is_manual") and data.get("soil_sensor_entity_id"):
                 sensor_id = data.get("soil_sensor_entity_id")
                 state = self.hass.states.get(sensor_id)
                 if state:
@@ -402,7 +468,21 @@ class IrrigationManager:
             except Exception:
                 continue
 
-            if now.hour != sched_h or now.minute != sched_m:
+            # Allow a 5-minute grace window: fire if we are in the range
+            # [sched_time, sched_time + 5 min]. This prevents zones from being
+            # silently skipped when the 1-minute poll is slightly delayed
+            # (e.g. during HA startup or a brief system hiccup).
+            sched_total_minutes = sched_h * 60 + sched_m
+            now_total_minutes = now.hour * 60 + now.minute
+            minutes_past_sched = now_total_minutes - sched_total_minutes
+            if minutes_past_sched < 0 or minutes_past_sched > 5:
+                continue
+            
+            # Make sure we only fire ONCE per scheduled window per zone:
+            # track the last time this zone was started to avoid re-firing
+            # multiple times within the grace window.
+            last_fired_str = zone.get("_last_auto_start_date")
+            if last_fired_str == now.date().isoformat():
                 continue
 
             manual_overrides = zone.get("manual_overrides", ["auto"] * 7)
@@ -507,6 +587,7 @@ class IrrigationManager:
                 }
                 zone["last_watered_at"] = now.isoformat()
                 zone["last_skipped_reason"] = None
+                zone["_last_auto_start_date"] = now.date().isoformat()  # dedup within grace window
                 config_changed = True
 
         if config_changed:
@@ -517,18 +598,20 @@ class IrrigationManager:
 
     async def _turn_on_valve(self, entity_id):
         domain = entity_id.split(".")[0]
+        service = "open_valve" if domain == "valve" else "turn_on"
         try:
             await self.hass.services.async_call(
-                domain, "turn_on", {"entity_id": entity_id}, blocking=False
+                domain, service, {"entity_id": entity_id}, blocking=False
             )
         except Exception as e:
             _LOGGER.error(f"Failed to turn on {entity_id}: {e}")
 
     async def _turn_off_valve(self, entity_id):
         domain = entity_id.split(".")[0]
+        service = "close_valve" if domain == "valve" else "turn_off"
         try:
             await self.hass.services.async_call(
-                domain, "turn_off", {"entity_id": entity_id}, blocking=False
+                domain, service, {"entity_id": entity_id}, blocking=False
             )
         except Exception as e:
             _LOGGER.error(f"Failed to turn off {entity_id}: {e}")
