@@ -360,6 +360,11 @@ class IrrigationManager:
             else global_rain_sensor if global_rain_sensor.startswith("weather.")
             else "weather.forecast_home"
         )
+        
+        if not self.hass.states.get(weather_entity):
+            _LOGGER.debug(f"Weather entity {weather_entity} not yet available. Skipping forecast fetch.")
+            return None
+
         try:
             response = await self.hass.services.async_call(
                 "weather",

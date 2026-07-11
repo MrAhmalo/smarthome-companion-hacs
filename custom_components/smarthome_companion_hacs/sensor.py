@@ -13,7 +13,7 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 class IntegrationInfoSensor(SensorEntity):
-    def __init__(self, hass, module="legacy"):
+    def __init__(self, hass, module="legacy", version="Unbekannt"):
         self.hass = hass
         self._module = module
         if module == "legacy":
@@ -23,15 +23,7 @@ class IntegrationInfoSensor(SensorEntity):
             self._attr_name = f"SmartHome Companion ({module.title()})"
             self._attr_unique_id = f"smarthome_companion_integration_info_{module}"
         self._attr_icon = "mdi:home-assistant"
-        
-        self._version = "Unbekannt"
-        try:
-            manifest_path = os.path.join(os.path.dirname(__file__), "manifest.json")
-            with open(manifest_path, "r", encoding="utf-8") as f:
-                manifest = json.load(f)
-                self._version = manifest.get("version", "Unbekannt")
-        except Exception as e:
-            _LOGGER.error(f"Fehler beim Lesen der manifest.json: {e}")
+        self._version = version
 
     @property
     def native_value(self):
@@ -45,6 +37,8 @@ class IntegrationInfoSensor(SensorEntity):
         }
 
 async def async_setup_entry(hass, entry, async_add_entities):
+    from homeassistant.loader import async_get_integration
+    
     sun_manager = hass.data[DOMAIN].get("sun_manager")
     store = hass.data[DOMAIN].get("store")
     blinds_manager = hass.data[DOMAIN].get("blinds_manager")
@@ -52,7 +46,13 @@ async def async_setup_entry(hass, entry, async_add_entities):
     
     module = entry.data.get("module", "legacy")
 
-    entities = [IntegrationInfoSensor(hass, module)]
+    try:
+        integration = await async_get_integration(hass, DOMAIN)
+        version = integration.version
+    except Exception:
+        version = "Unbekannt"
+
+    entities = [IntegrationInfoSensor(hass, module, version)]
     if module in ("blinds", "legacy") and sun_manager:
         entities.extend([
             FassadeSunSensor(sun_manager, "nord", "Nord"),

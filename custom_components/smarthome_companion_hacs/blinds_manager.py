@@ -391,6 +391,10 @@ class BlindsManager:
         if getattr(self, "_last_weather_update_hour", None) == now.hour:
             return
             
+        if not self.hass.states.get(weather_entity):
+            _LOGGER.debug(f"Weather entity {weather_entity} not yet available. Skipping forecast fetch.")
+            return
+
         try:
             response = await self.hass.services.async_call(
                 "weather",
