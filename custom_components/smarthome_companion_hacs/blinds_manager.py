@@ -529,8 +529,11 @@ class BlindsManager:
             if avg_cloud > max_cloud:
                 cloud_ok = False
                     
-        card_dir = config.get("direction", "sueden")
-        direction_map = {"norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west"}
+        card_dir = config.get("cardinal_direction", config.get("direction", "sueden")).lower()
+        direction_map = {
+            "norden": "nord", "osten": "ost", "sueden": "sued", "westen": "west",
+            "süden": "sued", "ost": "ost", "süd": "sued", "west": "west", "nord": "nord"
+        }
         direction = direction_map.get(card_dir, "sued")
         
         sun_intensity = self.sun_manager.forecast_max_intensities.get(direction, 0.0)
@@ -584,10 +587,6 @@ class BlindsManager:
                 "max_intensity": sun_intensity,
                 "avg_cloud": avg_cloud if 'avg_cloud' in locals() else None
             }
-                
-        self._force_plan_regeneration = False
-        self.hass.async_create_task(self.store.async_save())
-        self.hass.bus.async_fire("smarthome_companion_blinds_updated")
 
     async def _watchdog_loop(self, now):
         await self._evaluate_all(is_watchdog_check=True)
@@ -624,6 +623,11 @@ class BlindsManager:
             await self.store.async_save()
         except Exception as e:
             _LOGGER.error("Error saving store data after evaluate_all: %s", e)
+
+    async def _clear_all_overrides(self):
+        for state in self._states.values():
+            state["manual_override_today"] = None
+        self.hass.bus.async_fire("smarthome_companion_blinds_updated")
 
     async def _evaluate_blind(self, entity_id, config, is_watchdog_check=False, is_state_change=False, force_correction=False):
         """

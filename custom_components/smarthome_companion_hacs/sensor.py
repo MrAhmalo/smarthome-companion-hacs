@@ -819,7 +819,7 @@ class BlindNextActionSensor(_BlindBaseSensor):
     def native_value(self):
         events = self._get_events()
         now = dt_util.now()
-        future_events = [f"{act} ({dt.strftime('%H:%M')})" for dt, act in events if dt > now]
+        future_events = [f"{act} ({dt_util.as_local(dt).strftime('%H:%M')})" for dt, act in events if dt > now]
         if not future_events:
             return "Keine Aktionen"
         return future_events[0]
@@ -835,11 +835,11 @@ class BlindNextActionSensor(_BlindBaseSensor):
             return attrs
         dt, act = future[0]
         
-        events_list = [{"action": a, "time": d.strftime("%H:%M"), "is_today": d.date() == now.date()} for d, a in future]
+        events_list = [{"action": a, "time": dt_util.as_local(d).strftime("%H:%M"), "is_today": dt_util.as_local(d).date() == dt_util.as_local(now).date()} for d, a in future]
         
         attrs.update({
             "next_action": act,
-            "next_time": dt.strftime("%H:%M"),
+            "next_time": dt_util.as_local(dt).strftime("%H:%M"),
             "next_datetime": dt.isoformat(),
             "events_list": events_list,
         })
@@ -872,7 +872,7 @@ class BlindShadingPredictionTodaySensor(_BlindBaseSensor):
             s_dt = dt_util.parse_datetime(s_time_str)
             e_dt = dt_util.parse_datetime(e_time_str)
             if s_dt and e_dt:
-                return f"Geplant: {pos}% ({s_dt.strftime('%H:%M')} - {e_dt.strftime('%H:%M')})"
+                return f"Geplant: {pos}% ({dt_util.as_local(s_dt).strftime('%H:%M')} - {dt_util.as_local(e_dt).strftime('%H:%M')})"
         return f"Geplant: {pos}%"
 
     @property
@@ -923,7 +923,7 @@ class BlindShadingPredictionTomorrowSensor(_BlindBaseSensor):
             s_dt = dt_util.parse_datetime(s_time_str)
             e_dt = dt_util.parse_datetime(e_time_str)
             if s_dt and e_dt:
-                return f"Geplant: {pos}% ({s_dt.strftime('%H:%M')} - {e_dt.strftime('%H:%M')})"
+                return f"Geplant: {pos}% ({dt_util.as_local(s_dt).strftime('%H:%M')} - {dt_util.as_local(e_dt).strftime('%H:%M')})"
         return f"Geplant: {pos}%"
 
     @property

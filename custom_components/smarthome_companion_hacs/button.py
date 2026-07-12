@@ -32,6 +32,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
     if module in ("blinds", "legacy"):
         # Initial registration
         add_blind_buttons()
+        
+        # Add global buttons
+        if blinds_manager:
+            async_add_entities([
+                ForcePlanRegenerationButton(hass, blinds_manager),
+                ForceApplyAllButton(hass, blinds_manager),
+                ClearManualOverridesButton(hass, blinds_manager)
+            ])
 
         # Dynamic registration
         entry.async_on_unload(
@@ -39,6 +47,70 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "smarthome_companion_blinds_updated", add_blind_buttons
             )
         )
+
+class ForcePlanRegenerationButton(ButtonEntity):
+    def __init__(self, hass, blinds_manager):
+        self.hass = hass
+        self.blinds_manager = blinds_manager
+        self._attr_name = "Beschattung neu berechnen (Global)"
+        self._attr_unique_id = "smarthome_companion_button_force_plan"
+        self._attr_icon = "mdi:calendar-refresh"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "hub")},
+            name="SmartHome Companion",
+            manufacturer="SmartHome Companion",
+            model="Hub & Einstellungen",
+        )
+
+    async def async_press(self) -> None:
+        import homeassistant.util.dt as dt_util
+        self.blinds_manager._force_plan_regeneration = True
+        await self.blinds_manager._regular_loop(dt_util.now())
+        self.hass.bus.async_fire("smarthome_companion_blinds_updated")
+
+class ForceApplyAllButton(ButtonEntity):
+    def __init__(self, hass, blinds_manager):
+        self.hass = hass
+        self.blinds_manager = blinds_manager
+        self._attr_name = "Beschattung anwenden (Alle Rollläden)"
+        self._attr_unique_id = "smarthome_companion_button_force_apply"
+        self._attr_icon = "mdi:shield-sun"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "hub")},
+            name="SmartHome Companion",
+            manufacturer="SmartHome Companion",
+            model="Hub & Einstellungen",
+        )
+
+    async def async_press(self) -> None:
+        await self.blinds_manager._evaluate_all(is_watchdog_check=True, force_correction=True)
+        self.hass.bus.async_fire("smarthome_companion_blinds_updated")
+
+class ClearManualOverridesButton(ButtonEntity):
+    def __init__(self, hass, blinds_manager):
+        self.hass = hass
+        self.blinds_manager = blinds_manager
+        self._attr_name = "Manuelle Übersteuerung aufheben (Alle Rollläden)"
+        self._attr_unique_id = "smarthome_companion_button_clear_overrides"
+        self._attr_icon = "mdi:lock-open-alert"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "hub")},
+            name="SmartHome Companion",
+            manufacturer="SmartHome Companion",
+            model="Hub & Einstellungen",
+        )
+
+    async def async_press(self) -> None:
+        await self.blinds_manager._clear_all_overrides()
 
 
 class BlindWatchdogButton(ButtonEntity):
