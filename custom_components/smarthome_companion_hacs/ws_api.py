@@ -112,7 +112,19 @@ async def handle_save_irrigation_config(hass, connection, msg):
             return
 
     store = hass.data[DOMAIN]["store"]
-    await store.save_irrigation(msg["irrigation"])
+    current_irrigation = store.get_irrigation()
+    current_zones = {z.get("id"): z for z in current_irrigation.get("zones", []) if z.get("id")}
+    
+    new_irrigation = msg["irrigation"]
+    for new_z in new_irrigation.get("zones", []):
+        zid = new_z.get("id")
+        if zid in current_zones:
+            old_z = current_zones[zid]
+            for attr in ("last_watered_at", "last_skipped_at", "last_skipped_reason", "_last_auto_start_date"):
+                if not new_z.get(attr) and old_z.get(attr):
+                    new_z[attr] = old_z[attr]
+
+    await store.save_irrigation(new_irrigation)
     
     if "irrigation_manager" in hass.data[DOMAIN]:
         irrigation_manager = hass.data[DOMAIN]["irrigation_manager"]

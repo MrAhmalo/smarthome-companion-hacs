@@ -189,6 +189,9 @@ class IrrigationManager:
             if zone_id in self.running_zones:
                 _LOGGER.info(f"Valve {entity_id} turned off externally. Removing from tracking.")
                 del self.running_zones[zone_id]
+                zone["last_watered_at"] = dt_util.now().isoformat()
+                zone["last_skipped_reason"] = None
+                await self.store.save_irrigation(self.config)
                 self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
 
     async def _async_sensor_changed(self, event):
@@ -224,6 +227,7 @@ class IrrigationManager:
 
     async def _stop_zones(self, zones_to_stop):
         config_changed = False
+        now_str = dt_util.now().isoformat()
         for zone_id, reason in zones_to_stop:
             if zone_id not in self.running_zones:
                 continue
@@ -232,7 +236,11 @@ class IrrigationManager:
             await self._turn_off_valve(valve)
             del self.running_zones[zone_id]
             
-            # Update last_watered_at etc could be done here if needed
+            zone = next((z for z in self.config.get("zones", []) if z.get("id") == zone_id), None)
+            if zone:
+                zone["last_watered_at"] = now_str
+                zone["last_skipped_reason"] = None
+                config_changed = True
         
         if config_changed:
             await self.store.save_irrigation(self.config)

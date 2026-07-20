@@ -952,6 +952,7 @@ class _IrrigationZoneBaseSensor(SensorEntity):
         self.irrigation_manager = irrigation_manager
         self._zone_id = zone_id
         self._sensor_type = sensor_type
+        self.entity_id = f"sensor.smarthome_companion_sensor_irr_{sensor_type}_{zone_id}"
 
     def _get_zone(self):
         irrigation_data = self.store.get_irrigation()
@@ -1002,8 +1003,11 @@ class IrrigationZoneLastWateredSensor(_IrrigationZoneBaseSensor):
             return "Nie"
         try:
             dt = dt_util.parse_datetime(zone.get("last_watered_at"))
-            return dt.strftime("%d.%m.%Y %H:%M") if dt else "Nie"
-        except:
+            if dt:
+                dt = dt_util.as_local(dt)
+                return dt.strftime("%d.%m.%Y %H:%M")
+            return "Nie"
+        except Exception:
             return "Nie"
 
 class IrrigationZoneNextRunSensor(_IrrigationZoneBaseSensor):

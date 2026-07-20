@@ -147,25 +147,38 @@ class BlindsManager:
 
         # Weekend override
         is_weekend_or_holiday = False
+        is_vacation_day = False
+        
         if date_val.weekday() >= 5:
             is_weekend_or_holiday = True
+            is_vacation_day = True
         else:
-            settings = self.store.data.get("settings", {})
-            holiday_sensor_id = settings.get("holiday_sensor", "binary_sensor.workday_sensor")
-            if holiday_sensor_id:
-                sensor_state = self.hass.states.get(holiday_sensor_id)
-                if sensor_state:
-                    state_val = sensor_state.state.lower()
-                    if holiday_sensor_id.startswith("calendar."):
-                        if state_val == "on":
+            if date_val == now.date():
+                if self.store.data.get("today_is_holiday") or self.store.data.get("today_is_urlaub"):
+                    is_weekend_or_holiday = True
+                if self.store.data.get("today_is_vacation"):
+                    is_vacation_day = True
+            elif date_val == (now.date() + timedelta(days=1)):
+                if self.store.data.get("tomorrow_is_holiday") or self.store.data.get("tomorrow_is_urlaub"):
+                    is_weekend_or_holiday = True
+                if self.store.data.get("tomorrow_is_vacation"):
+                    is_vacation_day = True
+            
+            # Legacy fallback if no holiday found but workday sensor is active
+            if not is_weekend_or_holiday and not is_vacation_day:
+                settings = self.store.data.get("settings", {})
+                holiday_sensor_id = settings.get("holiday_sensor", "binary_sensor.workday_sensor")
+                if holiday_sensor_id and not holiday_sensor_id.startswith("calendar."):
+                    sensor_state = self.hass.states.get(holiday_sensor_id)
+                    if sensor_state:
+                        state_val = sensor_state.state.lower()
+                        if "workday" in holiday_sensor_id.lower() and state_val == "off":
                             is_weekend_or_holiday = True
-                    elif "workday" in holiday_sensor_id.lower():
-                        if state_val == "off":
+                        elif "workday" not in holiday_sensor_id.lower() and state_val == "on":
                             is_weekend_or_holiday = True
-                    else:
-                        # Fallback for other holiday binary sensors where 'on' means holiday
-                        if state_val == "on":
-                            is_weekend_or_holiday = True
+
+        if is_vacation_day and config.get("enable_vacation_weekend_mode", False):
+            is_weekend_or_holiday = True
 
         if config.get("enable_weekend_open", False) and is_weekend_or_holiday:
             weekend_dt = get_dt(self._parse_time(config.get("weekend_open_time"), time(9, 0)))
@@ -331,55 +344,84 @@ class BlindsManager:
         for day_offset in (0, 1):
             target_date = now.date() + timedelta(days=day_offset)
             is_holiday = False
+            is_vacation = False
+            is_urlaub = False
             
             if target_date.weekday() >= 5:
                 is_holiday = True
+                is_vacation = True
+                is_urlaub = True
             else:
                 settings = self.store.data.get("settings", {})
-                holiday_sensor_id = settings.get("holiday_sensor", "")
-                if holiday_sensor_id.startswith("calendar."):
+                calendar_ids = set()
+                
+                urlaub_cal_id = settings.get("globalUrlaubCalendarId", "")
+                
+                # Fetch all possible calendar configs
+                for key in ["holiday_sensor", "globalHolidayCalendarId", "globalUrlaubCalendarId"]:
+                    cal_id = settings.get(key, "")
+                    if cal_id.startswith("calendar."):
+                        calendar_ids.add(cal_id)
+                
+                for cal_id in calendar_ids:
                     start = datetime.combine(target_date, time(0, 0), now.tzinfo)
                     end = datetime.combine(target_date, time(23, 59, 59), now.tzinfo)
-                    state_obj = self.hass.states.get(holiday_sensor_id)
+                    state_obj = self.hass.states.get(cal_id)
                     if state_obj is not None and state_obj.state not in ("unavailable", "unknown"):
                         try:
                             response = await self.hass.services.async_call(
                                 "calendar",
                                 "get_events",
                                 {
-                                    "entity_id": holiday_sensor_id,
+                                    "entity_id": cal_id,
                                     "start_date_time": start.isoformat(),
                                     "end_date_time": end.isoformat(),
                                 },
                                 blocking=True,
                                 return_response=True,
                             )
-                            if response and holiday_sensor_id in response:
-                                events = response[holiday_sensor_id].get("events", [])
+                            if response and cal_id in response:
+                                events = response[cal_id].get("events", [])
                                 for ev in events:
                                     ev_end = ev.get("end", "")
-                                    # Home Assistant all-day events end at 00:00:00 of the next day (e.g. YYYY-MM-DD)
+                                    # Home Assistant all-day events end at 00:00:00 of the next day
                                     if len(ev_end) == 10 and ev_end == target_date.isoformat():
                                         continue
-                                    is_holiday = True
-                                    break
+                                    
+                                    # If it's the dedicated Urlaub calendar, it's always Urlaub
+                                    if cal_id == urlaub_cal_id:
+                                        is_urlaub = True
+                                        continue
+                                        
+                                    # Keyword distinction for Holiday/Ferien calendars
+                                    msg = ev.get("summary", ev.get("message", "")).lower()
+                                    if "ferien" in msg:
+                                        is_vacation = True
+                                    elif "urlaub" in msg:
+                                        is_urlaub = True
+                                    else:
+                                        is_holiday = True
                         except Exception as e:
                             pass
-                elif "workday" in holiday_sensor_id.lower():
-                    if target_date == now.date():
-                        sensor_state = self.hass.states.get(holiday_sensor_id)
-                        if sensor_state and sensor_state.state.lower() == "off":
+                
+                # Non-calendar sensors fallback
+                holiday_sensor_id = settings.get("holiday_sensor", "")
+                if holiday_sensor_id and not holiday_sensor_id.startswith("calendar.") and target_date == now.date():
+                    sensor_state = self.hass.states.get(holiday_sensor_id)
+                    if sensor_state:
+                        if "workday" in holiday_sensor_id.lower() and sensor_state.state.lower() == "off":
                             is_holiday = True
-                elif holiday_sensor_id:
-                    if target_date == now.date():
-                        sensor_state = self.hass.states.get(holiday_sensor_id)
-                        if sensor_state and sensor_state.state.lower() == "on":
+                        elif "workday" not in holiday_sensor_id.lower() and sensor_state.state.lower() == "on":
                             is_holiday = True
                             
             if day_offset == 0:
                 self.store.data["today_is_holiday"] = is_holiday
+                self.store.data["today_is_vacation"] = is_vacation
+                self.store.data["today_is_urlaub"] = is_urlaub
             else:
                 self.store.data["tomorrow_is_holiday"] = is_holiday
+                self.store.data["tomorrow_is_vacation"] = is_vacation
+                self.store.data["tomorrow_is_urlaub"] = is_urlaub
 
         self.hass.bus.async_fire("smarthome_companion_blinds_updated")
 
