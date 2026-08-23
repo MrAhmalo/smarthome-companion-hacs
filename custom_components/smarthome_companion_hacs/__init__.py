@@ -1,6 +1,9 @@
 import logging
+# pyrefly: ignore [missing-import]
 from homeassistant.core import HomeAssistant, callback
+# pyrefly: ignore [missing-import]
 from homeassistant.config_entries import ConfigEntry
+# pyrefly: ignore [missing-import]
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
@@ -20,7 +23,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up the SmartHome Companion HACS component from a config entry."""
-    _LOGGER.info(f"Setting up SmartHome Companion Backend ({entry.title})")
+    _LOGGER.info(f"Setting up SmartHome Companion Backend now({entry.title})")
 
     hass.data.setdefault(DOMAIN, {})
 
@@ -39,6 +42,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entity_ids = call.data.get("entity_ids", [])
             active = call.data.get("active", True)
             
+            # pyrefly: ignore [missing-import]
             import homeassistant.util.dt as dt_util
             from datetime import timedelta
             
@@ -94,7 +98,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await simulation_manager.async_setup()
 
         # Track state changes to detect light on/off for override reset
+        # pyrefly: ignore [missing-import]
         from homeassistant.const import STATE_ON, STATE_OFF
+        # pyrefly: ignore [missing-import]
         from homeassistant.helpers.event import async_track_state_change_event
 
         @callback
@@ -125,6 +131,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "number", "button", "switch", "text", "select"])
 
     # Clean up obsolete entities from the registry
+    # pyrefly: ignore [missing-import]
     from homeassistant.helpers import entity_registry as er
     ent_reg = er.async_get(hass)
     obsolete_unique_ids = [
