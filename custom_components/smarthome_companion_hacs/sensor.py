@@ -5,7 +5,9 @@ from datetime import timedelta, time, datetime
 # pyrefly: ignore [missing-import]
 import homeassistant.util.dt as dt_util
 
+# pyrefly: ignore [missing-import]
 from homeassistant.components.sensor import SensorEntity
+# pyrefly: ignore [missing-import]
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
@@ -37,6 +39,7 @@ class IntegrationInfoSensor(SensorEntity):
         }
 
 async def async_setup_entry(hass, entry, async_add_entities):
+    # pyrefly: ignore [missing-import]
     from homeassistant.loader import async_get_integration
     
     sun_manager = hass.data[DOMAIN].get("sun_manager")
@@ -83,6 +86,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
             IrrigationMaxManualRuntimeSensor(hass, store),
             IrrigationSimultaneousModeSensor(hass, store),
         ])
+
+    simulation_manager = hass.data[DOMAIN].get("simulation_manager")
+    if store and simulation_manager:
+        entities.append(PresenceSimulationActiveSensor(hass, store, simulation_manager))
 
     if entities:
         async_add_entities(entities)
@@ -675,6 +682,8 @@ class BlindOpenTimeSensor(_BlindBaseSensor):
         config = self.store.get_blinds().get(self._blind_id)
         if not config:
             return None
+        if not config.get("use_fixed_open_time", False) and not config.get("use_sunrise", False):
+            return "Deaktiviert"
         now = dt_util.now()
         times_today = self.blinds_manager.calculate_times(self._blind_id, config, now.date())
         open_time = times_today.get("open_time")
@@ -683,7 +692,7 @@ class BlindOpenTimeSensor(_BlindBaseSensor):
             open_time = times_tomorrow.get("open_time")
         if open_time:
             return open_time.strftime("%H:%M")
-        return None
+        return "Deaktiviert"
 
 
 class BlindCloseTimeSensor(_BlindBaseSensor):
@@ -698,6 +707,8 @@ class BlindCloseTimeSensor(_BlindBaseSensor):
         config = self.store.get_blinds().get(self._blind_id)
         if not config:
             return None
+        if not config.get("use_fixed_close_time", False) and not config.get("use_sunset", False):
+            return "Deaktiviert"
         now = dt_util.now()
         times_today = self.blinds_manager.calculate_times(self._blind_id, config, now.date())
         close_time = times_today.get("close_time")
@@ -706,7 +717,7 @@ class BlindCloseTimeSensor(_BlindBaseSensor):
             close_time = times_tomorrow.get("close_time")
         if close_time:
             return close_time.strftime("%H:%M")
-        return None
+        return "Deaktiviert"
 
 
 class BlindSunriseOpenTimeSensor(_BlindBaseSensor):
@@ -807,9 +818,9 @@ class BlindNextActionSensor(_BlindBaseSensor):
                 if plan.get("shading_active"):
                     s_time = dt_util.parse_datetime(plan.get("start_time"))
                     e_time = dt_util.parse_datetime(plan.get("end_time"))
-                    if s_time and s_time > open_dt:
+                    if s_time and (open_dt is None or s_time > open_dt):
                         events.append((s_time, "Beschattung"))
-                    if e_time and e_time < close_dt:
+                    if e_time and (close_dt is None or e_time < close_dt):
                         events.append((e_time, "Öffnen"))
                         
         events.sort(key=lambda x: x[0])
@@ -956,7 +967,11 @@ class _IrrigationZoneBaseSensor(SensorEntity):
 
     def _get_zone(self):
         irrigation_data = self.store.get_irrigation()
-        if not irrigation_data: return None
+        if not irrigation_data or not irrigation_data.get("zones"):
+            if self.irrigation_manager and getattr(self.irrigation_manager, "config", None):
+                irrigation_data = self.irrigation_manager.config
+            else:
+                return None
         for z in irrigation_data.get("zones", []):
             if z.get("id") == self._zone_id:
                 return z
@@ -1010,6 +1025,29 @@ class IrrigationZoneLastWateredSensor(_IrrigationZoneBaseSensor):
         except Exception:
             return "Nie"
 
+    @property
+    def extra_state_attributes(self):
+        zone = self._get_zone()
+        if not zone:
+            return {}
+        last_watered = zone.get("last_watered_at")
+        attrs = {
+            "last_watered_at": last_watered,
+            "last_skipped_at": zone.get("last_skipped_at"),
+            "last_skipped_reason": zone.get("last_skipped_reason"),
+        }
+        if last_watered:
+            try:
+                dt = dt_util.parse_datetime(last_watered)
+                if dt:
+                    dt = dt_util.as_local(dt)
+                    now = dt_util.as_local(dt_util.now())
+                    attrs["days_ago"] = (now.date() - dt.date()).days
+                    attrs["minutes_ago"] = int((now - dt).total_seconds() / 60)
+            except Exception:
+                pass
+        return attrs
+
 class IrrigationZoneNextRunSensor(_IrrigationZoneBaseSensor):
     def __init__(self, hass, store, irrigation_manager, zone_id):
         super().__init__(hass, store, irrigation_manager, zone_id, "next_planned")
@@ -1020,70 +1058,46 @@ class IrrigationZoneNextRunSensor(_IrrigationZoneBaseSensor):
     @property
     def native_value(self):
         zone = self._get_zone()
-        if not zone: return "Keine"
+        if not zone:
+            return "Keine"
         
         now = dt_util.now()
-        time_str = zone.get("scheduled_time", "00:00")
-        try:
-            parts = time_str.split(":")
-            candidate = now.replace(hour=int(parts[0]), minute=int(parts[1]), second=0, microsecond=0)
-        except Exception:
+        next_dt = (
+            self.irrigation_manager.calculate_next_run(zone, now)
+            if self.irrigation_manager and hasattr(self.irrigation_manager, "calculate_next_run")
+            else None
+        )
+        if not next_dt:
             return "Keine"
             
-        if candidate < now:
-            candidate += timedelta(days=1)
-            
-        schedule = zone.get("weekday_schedule", [True]*7)
-        for i in range(14):
-            weekday = candidate.weekday()
-            heat_active = self.irrigation_manager.is_heat_override_today(zone) if hasattr(self.irrigation_manager, "is_heat_override_today") else False
-            
-            if (weekday < len(schedule) and schedule[weekday]) or heat_active:
-                if candidate.date() == now.date():
-                    return f"Heute {candidate.strftime('%H:%M')}"
-                elif candidate.date() == (now + timedelta(days=1)).date():
-                    return f"Morgen {candidate.strftime('%H:%M')}"
-                else:
-                    return candidate.strftime("%d.%m. %H:%M")
-            candidate += timedelta(days=1)
-            
-        return "Keine"
+        next_local = dt_util.as_local(next_dt)
+        today = dt_util.as_local(now).date()
+        
+        if next_local.date() == today:
+            return f"Heute {next_local.strftime('%H:%M')}"
+        elif next_local.date() == today + timedelta(days=1):
+            return f"Morgen {next_local.strftime('%H:%M')}"
+        else:
+            return next_local.strftime("%d.%m. %H:%M")
 
     @property
     def extra_state_attributes(self):
         zone = self._get_zone()
-        if not zone: return {}
+        if not zone:
+            return {}
         
         now = dt_util.now()
-        time_str = zone.get("scheduled_time", "00:00")
-        try:
-            parts = time_str.split(":")
-            candidate = now.replace(hour=int(parts[0]), minute=int(parts[1]), second=0, microsecond=0)
-        except Exception:
-            return {}
-            
-        if candidate < now:
-            candidate += timedelta(days=1)
-            
-        schedule = zone.get("weekday_schedule", [True]*7)
-        extra_days = []
-        heat_active = self.irrigation_manager.is_heat_override_today(zone) if hasattr(self.irrigation_manager, "is_heat_override_today") else False
-        if heat_active:
-            extra_days.append(now.weekday())
-            
-        next_dt = None
-        for i in range(14):
-            weekday = candidate.weekday()
-            
-            if (weekday < len(schedule) and schedule[weekday]) or (candidate.date() == now.date() and heat_active):
-                if not next_dt:
-                    next_dt = candidate.isoformat()
-            candidate += timedelta(days=1)
-            
+        next_dt = (
+            self.irrigation_manager.calculate_next_run(zone, now)
+            if self.irrigation_manager and hasattr(self.irrigation_manager, "calculate_next_run")
+            else None
+        )
+        
         return {
-            "next_datetime": next_dt,
-            "extra_active_days": extra_days,
-            "last_forecast_temperature": getattr(self.irrigation_manager, "_last_forecast_temperature", None)
+            "next_datetime": next_dt.isoformat() if next_dt else None,
+            "last_forecast_temperature": getattr(self.irrigation_manager, "_last_forecast_temperature", None),
+            "manual_overrides": zone.get("manual_overrides", ["auto"] * 7),
+            "min_rest_days": zone.get("min_rest_days", 2),
         }
 
 class IrrigationZoneStatusSensor(_IrrigationZoneBaseSensor):
@@ -1197,3 +1211,51 @@ class IrrigationZoneProgressSensor(_IrrigationZoneBaseSensor):
         
         progress = (elapsed / total) * 100
         return round(max(0, min(100, progress)))
+
+
+class PresenceSimulationActiveSensor(SensorEntity):
+    def __init__(self, hass, store, simulation_manager):
+        self.hass = hass
+        self.store = store
+        self.simulation_manager = simulation_manager
+        self._attr_name = "Anwesenheitssimulation aktiv"
+        self._attr_unique_id = "smarthome_companion_presence_simulation_active"
+        self.entity_id = "sensor.smarthome_companion_presence_simulation_active"
+        self._attr_icon = "mdi:shield-home"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, "hub")},
+            name="SmartHome Companion",
+            manufacturer="SmartHome Companion",
+            model="Hub & Einstellungen",
+        )
+
+    @property
+    def native_value(self):
+        if not self.simulation_manager:
+            return "Inaktiv"
+        return "Aktiv" if self.simulation_manager.is_active else "Inaktiv"
+
+    @property
+    def extra_state_attributes(self):
+        config = self.store.data.get("simulation", {})
+        return {
+            "is_active": self.simulation_manager.is_active if self.simulation_manager else False,
+            "enabled": config.get("enabled", False),
+            "active_triggers": getattr(self.simulation_manager, "active_triggers", []),
+            "triggers": config.get("triggers", []),
+            "actions_count": len(config.get("actions", [])),
+        }
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "smarthome_companion_simulation_updated", self._handle_update
+            )
+        )
+
+    async def _handle_update(self, event):
+        self.async_write_ha_state()
+

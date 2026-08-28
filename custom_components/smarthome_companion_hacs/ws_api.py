@@ -1,7 +1,10 @@
 import logging
 from datetime import datetime
+# pyrefly: ignore [missing-import]
 import voluptuous as vol
+# pyrefly: ignore [missing-import]
 from homeassistant.components import websocket_api
+# pyrefly: ignore [missing-import]
 from homeassistant.helpers import (
     entity_registry as er,
     device_registry as dr,
@@ -382,15 +385,25 @@ async def handle_save_irrigation_config(hass, connection, msg):
 
     store = hass.data[DOMAIN]["store"]
     current_irrigation = store.get_irrigation()
-    current_zones = {z.get("id"): z for z in current_irrigation.get("zones", []) if z.get("id")}
+    current_zones_by_id = {z.get("id"): z for z in current_irrigation.get("zones", []) if z.get("id")}
+    current_zones_by_valve = {z.get("valve_entity_id"): z for z in current_irrigation.get("zones", []) if z.get("valve_entity_id")}
     
     new_irrigation = msg["irrigation"]
     for new_z in new_irrigation.get("zones", []):
         zid = new_z.get("id")
-        if zid in current_zones:
-            old_z = current_zones[zid]
+        valve_id = new_z.get("valve_entity_id")
+        
+        old_z = None
+        if zid and zid in current_zones_by_id:
+            old_z = current_zones_by_id[zid]
+        elif valve_id and valve_id in current_zones_by_valve:
+            old_z = current_zones_by_valve[valve_id]
+            
+        if old_z:
+            if not zid and old_z.get("id"):
+                new_z["id"] = old_z["id"]
             for attr in ("last_watered_at", "last_skipped_at", "last_skipped_reason", "_last_auto_start_date"):
-                if attr in old_z:
+                if old_z.get(attr) is not None:
                     new_z[attr] = old_z[attr]
 
     success = await store.save_irrigation(new_irrigation)

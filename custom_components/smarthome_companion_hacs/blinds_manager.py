@@ -66,27 +66,32 @@ class BlindsManager:
         mem = self._states.get(entity_id, {})
         now = dt_util.now()
 
+        sim_prefix = ""
+        simulation_mgr = self.hass.data.get(DOMAIN, {}).get("simulation_manager")
+        if simulation_mgr and simulation_mgr.is_active and simulation_mgr.get_blind_config(entity_id):
+            sim_prefix = "Anwesenheitssimulation: "
+
         if action_type == "open":
-            msg = f"geöffnet von der Integration um der Öffnungszeit nachzugehen{suffix}."
+            msg = f"{sim_prefix}geöffnet von der Integration um der Öffnungszeit nachzugehen{suffix}."
         elif action_type == "close":
-            msg = f"geschlossen von der Integration um der Schließzeit nachzugehen{suffix}."
+            msg = f"{sim_prefix}geschlossen von der Integration um der Schließzeit nachzugehen{suffix}."
         elif action_type == "shading":
             details = mem.get("shading_log_details", {})
             if details:
                 mx = details.get("Temperatur Max Heute", "?")
                 intensity = details.get("Sonnenintensität", "?")
-                msg = f"Hitzeschutz aktiviert gemäß Tagesplan: Fährt auf {target_position}% (Heutiges Maximum: {mx}, Sonne: {intensity}){suffix}."
+                msg = f"{sim_prefix}Hitzeschutz aktiviert gemäß Tagesplan: Fährt auf {target_position}% (Heutiges Maximum: {mx}, Sonne: {intensity}){suffix}."
             else:
-                msg = f"von der Integration auf Beschattungsposition ({target_position}%) gefahren{suffix}."
+                msg = f"{sim_prefix}von der Integration auf Beschattungsposition ({target_position}%) gefahren{suffix}."
         elif action_type == "ventilation":
             if mem.get("ventilation_logged_today") == now.date().isoformat():
                 return
             mem["ventilation_logged_today"] = now.date().isoformat()
-            msg = f"Der Rollladen wird zum Lüften auf {target_position}% gefahren."
+            msg = f"{sim_prefix}Der Rollladen wird zum Lüften auf {target_position}% gefahren."
         elif action_type == "cloud_pause":
-            msg = f"Hitzeschutz aufgrund von Bewölkung pausiert. Fährt auf {target_position}%{suffix}."
+            msg = f"{sim_prefix}Hitzeschutz aufgrund von Bewölkung pausiert. Fährt auf {target_position}%{suffix}."
         else:
-            msg = f"von der Integration gesteuert auf {target_position}%{suffix}."
+            msg = f"{sim_prefix}von der Integration gesteuert auf {target_position}%{suffix}."
         
         await self._log_to_logbook(entity_id, msg)
 
@@ -109,37 +114,49 @@ class BlindsManager:
             return base_config
 
         config = dict(base_config)
-        open_sched_mode = sim_config.get("openScheduleMode", "fixed")
-        close_sched_mode = sim_config.get("closeScheduleMode", "fixed")
-        
-        config["use_fixed_open_time"] = open_sched_mode in ["fixed", "combined"]
-        config["use_sunrise"] = open_sched_mode in ["sunrise", "combined"]
-        config["fixed_open_time"] = sim_config.get("openTime", "07:00")
-        
-        config["use_fixed_close_time"] = close_sched_mode in ["fixed", "combined"]
-        config["use_sunset"] = close_sched_mode in ["sunset", "combined"]
-        config["fixed_close_time"] = sim_config.get("closeTime", "22:00")
-        
+        action_type = sim_config.get("blindsActionType", "both")
         time_offset = int(sim_config.get("timeOffset", 0))
-        config["sunrise_offset"] = int(sim_config.get("sunriseOffsetMin", 0)) + time_offset
-        config["sunset_offset"] = int(sim_config.get("sunsetOffsetMin", 0)) + time_offset
-        
+
+        # Handle opening schedule override
+        if action_type in ["both", "open"]:
+            open_sched_mode = sim_config.get("openScheduleMode", "fixed")
+            config["use_fixed_open_time"] = open_sched_mode in ["fixed", "combined"]
+            config["use_sunrise"] = open_sched_mode in ["sunrise", "combined"]
+            
+            raw_open_time = sim_config.get("openTime", "07:00")
+            if time_offset != 0 and open_sched_mode == "fixed":
+                t = self._parse_time(raw_open_time, time(7, 0))
+                shifted = (datetime.combine(datetime.today(), t) + timedelta(minutes=time_offset)).time()
+                config["fixed_open_time"] = shifted.strftime("%H:%M")
+            else:
+                config["fixed_open_time"] = raw_open_time
+                
+            config["sunrise_offset"] = int(sim_config.get("sunriseOffsetMin", 0)) + time_offset
+
+        # Handle closing schedule override
+        if action_type in ["both", "close"]:
+            close_sched_mode = sim_config.get("closeScheduleMode", "fixed")
+            config["use_fixed_close_time"] = close_sched_mode in ["fixed", "combined"]
+            config["use_sunset"] = close_sched_mode in ["sunset", "combined"]
+            
+            raw_close_time = sim_config.get("closeTime", "22:00")
+            if time_offset != 0 and close_sched_mode == "fixed":
+                t = self._parse_time(raw_close_time, time(22, 0))
+                shifted = (datetime.combine(datetime.today(), t) + timedelta(minutes=time_offset)).time()
+                config["fixed_close_time"] = shifted.strftime("%H:%M")
+            else:
+                config["fixed_close_time"] = raw_close_time
+                
+            config["sunset_offset"] = int(sim_config.get("sunsetOffsetMin", 0)) + time_offset
+
         config["enable_random_delay"] = True
         config["random_delay_prev"] = int(sim_config.get("randomDelay", 15))
         config["random_delay_post"] = int(sim_config.get("randomDelay", 15))
-        
+
         config["enable_weekend_open"] = False
         config["enable_weekend_close"] = False
         config["enable_vacation_weekend_mode"] = False
-        
-        action_type = sim_config.get("blindsActionType", "both")
-        if action_type == "open":
-            config["use_fixed_close_time"] = False
-            config["use_sunset"] = False
-        elif action_type == "close":
-            config["use_fixed_open_time"] = False
-            config["use_sunrise"] = False
-            
+
         return config
 
     def calculate_times(self, entity_id, config, date_val=None):
@@ -168,10 +185,14 @@ class BlindsManager:
         sunrise_time_dt = None
         fixed_open_dt = None
 
-        if config.get("use_fixed_open_time", False):
+        use_fixed_open = config.get("use_fixed_open_time", False)
+        use_sunrise = config.get("use_sunrise", False)
+        open_enabled = bool(use_fixed_open or use_sunrise)
+
+        if use_fixed_open:
             fixed_open_dt = get_dt(self._parse_time(config.get("fixed_open_time"), time(7, 0)))
             
-        if config.get("use_sunrise", False):
+        if use_sunrise:
             sun_sun = self.hass.states.get("sun.sun")
             sun_next_rising = sun_sun.attributes.get("next_rising") if sun_sun else None
             if sun_next_rising:
@@ -224,33 +245,35 @@ class BlindsManager:
         if is_vacation_day and config.get("enable_vacation_weekend_mode", False):
             is_weekend_or_holiday = True
 
-        if config.get("enable_weekend_open", False) and is_weekend_or_holiday:
-            weekend_dt = get_dt(self._parse_time(config.get("weekend_open_time"), time(9, 0)))
-            if base_open_time_dt:
-                base_open_time_dt = max(base_open_time_dt, weekend_dt)
-            else:
-                base_open_time_dt = weekend_dt
+        if open_enabled:
+            if config.get("enable_weekend_open", False) and is_weekend_or_holiday:
+                weekend_dt = get_dt(self._parse_time(config.get("weekend_open_time"), time(9, 0)))
+                if base_open_time_dt:
+                    base_open_time_dt = max(base_open_time_dt, weekend_dt)
+                else:
+                    base_open_time_dt = weekend_dt
 
-        sleep_in_date_str = config.get("sleep_in_date")
-        if sleep_in_date_str and sleep_in_date_str == date_val.isoformat():
-            weekend_dt = get_dt(self._parse_time(config.get("weekend_open_time"), time(9, 0)))
-            if base_open_time_dt:
-                base_open_time_dt = max(base_open_time_dt, weekend_dt)
-            else:
-                base_open_time_dt = weekend_dt
-
-        if not base_open_time_dt:
-            base_open_time_dt = get_dt(self._parse_time(config.get("fixed_open_time"), time(7, 0)))
+            sleep_in_date_str = config.get("sleep_in_date")
+            if sleep_in_date_str and sleep_in_date_str == date_val.isoformat():
+                weekend_dt = get_dt(self._parse_time(config.get("weekend_open_time"), time(9, 0)))
+                if base_open_time_dt:
+                    base_open_time_dt = max(base_open_time_dt, weekend_dt)
+                else:
+                    base_open_time_dt = weekend_dt
 
         # 2. Basis-Schließzeit kalkulieren
         base_close_time_dt = None
         sunset_time_dt = None
         fixed_close_dt = None
 
-        if config.get("use_fixed_close_time", False):
+        use_fixed_close = config.get("use_fixed_close_time", False)
+        use_sunset = config.get("use_sunset", False)
+        close_enabled = bool(use_fixed_close or use_sunset)
+
+        if use_fixed_close:
             fixed_close_dt = get_dt(self._parse_time(config.get("fixed_close_time"), time(22, 0)))
 
-        if config.get("use_sunset", False):
+        if use_sunset:
             sun_sun = self.hass.states.get("sun.sun")
             sun_next_setting = sun_sun.attributes.get("next_setting") if sun_sun else None
             if sun_next_setting:
@@ -268,15 +291,13 @@ class BlindsManager:
         elif sunset_time_dt:
             base_close_time_dt = sunset_time_dt
 
-        if not base_close_time_dt:
-            base_close_time_dt = get_dt(self._parse_time(config.get("fixed_close_time"), time(22, 0)))
-
-        if config.get("enable_weekend_close", False) and is_weekend_or_holiday:
-            weekend_close_dt = get_dt(self._parse_time(config.get("weekend_close_time"), time(23, 0)))
-            if base_close_time_dt:
-                base_close_time_dt = max(base_close_time_dt, weekend_close_dt)
-            else:
-                base_close_time_dt = weekend_close_dt
+        if close_enabled:
+            if config.get("enable_weekend_close", False) and is_weekend_or_holiday:
+                weekend_close_dt = get_dt(self._parse_time(config.get("weekend_close_time"), time(23, 0)))
+                if base_close_time_dt:
+                    base_close_time_dt = max(base_close_time_dt, weekend_close_dt)
+                else:
+                    base_close_time_dt = weekend_close_dt
 
         # 3. Zufall anwenden (standardmäßig aktiviert!)
         enable_random_delay = config.get("enable_random_delay", True)
@@ -306,15 +327,19 @@ class BlindsManager:
             open_seed = f"{entity_id}-{date_str}-open"
             close_seed = f"{entity_id}-{date_str}-close"
             
-            r_open = random.Random(open_seed)
-            open_offset = r_open.randint(-random_delay_prev, random_delay_post)
-            actual_open_time_dt = base_open_time_dt + timedelta(minutes=open_offset)
+            if base_open_time_dt is not None:
+                r_open = random.Random(open_seed)
+                open_offset = r_open.randint(-random_delay_prev, random_delay_post)
+                actual_open_time_dt = base_open_time_dt + timedelta(minutes=open_offset)
             
-            r_close = random.Random(close_seed)
-            close_offset = r_close.randint(-random_delay_prev, random_delay_post)
-            actual_close_time_dt = base_close_time_dt + timedelta(minutes=close_offset)
+            if base_close_time_dt is not None:
+                r_close = random.Random(close_seed)
+                close_offset = r_close.randint(-random_delay_prev, random_delay_post)
+                actual_close_time_dt = base_close_time_dt + timedelta(minutes=close_offset)
 
         return {
+            "open_enabled": open_enabled,
+            "close_enabled": close_enabled,
             "open_time": actual_open_time_dt,
             "close_time": actual_close_time_dt,
             "sunrise_time": sunrise_time_dt,
@@ -863,10 +888,11 @@ class BlindsManager:
                         
                         if not is_manual_ventilation_shading_trigger:
                             times_check = self.calculate_times(entity_id, config)
+                            open_time_check = times_check.get("open_time")
                             is_morning_ventilation = (
                                 config.get("enable_ventilation", False)
                                 and now.time() <= self._parse_time(config.get("ventilation_until"), time(10, 0))
-                                and now < times_check["open_time"]
+                                and (open_time_check is None or now < open_time_check)
                             )
                             
                             if is_morning_ventilation and is_opening and mem.get("ventilation_stopped_today") != now.date().isoformat():
@@ -885,13 +911,12 @@ class BlindsManager:
         # Lüftungszeit ist nur morgens gültig: zwischen Mitternacht und vent_until UND
         # solange die Öffnungszeit des Tages noch nicht erreicht wurde.
         # WICHTIG: Prüft ob es wirklich früh morgens ist, NICHT abends.
-        # (Mitternacht 00:00 < vent_until würde sonst fälschlicherweise nachts auslösen!)
         times_today = self.calculate_times(entity_id, config)
-        open_time_today = times_today["open_time"]
+        open_time_today = times_today.get("open_time")
         is_morning_ventilation_time = (
             config.get("enable_ventilation", False)
             and now.time() <= vent_until
-            and now < open_time_today  # Öffnungszeit noch nicht erreicht
+            and (open_time_today is None or now < open_time_today)
         )
 
         # Backup-Sicherheit: Wenn zum ersten Mal am Morgen ein Öffnungsversuch erkannt wird,
@@ -949,20 +974,29 @@ class BlindsManager:
 
         # Reuse times_today already calculated above (avoid double computation)
         open_time_dt = open_time_today
-        close_time_dt = times_today["close_time"]
+        close_time_dt = times_today.get("close_time")
+        open_enabled = times_today.get("open_enabled", False)
+        close_enabled = times_today.get("close_enabled", False)
 
-        target_position = 100
-        action_type = "open"
-        
         is_night = False
-        if open_time_dt <= close_time_dt:
-            if now < open_time_dt or now >= close_time_dt:
+        if open_time_dt and close_time_dt:
+            if open_time_dt <= close_time_dt:
+                if now < open_time_dt or now >= close_time_dt:
+                    is_night = True
+            else:
+                if now >= close_time_dt and now < open_time_dt:
+                    is_night = True
+        elif close_time_dt and not open_time_dt:
+            if now >= close_time_dt:
                 is_night = True
-        else:
-            if now >= close_time_dt and now < open_time_dt:
+        elif open_time_dt and not close_time_dt:
+            if now < open_time_dt:
                 is_night = True
-                
-        if is_night:
+
+        target_position = None
+        action_type = None
+
+        if is_night and close_enabled:
             target_position = 0
             action_type = "close"
         else:
@@ -982,22 +1016,18 @@ class BlindsManager:
             is_morning_ventilation = (
                 config.get("enable_ventilation", False)
                 and now.time() <= self._parse_time(config.get("ventilation_until"), time(10, 0))
-                and now < open_time_today  # Öffnungszeit noch nicht erreicht
+                and (open_time_today is None or now < open_time_today)
             )
 
             if is_morning_ventilation:
                 ventilation_pos = int(config.get("ventilation_position", 59))
                 # REGEL: Lüftung fährt NIE runter - nur hoch bis zur Lüftungsposition.
-                # Wenn der Rollladen bereits höher ist, bleibt er wo er ist (target = max).
                 effective_ventilation_pos = max(ventilation_pos, current_position)
-                # Fall B: Hitze ist schon da
                 if is_shading_time:
                     if ventilation_pos < shading_target:
-                        # Lüftung ist weiter ZU als Hitzeschutz: Erst lüften
                         target_position = effective_ventilation_pos
                         action_type = "ventilation"
                     else:
-                        # Lüftung ist weiter AUF als Hitzeschutz: Überspringen
                         target_position = shading_target
                         action_type = "shading"
                         mem["shading_log_details"] = {
@@ -1015,13 +1045,20 @@ class BlindsManager:
                         "Temperatur Max Heute": f"{plan.get('today_max')} °C",
                         "Sonnenintensität": f"{plan.get('max_intensity'):.0f} W/m²"
                     }
-                else:
+                elif open_enabled and not is_night:
                     target_position = 100
                     action_type = "open"
+                elif is_shading and shading_end and now >= shading_end and (close_time_dt is None or now < close_time_dt):
+                    if mem.get("last_target_position") == shading_target:
+                        target_position = 100
+                        action_type = "open"
 
         last_target_pos = mem.get("last_target_position")
         mem["last_target_position"] = target_position
-        
+
+        if target_position is None:
+            return
+
         is_transition = last_target_pos is not None and last_target_pos != target_position
         
         # Evaluate manual override exceptions
@@ -1069,7 +1106,10 @@ class BlindsManager:
         if abs(current_position - target_position) > position_threshold:
             # Wenn es eine reguläre scheduled Automation Transition ist
             if is_transition:
-                self._add_trace(entity_id, "Automation", target_position)
+                simulation_mgr = self.hass.data.get(DOMAIN, {}).get("simulation_manager")
+                is_sim = simulation_mgr and simulation_mgr.is_active and simulation_mgr.get_blind_config(entity_id)
+                trace_label = "Automation (Simulation)" if is_sim else "Automation"
+                self._add_trace(entity_id, trace_label, target_position)
                 mem["last_managed_position"] = target_position
                 mem["automatic_transit"] = True
                 mem["last_command_time"] = now.isoformat()

@@ -1,8 +1,11 @@
 import logging
 import asyncio
 from datetime import timedelta
+# pyrefly: ignore [missing-import]
 import homeassistant.util.dt as dt_util
+# pyrefly: ignore [missing-import]
 from homeassistant.helpers.event import async_track_time_interval, async_track_state_change_event
+# pyrefly: ignore [missing-import]
 from homeassistant.components.weather import ATTR_FORECAST_PRECIPITATION_PROBABILITY
 
 _LOGGER = logging.getLogger(__name__)
@@ -20,6 +23,7 @@ class IrrigationManager:
         self._heat_override_active_yesterday = False
         self._heat_override_active_today = False
         self._last_forecast_temperature = None
+        self._cached_forecasts = []
 
     def is_heat_override_today(self, zone):
         if not (zone.get("enableHeatOverride") or zone.get("enable_heat_override")):
@@ -99,6 +103,11 @@ class IrrigationManager:
             self.hass, self._async_fast_update, timedelta(seconds=15)
         )
         self._update_sensor_listeners()
+        try:
+            await self._fetch_daily_max_temp(dt_util.now())
+            await self._async_check_irrigation(dt_util.now())
+        except Exception as e:
+            _LOGGER.debug(f"Initial irrigation check delayed: {e}")
         _LOGGER.info("IrrigationManager setup complete.")
 
     async def _async_fast_update(self, now):
@@ -397,6 +406,7 @@ class IrrigationManager:
             )
             if response and weather_entity in response:
                 forecasts = response[weather_entity].get("forecast", [])
+                self._cached_forecasts = forecasts
                 for f in forecasts:
                     dt_str = f.get("datetime")
                     if dt_str:
@@ -407,6 +417,135 @@ class IrrigationManager:
                             return temp
         except Exception as e:
             _LOGGER.warning(f"Could not fetch weather forecast: {e}")
+        return None
+
+    def calculate_next_run(self, zone: dict, now=None):
+        """Calculate the next planned run datetime for a zone (up to 14 days in future).
+
+        Simulates day by day, respecting:
+        - Manual overrides (force_pause, force_water)
+        - Minimum rest days (min_rest_days) in Smart Mode based on last_watered_at
+        - Weekday schedule
+        - Rain forecast & current rain status
+        - Heat override threshold
+        Matches the calculation logic of the SmartHome Companion Flutter app.
+        """
+        if not zone:
+            return None
+
+        now = dt_util.as_local(now or dt_util.now())
+        today = now.date()
+
+        # Parse scheduled time (HH:MM)
+        time_str = zone.get("scheduled_time", "06:00")
+        try:
+            parts = time_str.split(":")
+            h, m = int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+        except Exception:
+            h, m = 6, 0
+
+        # Calculate simulated days since last watered
+        last_watered_str = zone.get("last_watered_at")
+        simulated_days_since_water = 999
+        if last_watered_str:
+            try:
+                lw = dt_util.parse_datetime(last_watered_str)
+                if lw:
+                    lw_local = dt_util.as_local(lw)
+                    simulated_days_since_water = (today - lw_local.date()).days
+            except Exception:
+                pass
+
+        has_sensor = bool(zone.get("soil_sensor_entity_id"))
+        min_rest_days = int(zone.get("min_rest_days", 2))
+        enable_heat = bool(zone.get("enable_heat_override") or zone.get("enableHeatOverride"))
+        heat_threshold = float(self.config.get("heat_override_threshold", 30.0))
+        manual_overrides = zone.get("manual_overrides", ["auto"] * 7)
+        weekday_schedule = zone.get("weekday_schedule", [True] * 7 if has_sensor else [False] * 7)
+        is_currently_raining = self._is_raining()
+
+        for days_offset in range(15):
+            slot_date = today + timedelta(days=days_offset)
+            weekday = slot_date.weekday()  # 0 = Monday ... 6 = Sunday
+
+            # 1. Manual Overrides
+            override_state = manual_overrides[weekday] if weekday < len(manual_overrides) else "auto"
+            if override_state == "force_water":
+                candidate_dt = now.replace(
+                    year=slot_date.year, month=slot_date.month, day=slot_date.day,
+                    hour=h, minute=m, second=0, microsecond=0
+                )
+                if candidate_dt > now:
+                    return candidate_dt
+                simulated_days_since_water = 1
+                continue
+            elif override_state == "force_pause":
+                simulated_days_since_water += 1
+                continue
+
+            # 2. Weather forecast checks for this slot date
+            rain_forecast = is_currently_raining if days_offset == 0 else False
+            hot_forecast = False
+
+            if hasattr(self, "_cached_forecasts") and self._cached_forecasts:
+                for f in self._cached_forecasts:
+                    dt_str = f.get("datetime")
+                    if not dt_str:
+                        continue
+                    f_dt = dt_util.parse_datetime(dt_str)
+                    if f_dt and dt_util.as_local(f_dt).date() == slot_date:
+                        try:
+                            temp = float(f.get("temperature", 0))
+                            if temp > heat_threshold:
+                                hot_forecast = True
+                        except (ValueError, TypeError):
+                            pass
+
+                        cond = str(f.get("condition", "")).lower()
+                        if cond in {"rainy", "pouring", "lightning-rainy", "snowy-rainy"}:
+                            rain_forecast = True
+
+                        try:
+                            prob = float(f.get(ATTR_FORECAST_PRECIPITATION_PROBABILITY, f.get("precipitation_probability", 0)))
+                            if prob > 60:
+                                rain_forecast = True
+                        except (ValueError, TypeError):
+                            pass
+                        break
+
+            is_scheduled = weekday < len(weekday_schedule) and weekday_schedule[weekday]
+            heat_override = hot_forecast and enable_heat
+
+            if has_sensor:
+                # ── SMART MODE ──
+                if not is_scheduled and not heat_override:
+                    will_water = False
+                elif rain_forecast:
+                    will_water = False
+                elif simulated_days_since_water <= min_rest_days and not heat_override:
+                    will_water = False
+                else:
+                    will_water = True
+            else:
+                # ── SCHEDULE MODE ──
+                if rain_forecast:
+                    will_water = False
+                elif not is_scheduled and not heat_override:
+                    will_water = False
+                else:
+                    will_water = True
+
+            if will_water:
+                candidate_dt = now.replace(
+                    year=slot_date.year, month=slot_date.month, day=slot_date.day,
+                    hour=h, minute=m, second=0, microsecond=0
+                )
+                if candidate_dt > now:
+                    return candidate_dt
+                simulated_days_since_water = 1
+            else:
+                simulated_days_since_water += 1
+
         return None
 
     async def _async_check_irrigation(self, now):
