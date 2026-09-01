@@ -329,7 +329,7 @@ async def handle_save_blinds_config(hass, connection, msg):
     store = hass.data[DOMAIN]["store"]
     success = await store.save_blinds(msg["blinds"])
     if not success:
-        connection.send_error(msg["id"], "save_failed", "Die Konfiguration konnte nicht gespeichert werden (Serialisierungsfehler oder I/O).")
+        connection.send_error(msg["id"], "save_failed", "Failed to save configuration (serialization or I/O error).")
         return
     
     # Notify manager to reload config
@@ -408,7 +408,7 @@ async def handle_save_irrigation_config(hass, connection, msg):
 
     success = await store.save_irrigation(new_irrigation)
     if not success:
-        connection.send_error(msg["id"], "save_failed", "Die Konfiguration konnte nicht gespeichert werden (Serialisierungsfehler oder I/O).")
+        connection.send_error(msg["id"], "save_failed", "Failed to save configuration (serialization or I/O error).")
         return
     
     if "irrigation_manager" in hass.data[DOMAIN]:

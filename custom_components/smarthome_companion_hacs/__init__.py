@@ -23,7 +23,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up the SmartHome Companion HACS component from a config entry."""
-    _LOGGER.info(f"Setting up SmartHome Companion Backend now({entry.title})")
+    _LOGGER.info("Setting up SmartHome Companion Backend: %s", entry.title)
 
     hass.data.setdefault(DOMAIN, {})
 

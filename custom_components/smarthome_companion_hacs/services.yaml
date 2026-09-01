@@ -1,18 +1,18 @@
 set_sleep_in:
   name: "Set Sleep In"
-  description: "Markiert einen oder mehrere Rollläden für 'Ausschlafen', sodass diese am nächsten Morgen (bzw. noch heute, falls vor 12 Uhr) nicht durch die Automatik geöffnet werden."
+  description: "Marks one or more blinds for 'Sleep In', preventing them from opening automatically next morning (or today if triggered before 12:00)."
   fields:
     entity_ids:
       name: "Entities"
-      description: "Eine Liste von Rollladen-Entitäten (z.B. cover.schlafzimmer), für die Ausschlafen aktiviert/deaktiviert werden soll."
+      description: "List of cover entity IDs (e.g., cover.bedroom) to toggle sleep-in mode for."
       required: true
       selector:
         entity:
           domain: cover
           multiple: true
     active:
-      name: "Aktiv"
-      description: "True (Standard), um Ausschlafen zu aktivieren. False, um es wieder zu deaktivieren."
+      name: "Active"
+      description: "Set to True (default) to enable sleep-in, or False to disable."
       required: false
       selector:
         boolean: {}

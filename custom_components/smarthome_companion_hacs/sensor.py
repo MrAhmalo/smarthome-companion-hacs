@@ -15,7 +15,7 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 class IntegrationInfoSensor(SensorEntity):
-    def __init__(self, hass, module="legacy", version="Unbekannt"):
+    def __init__(self, hass, module="legacy", version="Unknown"):
         self.hass = hass
         self._module = module
         if module == "legacy":
@@ -35,7 +35,7 @@ class IntegrationInfoSensor(SensorEntity):
     def extra_state_attributes(self):
         return {
             "integration": "SmartHome Companion HACS Backend",
-            "author": "Julian & Antigravity"
+            "author": "SmartHome Companion"
         }
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -53,7 +53,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         integration = await async_get_integration(hass, DOMAIN)
         version = integration.version
     except Exception:
-        version = "Unbekannt"
+        version = "Unknown"
 
     entities = [IntegrationInfoSensor(hass, module, version)]
     if module in ("blinds", "legacy") and sun_manager:

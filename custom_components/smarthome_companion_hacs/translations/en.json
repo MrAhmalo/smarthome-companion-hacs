@@ -1,1 +1,17 @@
-{ "config": { "step": { "user": { "title": "Setup Backend", "description": "Which module do you want to configure?", "menu_options": { "blinds": "Blinds Configuration", "irrigation": "Irrigation Configuration" } } }, "abort": { "already_configured": "This module is already configured." } } }
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SmartHome Companion Backend",
+        "description": "Select the module you want to configure:",
+        "menu_options": {
+          "blinds": "Blinds & Solar Shading",
+          "irrigation": "Irrigation System"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This module is already configured."
+    }
+  }
+}

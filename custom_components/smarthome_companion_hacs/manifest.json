@@ -1,7 +1,7 @@
 {
   "domain": "smarthome_companion_hacs",
   "name": "SmartHome Companion Backend",
-  "documentation": "https://github.com/MrAhmalo/SmartHome-Companion",
+  "documentation": "https://github.com/MrAhmalo/smarthome-companion-hacs",
   "dependencies": [
     "sun",
     "weather"
