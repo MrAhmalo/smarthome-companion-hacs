@@ -1,5 +1,7 @@
 import logging
 # pyrefly: ignore [missing-import]
+from homeassistant.core import callback
+# pyrefly: ignore [missing-import]
 from homeassistant.components.number import NumberEntity
 # pyrefly: ignore [missing-import]
 from homeassistant.helpers.entity import DeviceInfo
@@ -25,6 +27,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     added_blind_entities = set()
 
+    @callback
     def _add_blind_numbers_sync(event=None):
         if not store or not blinds_manager:
             return
@@ -46,7 +49,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
         if new_entities:
             async_add_entities(new_entities)
 
-    async def add_blind_numbers(event=None):
+    @callback
+    def add_blind_numbers(event=None):
         _add_blind_numbers_sync(event)
 
     if module in ("blinds", "legacy"):
@@ -116,7 +120,8 @@ class WatchdogIntervalNumber(NumberEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 
@@ -173,7 +178,8 @@ class BlindsPositionThresholdNumber(NumberEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 
@@ -218,7 +224,8 @@ class _BlindBaseNumber(NumberEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 
@@ -350,7 +357,8 @@ class _BlindBaseGenericNumber(NumberEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 

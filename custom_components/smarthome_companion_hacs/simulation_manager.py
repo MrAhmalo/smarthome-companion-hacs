@@ -1,10 +1,13 @@
 import logging
 # pyrefly: ignore [missing-import]
+from homeassistant.core import callback
+# pyrefly: ignore [missing-import]
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 # pyrefly: ignore [missing-import]
 from homeassistant.helpers.event import async_track_state_change_event
 
 from .const import DOMAIN
+from .util import safe_fire_event, safe_create_task
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,7 +23,8 @@ class SimulationManager:
         await self.async_reload_config()
 
         # Re-check triggers once Home Assistant is completely started
-        async def _on_ha_started(event):
+        @callback
+        def _on_ha_started(event):
             config = self.store.data.get("simulation", {})
             triggers = [t.get("entityId") for t in config.get("triggers", []) if t.get("entityId")]
             if triggers:
@@ -51,6 +55,7 @@ class SimulationManager:
             # Check current state
             self._check_triggers(trigger_entities)
 
+    @callback
     def _handle_trigger_state_change(self, event):
         config = self.store.data.get("simulation", {})
         triggers = [t.get("entityId") for t in config.get("triggers", []) if t.get("entityId")]
@@ -74,6 +79,7 @@ class SimulationManager:
             return True
         return False
 
+    @callback
     def _check_triggers(self, trigger_entities):
         config = self.store.data.get("simulation", {})
         enabled = config.get("enabled", False)
@@ -87,6 +93,7 @@ class SimulationManager:
         active = len(active_triggers) > 0
         self._set_simulation_active(active)
 
+    @callback
     def _set_simulation_active(self, active: bool):
         was_active = self._is_active
         self._is_active = active
@@ -114,7 +121,8 @@ class SimulationManager:
             _LOGGER.info("Presence simulation ACTIVATED (Active triggers: %s)", self._active_triggers)
             if light_entities:
                 _LOGGER.info("Starting presence_simulation for %s", light_entities)
-                self.hass.async_create_task(
+                safe_create_task(
+                    self.hass,
                     self.hass.services.async_call(
                         "presence_simulation", "start",
                         {"entity_id": light_entities}
@@ -124,17 +132,18 @@ class SimulationManager:
             _LOGGER.info("Presence simulation DEACTIVATED")
             if light_entities:
                 _LOGGER.info("Stopping presence_simulation")
-                self.hass.async_create_task(
+                safe_create_task(
+                    self.hass,
                     self.hass.services.async_call("presence_simulation", "stop")
                 )
 
-        # Notify Home Assistant & Blinds Manager about simulation state update
-        self.hass.bus.async_fire("smarthome_companion_simulation_updated")
-        self.hass.bus.async_fire("smarthome_companion_blinds_updated")
+        # Notify Home Assistant & Blinds Manager about simulation state update safely
+        safe_fire_event(self.hass, "smarthome_companion_simulation_updated")
+        safe_fire_event(self.hass, "smarthome_companion_blinds_updated")
         
         blinds_mgr = self.hass.data.get(DOMAIN, {}).get("blinds_manager")
         if blinds_mgr:
-            self.hass.async_create_task(blinds_mgr._evaluate_all(is_watchdog_check=False))
+            safe_create_task(self.hass, blinds_mgr._evaluate_all(is_watchdog_check=False))
 
     @property
     def is_active(self):

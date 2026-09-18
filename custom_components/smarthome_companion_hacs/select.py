@@ -1,5 +1,9 @@
 import logging
+# pyrefly: ignore [missing-import]
+from homeassistant.core import callback
+# pyrefly: ignore [missing-import]
 from homeassistant.components.select import SelectEntity
+# pyrefly: ignore [missing-import]
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
@@ -14,6 +18,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     added_blind_entities = set()
 
+    @callback
     def add_blind_selects(event=None):
         if not store or not blinds_manager:
             return
@@ -109,5 +114,6 @@ class BlindCardinalDirectionSelect(SelectEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()

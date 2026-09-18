@@ -1,8 +1,13 @@
 import logging
+# pyrefly: ignore [missing-import]
+from homeassistant.core import callback
+# pyrefly: ignore [missing-import]
 from homeassistant.components.button import ButtonEntity
+# pyrefly: ignore [missing-import]
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
+from .util import safe_fire_event
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,6 +20,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     added_blind_entities = set()
 
+    @callback
     def add_blind_buttons(event=None):
         if not store or not blinds_manager:
             return
@@ -66,10 +72,11 @@ class ForcePlanRegenerationButton(ButtonEntity):
         )
 
     async def async_press(self) -> None:
+        # pyrefly: ignore [missing-import]
         import homeassistant.util.dt as dt_util
         self.blinds_manager._force_plan_regeneration = True
         await self.blinds_manager._regular_loop(dt_util.now())
-        self.hass.bus.async_fire("smarthome_companion_blinds_updated")
+        safe_fire_event(self.hass, "smarthome_companion_blinds_updated")
 
 class ForceApplyAllButton(ButtonEntity):
     def __init__(self, hass, blinds_manager):
@@ -90,7 +97,7 @@ class ForceApplyAllButton(ButtonEntity):
 
     async def async_press(self) -> None:
         await self.blinds_manager._evaluate_all(is_watchdog_check=True, force_correction=True)
-        self.hass.bus.async_fire("smarthome_companion_blinds_updated")
+        safe_fire_event(self.hass, "smarthome_companion_blinds_updated")
 
 class ClearManualOverridesButton(ButtonEntity):
     def __init__(self, hass, blinds_manager):
@@ -155,4 +162,4 @@ class BlindWatchdogButton(ButtonEntity):
                 self._blind_id, config, is_watchdog_check=True, force_correction=True
             )
             # Instantly fire refresh event so that tracing logs or time sensors on other entities update
-            self.hass.bus.async_fire("smarthome_companion_blinds_updated")
+            safe_fire_event(self.hass, "smarthome_companion_blinds_updated")

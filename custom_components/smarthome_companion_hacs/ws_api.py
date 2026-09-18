@@ -11,6 +11,7 @@ from homeassistant.helpers import (
     label_registry as lr,
 )
 from .const import DOMAIN
+from .util import safe_fire_event
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -415,7 +416,7 @@ async def handle_save_irrigation_config(hass, connection, msg):
         irrigation_manager = hass.data[DOMAIN]["irrigation_manager"]
         await irrigation_manager.async_reload()
         
-    hass.bus.async_fire("smarthome_companion_irrigation_updated")
+    safe_fire_event(hass, "smarthome_companion_irrigation_updated")
     
     connection.send_result(msg["id"], {"success": True})
 
@@ -431,7 +432,7 @@ async def handle_cleanup_irrigation_config(hass, connection, msg):
         irrigation_manager = hass.data[DOMAIN]["irrigation_manager"]
         await irrigation_manager.async_reload()
         
-    hass.bus.async_fire("smarthome_companion_irrigation_updated")
+    safe_fire_event(hass, "smarthome_companion_irrigation_updated")
     
     connection.send_result(msg["id"], {"success": True})
 

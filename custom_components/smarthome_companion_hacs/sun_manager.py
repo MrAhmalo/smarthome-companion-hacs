@@ -2,6 +2,7 @@ import math
 import logging
 from datetime import timedelta, datetime
 from homeassistant.helpers.event import async_track_time_interval
+from .util import safe_fire_event
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ class SunManager:
             if now:
                 self._last_forecast_update = now
                 
-        self.hass.bus.async_fire("smarthome_companion_sun_updated")
+        safe_fire_event(self.hass, "smarthome_companion_sun_updated")
 
     def _calc_intensities(self, elevation, azimuth, cloud_coverage, target_dict):
         if elevation < 0:
@@ -187,7 +188,7 @@ class SunManager:
         self.forecast_max_intensities_tomorrow = max_f_tom
         self.global_shading_needed_tomorrow = any(v >= 600.0 for v in max_f_tom.values())
         
-        self.hass.bus.async_fire("smarthome_companion_sun_updated")
+        safe_fire_event(self.hass, "smarthome_companion_sun_updated")
 
     def _calc_sun_pos(self, dt_utc, lat, lon):
         days_since_2000 = (dt_utc - datetime(2000, 1, 1, 12, 0, 0)).total_seconds() / 86400.0

@@ -1,4 +1,5 @@
 import logging
+from homeassistant.core import callback
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.helpers.entity import DeviceInfo
 
@@ -15,6 +16,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     added_blind_entities = set()
 
+    @callback
     def add_blind_switches(event=None):
         if not store or not blinds_manager:
             return
@@ -118,7 +120,8 @@ class _BlindBaseGenericSwitch(SwitchEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 class _SleepInTomorrowSwitch(SwitchEntity):
@@ -254,5 +257,6 @@ class _SleepInTomorrowSwitch(SwitchEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()

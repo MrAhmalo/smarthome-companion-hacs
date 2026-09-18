@@ -7,6 +7,7 @@ import homeassistant.util.dt as dt_util
 from homeassistant.helpers.event import async_track_time_interval, async_track_state_change_event
 # pyrefly: ignore [missing-import]
 from homeassistant.components.weather import ATTR_FORECAST_PRECIPITATION_PROBABILITY
+from .util import safe_fire_event
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -113,7 +114,7 @@ class IrrigationManager:
     async def _async_fast_update(self, now):
         """Fast update loop for progress sensors."""
         if self.running_zones:
-            self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
+            safe_fire_event(self.hass, "smarthome_companion_irrigation_updated")
 
     async def async_reload(self):
         """Reload configuration from store."""
@@ -121,7 +122,7 @@ class IrrigationManager:
         self._update_sensor_listeners()
         self._last_checked_date = None
         await self._async_check_irrigation(dt_util.now())
-        self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
+        safe_fire_event(self.hass, "smarthome_companion_irrigation_updated")
         _LOGGER.info("Irrigation configuration reloaded.")
 
     def _update_sensor_listeners(self):
@@ -194,7 +195,7 @@ class IrrigationManager:
                 zone["last_skipped_at"] = None
                 zone["last_skipped_reason"] = None
                 await self.store.save_irrigation(self.config)
-                self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
+                safe_fire_event(self.hass, "smarthome_companion_irrigation_updated")
         else:
             # Valve was turned off.
             if zone_id in self.running_zones:
@@ -204,7 +205,7 @@ class IrrigationManager:
                 zone["last_skipped_at"] = None
                 zone["last_skipped_reason"] = None
                 await self.store.save_irrigation(self.config)
-                self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
+                safe_fire_event(self.hass, "smarthome_companion_irrigation_updated")
 
     async def _async_sensor_changed(self, event):
         """Handle soil sensor state changes."""
@@ -234,7 +235,7 @@ class IrrigationManager:
             await self._stop_zones(zones_to_stop)
             
         # Fire event so UI/sensors update with the new soil moisture immediately
-        self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
+        safe_fire_event(self.hass, "smarthome_companion_irrigation_updated")
 
     async def _stop_zones(self, zones_to_stop):
         config_changed = False
@@ -259,14 +260,14 @@ class IrrigationManager:
         if config_changed:
             await self.store.save_irrigation(self.config)
             
-        self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
+        safe_fire_event(self.hass, "smarthome_companion_irrigation_updated")
         
     async def async_force_check(self):
         """Force an immediate check of the irrigation logic."""
         _LOGGER.info("Forcing immediate irrigation check.")
         self._last_checked_date = None
         await self._async_check_irrigation(dt_util.now())
-        self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
+        safe_fire_event(self.hass, "smarthome_companion_irrigation_updated")
 
     async def async_manual_start(self, zone_id, duration_minutes=None):
         """Manually start a zone based on its configured or specified duration."""
@@ -307,7 +308,7 @@ class IrrigationManager:
         zone["last_skipped_at"] = None
         zone["last_skipped_reason"] = None
         await self.store.save_irrigation(self.config)
-        self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
+        safe_fire_event(self.hass, "smarthome_companion_irrigation_updated")
 
     async def async_manual_toggle(self, zone_id, state):
         """Toggle a zone indefinitely."""
@@ -338,7 +339,7 @@ class IrrigationManager:
             zone["last_skipped_at"] = None
             zone["last_skipped_reason"] = None
             await self.store.save_irrigation(self.config)
-            self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
+            safe_fire_event(self.hass, "smarthome_companion_irrigation_updated")
         else:
             _LOGGER.info(f"Toggling OFF zone {zone_id}.")
             await self._turn_off_valve(valve_entity)
@@ -349,7 +350,7 @@ class IrrigationManager:
             zone["last_skipped_at"] = None
             zone["last_skipped_reason"] = None
             await self.store.save_irrigation(self.config)
-            self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
+            safe_fire_event(self.hass, "smarthome_companion_irrigation_updated")
 
     def _is_raining(self):
         """Check the global rain sensor. Returns True if rain is detected."""
@@ -776,7 +777,7 @@ class IrrigationManager:
             await self.store.save_irrigation(self.config)
 
         if self.running_zones:
-            self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
+            safe_fire_event(self.hass, "smarthome_companion_irrigation_updated")
 
     async def _turn_on_valve(self, entity_id):
         domain = entity_id.split(".")[0]

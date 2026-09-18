@@ -1,9 +1,11 @@
 import logging
 import re
+from homeassistant.core import callback
 from homeassistant.components.text import TextEntity
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
+from .util import safe_fire_event
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,6 +68,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     added_blind_entities = set()
 
+    @callback
     def add_blind_texts(event=None):
         if not store or not blinds_manager:
             return
@@ -171,7 +174,8 @@ class BlindTimeText(TextEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 
@@ -222,7 +226,8 @@ class HubTextSetting(TextEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 
@@ -280,7 +285,7 @@ class IrrigationTextSetting(TextEntity):
         await self.store.async_save(self.store.data)
         if self.irrigation_manager:
             await self.irrigation_manager.async_reload()
-        self.hass.bus.async_fire("smarthome_companion_irrigation_updated")
+        safe_fire_event(self.hass, "smarthome_companion_irrigation_updated")
 
     async def async_added_to_hass(self):
         self.async_on_remove(
@@ -289,5 +294,6 @@ class IrrigationTextSetting(TextEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()

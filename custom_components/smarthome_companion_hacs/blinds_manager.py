@@ -7,6 +7,7 @@ from homeassistant.core import Context
 # pyrefly: ignore [missing-import]
 import homeassistant.util.dt as dt_util
 from .const import DOMAIN
+from .util import safe_fire_event
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -373,7 +374,7 @@ class BlindsManager:
         await self._update_weather_forecast()
         
         # Will be called when new config comes from UI
-        self.hass.bus.async_fire("smarthome_companion_blinds_updated")
+        safe_fire_event(self.hass, "smarthome_companion_blinds_updated")
         await self._evaluate_all(is_watchdog_check=False)
 
     async def _async_setup_schedulers(self):
@@ -499,7 +500,7 @@ class BlindsManager:
                 self.store.data["tomorrow_is_vacation"] = is_vacation
                 self.store.data["tomorrow_is_urlaub"] = is_urlaub
 
-        self.hass.bus.async_fire("smarthome_companion_blinds_updated")
+        safe_fire_event(self.hass, "smarthome_companion_blinds_updated")
 
     async def _update_weather_forecast(self):
         settings = self.store.data.get("settings", {})
@@ -596,7 +597,7 @@ class BlindsManager:
                 
         self._force_plan_regeneration = False
         self.hass.async_create_task(self.store.async_save())
-        self.hass.bus.async_fire("smarthome_companion_blinds_updated")
+        safe_fire_event(self.hass, "smarthome_companion_blinds_updated")
 
     def _generate_shading_plan(self, entity_id, config, plan_date):
         today_hourly = getattr(self, "_today_hourly_forecast", [])
@@ -751,7 +752,7 @@ class BlindsManager:
     async def _clear_all_overrides(self):
         for state in self._states.values():
             state["manual_override_today"] = None
-        self.hass.bus.async_fire("smarthome_companion_blinds_updated")
+        safe_fire_event(self.hass, "smarthome_companion_blinds_updated")
 
     async def _evaluate_blind(self, entity_id, config, is_watchdog_check=False, is_state_change=False, force_correction=False):
         """

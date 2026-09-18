@@ -6,6 +6,8 @@ from datetime import timedelta, time, datetime
 import homeassistant.util.dt as dt_util
 
 # pyrefly: ignore [missing-import]
+from homeassistant.core import callback
+# pyrefly: ignore [missing-import]
 from homeassistant.components.sensor import SensorEntity
 # pyrefly: ignore [missing-import]
 from homeassistant.helpers.entity import DeviceInfo
@@ -97,6 +99,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     # Track dynamically added blind unique IDs
     added_blind_entities = set()
 
+    @callback
     def _add_blind_sensors_sync(event=None):
         if not store or not blinds_manager:
             return
@@ -122,7 +125,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
         if new_entities:
             async_add_entities(new_entities)
 
-    async def add_blind_sensors(event=None):
+    @callback
+    def add_blind_sensors(event=None):
         _add_blind_sensors_sync(event)
 
     if module in ("blinds", "legacy"):
@@ -138,6 +142,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     added_irrigation_entities = set()
 
+    @callback
     def _add_irrigation_sensors_sync(event=None):
         if not store or not irrigation_manager:
             return
@@ -174,7 +179,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
         if new_entities:
             async_add_entities(new_entities)
 
-    async def update_irrigation_sensors(event=None):
+    @callback
+    def update_irrigation_sensors(event=None):
         _add_irrigation_sensors_sync()
         for entity in entities:
             if isinstance(entity, (ConfiguredIrrigationSensor, UnconfiguredIrrigationSensor, IrrigationMaxManualRuntimeSensor, IrrigationSimultaneousModeSensor)):
@@ -220,7 +226,8 @@ class _BaseBlindsSensor(SensorEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 
@@ -331,7 +338,8 @@ class _BaseIrrigationSensor(SensorEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 
@@ -489,7 +497,8 @@ class FassadeSunSensor(SensorEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 class FassadeSunForecastSensor(SensorEntity):
@@ -521,7 +530,8 @@ class FassadeSunForecastSensor(SensorEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 class GlobalShadingNeededSensor(SensorEntity):
@@ -551,7 +561,8 @@ class GlobalShadingNeededSensor(SensorEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 class FassadeSunForecastTomorrowSensor(SensorEntity):
@@ -583,7 +594,8 @@ class FassadeSunForecastTomorrowSensor(SensorEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 class GlobalShadingNeededTomorrowSensor(SensorEntity):
@@ -613,7 +625,8 @@ class GlobalShadingNeededTomorrowSensor(SensorEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 class _BlindBaseSensor(SensorEntity):
@@ -666,7 +679,8 @@ class _BlindBaseSensor(SensorEntity):
         )
         self.async_write_ha_state()
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 
@@ -1001,7 +1015,8 @@ class _IrrigationZoneBaseSensor(SensorEntity):
         )
         self.async_write_ha_state()
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
 class IrrigationZoneLastWateredSensor(_IrrigationZoneBaseSensor):
@@ -1256,6 +1271,7 @@ class PresenceSimulationActiveSensor(SensorEntity):
             )
         )
 
-    async def _handle_update(self, event):
+    @callback
+    def _handle_update(self, event):
         self.async_write_ha_state()
 
