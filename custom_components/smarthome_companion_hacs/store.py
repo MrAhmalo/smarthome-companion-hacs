@@ -1,5 +1,6 @@
 import logging
 import copy
+import re
 from homeassistant.helpers.storage import Store
 from .const import STORAGE_KEY, STORAGE_VERSION, DEFAULT_CATEGORIES
 
@@ -21,6 +22,19 @@ class CompanionStore:
             self.data.setdefault("dismissed_devices", [])
             self.data.setdefault("adaptive_light", {})
             self.data.setdefault("simulation", {})
+
+            # Migrate / sanitize zone IDs in irrigation store if they contain invalid characters
+            irrigation = self.data.get("irrigation")
+            if isinstance(irrigation, dict) and "zones" in irrigation:
+                modified = False
+                for z in irrigation.get("zones", []):
+                    zid = str(z.get("id", ""))
+                    clean_id = re.sub(r"[^a-zA-Z0-9_]", "", zid).lower()
+                    if clean_id and clean_id != zid:
+                        z["id"] = clean_id
+                        modified = True
+                if modified:
+                    await self.async_save()
         return self.data
 
     async def async_save(self, data=None):

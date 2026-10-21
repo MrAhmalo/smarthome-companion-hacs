@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 # pyrefly: ignore [missing-import]
 import voluptuous as vol
@@ -392,6 +393,11 @@ async def handle_save_irrigation_config(hass, connection, msg):
     new_irrigation = msg["irrigation"]
     for new_z in new_irrigation.get("zones", []):
         zid = new_z.get("id")
+        if zid:
+            clean_id = re.sub(r"[^a-zA-Z0-9_]", "", str(zid)).lower()
+            if clean_id:
+                new_z["id"] = clean_id
+                zid = clean_id
         valve_id = new_z.get("valve_entity_id")
         
         old_z = None
@@ -443,9 +449,10 @@ async def handle_cleanup_irrigation_config(hass, connection, msg):
 })
 @websocket_api.async_response
 async def handle_irrigation_manual_start(hass, connection, msg):
+    clean_zone_id = re.sub(r"[^a-zA-Z0-9_]", "", str(msg["zone_id"])).lower()
     if "irrigation_manager" in hass.data[DOMAIN]:
         irrigation_manager = hass.data[DOMAIN]["irrigation_manager"]
-        await irrigation_manager.async_manual_start(msg["zone_id"], duration_minutes=msg.get("duration"))
+        await irrigation_manager.async_manual_start(clean_zone_id, duration_minutes=msg.get("duration"))
     connection.send_result(msg["id"], {"success": True})
 
 @websocket_api.websocket_command({
@@ -455,9 +462,10 @@ async def handle_irrigation_manual_start(hass, connection, msg):
 })
 @websocket_api.async_response
 async def handle_irrigation_manual_toggle(hass, connection, msg):
+    clean_zone_id = re.sub(r"[^a-zA-Z0-9_]", "", str(msg["zone_id"])).lower()
     if "irrigation_manager" in hass.data[DOMAIN]:
         irrigation_manager = hass.data[DOMAIN]["irrigation_manager"]
-        await irrigation_manager.async_manual_toggle(msg["zone_id"], msg["state"])
+        await irrigation_manager.async_manual_toggle(clean_zone_id, msg["state"])
     connection.send_result(msg["id"], {"success": True})
 
 @websocket_api.websocket_command({

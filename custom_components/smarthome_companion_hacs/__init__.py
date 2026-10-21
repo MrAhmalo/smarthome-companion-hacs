@@ -147,10 +147,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ]
     for entity in list(ent_reg.entities.values()):
         if entity.platform == DOMAIN:
-            if entity.unique_id in obsolete_unique_ids or entity.unique_id.startswith("smarthome_companion_number_shading_intensity_threshold_"):
+            is_invalid_id = (
+                "[" in entity.entity_id
+                or "]" in entity.entity_id
+                or "#" in entity.entity_id
+                or "[" in entity.unique_id
+                or "]" in entity.unique_id
+                or "#" in entity.unique_id
+            )
+            if (
+                entity.unique_id in obsolete_unique_ids
+                or entity.unique_id.startswith("smarthome_companion_number_shading_intensity_threshold_")
+                or is_invalid_id
+            ):
                 try:
                     ent_reg.async_remove(entity.entity_id)
-                    _LOGGER.info(f"Removed obsolete entity from registry: {entity.entity_id}")
+                    _LOGGER.info(f"Removed obsolete/invalid entity from registry: {entity.entity_id}")
                 except Exception as e:
                     _LOGGER.error(f"Failed to remove entity {entity.entity_id}: {e}")
 

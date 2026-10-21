@@ -105,6 +105,10 @@ class SunManager:
         if not weather_entity or not weather_entity.startswith("weather."):
             weather_entity = settings.get("irrigation_weather_entity", "weather.forecast_home")
         
+        if not self.hass.states.get(weather_entity):
+            _LOGGER.debug(f"Weather entity {weather_entity} not available. Skipping cloud forecast fetch.")
+            return
+
         try:
             response = await self.hass.services.async_call(
                 "weather",

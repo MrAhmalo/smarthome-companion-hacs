@@ -628,6 +628,10 @@ class IrrigationManager:
             if zone_id in self.running_zones:
                 continue
 
+            # If winter mode is active, do not start any automated/scheduled irrigation
+            if self.config.get("winter_mode_active", False):
+                continue
+
             # Check if it's the scheduled time
             time_str = zone.get("scheduled_time", "00:00")
             try:

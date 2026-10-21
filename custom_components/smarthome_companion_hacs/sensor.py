@@ -1,6 +1,7 @@
 import logging
 import os
 import json
+import re
 from datetime import timedelta, time, datetime
 # pyrefly: ignore [missing-import]
 import homeassistant.util.dt as dt_util
@@ -91,7 +92,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     simulation_manager = hass.data[DOMAIN].get("simulation_manager")
     if store and simulation_manager:
-        entities.append(PresenceSimulationActiveSensor(hass, store, simulation_manager))
+        if "presence_simulation_sensor_added" not in hass.data[DOMAIN]:
+            has_blinds = any(
+                e.data.get("module") in ("blinds", "legacy")
+                for e in hass.config_entries.async_entries(DOMAIN)
+            )
+            if module in ("blinds", "legacy") or not has_blinds:
+                entities.append(PresenceSimulationActiveSensor(hass, store, simulation_manager))
+                hass.data[DOMAIN]["presence_simulation_sensor_added"] = True
 
     if entities:
         async_add_entities(entities)
@@ -155,6 +163,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             zone_id = zone.get("id")
             if not zone_id:
                 continue
+            clean_zone_id = _clean_zone_id(zone_id)
                 
             base_sensors = [
                 ("last_watered", IrrigationZoneLastWateredSensor),
@@ -165,13 +174,13 @@ async def async_setup_entry(hass, entry, async_add_entities):
             ]
             
             for sensor_key, sensor_class in base_sensors:
-                unique_id = f"{zone_id}_{sensor_key}"
+                unique_id = f"{clean_zone_id}_{sensor_key}"
                 if unique_id not in added_irrigation_entities:
                     new_entities.append(sensor_class(hass, store, irrigation_manager, zone_id))
                     added_irrigation_entities.add(unique_id)
                     
             if zone.get("soil_sensor_entity_id"):
-                unique_id = f"{zone_id}_target_moisture"
+                unique_id = f"{clean_zone_id}_target_moisture"
                 if unique_id not in added_irrigation_entities:
                     new_entities.append(IrrigationZoneTargetMoistureSensor(hass, store, irrigation_manager, zone_id))
                     added_irrigation_entities.add(unique_id)
@@ -970,14 +979,20 @@ class BlindShadingPredictionTomorrowSensor(_BlindBaseSensor):
         })
         return attrs
 
+def _clean_zone_id(zone_id: str) -> str:
+    """Sanitize zone_id for entity_id and unique_id to only allow [a-z0-9_]."""
+    clean = re.sub(r"[^a-zA-Z0-9_]", "", str(zone_id)).lower()
+    return clean or "unknown"
+
 class _IrrigationZoneBaseSensor(SensorEntity):
     def __init__(self, hass, store, irrigation_manager, zone_id, sensor_type):
         self.hass = hass
         self.store = store
         self.irrigation_manager = irrigation_manager
-        self._zone_id = zone_id
+        self._zone_id = str(zone_id)
+        self._clean_zone_id = _clean_zone_id(zone_id)
         self._sensor_type = sensor_type
-        self.entity_id = f"sensor.smarthome_companion_sensor_irr_{sensor_type}_{zone_id}"
+        self.entity_id = f"sensor.smarthome_companion_sensor_irr_{sensor_type}_{self._clean_zone_id}"
 
     def _get_zone(self):
         irrigation_data = self.store.get_irrigation()
@@ -987,7 +1002,8 @@ class _IrrigationZoneBaseSensor(SensorEntity):
             else:
                 return None
         for z in irrigation_data.get("zones", []):
-            if z.get("id") == self._zone_id:
+            zid = str(z.get("id", ""))
+            if zid == self._zone_id or _clean_zone_id(zid) == self._clean_zone_id:
                 return z
         return None
 
@@ -1002,10 +1018,13 @@ class _IrrigationZoneBaseSensor(SensorEntity):
         # pyrefly: ignore [missing-import]
         from homeassistant.helpers import device_registry as dr
         dev_reg = dr.async_get(self.hass)
-        hub_device = dev_reg.async_get_device(identifiers={(DOMAIN, "irrigation_hub")})
+        if hasattr(dev_reg, "async_get_device_by_identifier"):
+            hub_device = dev_reg.async_get_device_by_identifier((DOMAIN, "irrigation_hub"))
+        else:
+            hub_device = dev_reg.async_get_device(identifiers={(DOMAIN, "irrigation_hub")})
         hub_device_id = hub_device.id if hub_device else None
         return DeviceInfo(
-            identifiers={(DOMAIN, f"irrigation_zone_{self._zone_id}")},
+            identifiers={(DOMAIN, f"irrigation_zone_{self._clean_zone_id}")},
             name=f"Bewässerung {name}",
             manufacturer="SmartHome Companion",
             model="Bewässerungskreis",
@@ -1028,7 +1047,7 @@ class IrrigationZoneLastWateredSensor(_IrrigationZoneBaseSensor):
     def __init__(self, hass, store, irrigation_manager, zone_id):
         super().__init__(hass, store, irrigation_manager, zone_id, "last_watered")
         self._attr_name = "Zuletzt bewässert"
-        self._attr_unique_id = f"smarthome_companion_sensor_irr_last_watered_{zone_id}"
+        self._attr_unique_id = f"smarthome_companion_sensor_irr_last_watered_{self._clean_zone_id}"
         self._attr_icon = "mdi:water-check"
 
     @property
@@ -1072,7 +1091,7 @@ class IrrigationZoneNextRunSensor(_IrrigationZoneBaseSensor):
     def __init__(self, hass, store, irrigation_manager, zone_id):
         super().__init__(hass, store, irrigation_manager, zone_id, "next_planned")
         self._attr_name = "Nächste Bewässerung"
-        self._attr_unique_id = f"smarthome_companion_sensor_irr_next_planned_{zone_id}"
+        self._attr_unique_id = f"smarthome_companion_sensor_irr_next_planned_{self._clean_zone_id}"
         self._attr_icon = "mdi:calendar-clock"
 
     @property
@@ -1124,7 +1143,7 @@ class IrrigationZoneStatusSensor(_IrrigationZoneBaseSensor):
     def __init__(self, hass, store, irrigation_manager, zone_id):
         super().__init__(hass, store, irrigation_manager, zone_id, "status")
         self._attr_name = "Aktueller Status"
-        self._attr_unique_id = f"smarthome_companion_sensor_irr_status_{zone_id}"
+        self._attr_unique_id = f"smarthome_companion_sensor_irr_status_{self._clean_zone_id}"
         self._attr_icon = "mdi:information-outline"
 
     @property
@@ -1132,8 +1151,14 @@ class IrrigationZoneStatusSensor(_IrrigationZoneBaseSensor):
         zone = self._get_zone()
         if not zone: return "Unbekannt"
         
-        if zone.get("id") in self.irrigation_manager.running_zones:
+        zid = zone.get("id")
+        clean_zid = _clean_zone_id(zid) if zid else ""
+        running = self.irrigation_manager.running_zones
+        if zid in running or clean_zid in running or self._zone_id in running or self._clean_zone_id in running:
             return "Bewässert aktuell"
+
+        if self.irrigation_manager.config.get("winter_mode_active", False):
+            return "Winterpause"
             
         heat_active = self.irrigation_manager.is_heat_override_today(zone) if hasattr(self.irrigation_manager, "is_heat_override_today") else False
         if heat_active:
@@ -1164,8 +1189,14 @@ class IrrigationZoneStatusSensor(_IrrigationZoneBaseSensor):
         zone = self._get_zone()
         if not zone: return {}
         attrs = {}
-        if zone.get("id") in self.irrigation_manager.running_zones:
-            run_data = self.irrigation_manager.running_zones[zone.get("id")]
+        running = self.irrigation_manager.running_zones
+        run_data = (
+            running.get(zone.get("id"))
+            or running.get(_clean_zone_id(zone.get("id")))
+            or running.get(self._zone_id)
+            or running.get(self._clean_zone_id)
+        )
+        if run_data:
             attrs["is_manual"] = run_data.get("is_manual", False)
             if run_data.get("duration"):
                 attrs["duration_minutes"] = run_data["duration"].total_seconds() / 60
@@ -1181,7 +1212,7 @@ class IrrigationZoneDurationSensor(_IrrigationZoneBaseSensor):
             self._attr_name = "Maximale Länge"
         else:
             self._attr_name = "Eingestellte Zeit"
-        self._attr_unique_id = f"smarthome_companion_sensor_irr_duration_{zone_id}"
+        self._attr_unique_id = f"smarthome_companion_sensor_irr_duration_{self._clean_zone_id}"
         self._attr_icon = "mdi:timer-sand"
         self._attr_native_unit_of_measurement = "min"
 
@@ -1195,7 +1226,7 @@ class IrrigationZoneTargetMoistureSensor(_IrrigationZoneBaseSensor):
     def __init__(self, hass, store, irrigation_manager, zone_id):
         super().__init__(hass, store, irrigation_manager, zone_id, "target_moisture")
         self._attr_name = "Zielfeuchtigkeit"
-        self._attr_unique_id = f"smarthome_companion_sensor_irr_target_moisture_{zone_id}"
+        self._attr_unique_id = f"smarthome_companion_sensor_irr_target_moisture_{self._clean_zone_id}"
         self._attr_icon = "mdi:water-percent"
         self._attr_native_unit_of_measurement = "%"
 
@@ -1209,16 +1240,23 @@ class IrrigationZoneProgressSensor(_IrrigationZoneBaseSensor):
     def __init__(self, hass, store, irrigation_manager, zone_id):
         super().__init__(hass, store, irrigation_manager, zone_id, "progress")
         self._attr_name = "Fortschritt"
-        self._attr_unique_id = f"smarthome_companion_sensor_irr_progress_{zone_id}"
+        self._attr_unique_id = f"smarthome_companion_sensor_irr_progress_{self._clean_zone_id}"
         self._attr_icon = "mdi:progress-clock"
         self._attr_native_unit_of_measurement = "%"
 
     @property
     def native_value(self):
-        if not self.irrigation_manager or self._zone_id not in self.irrigation_manager.running_zones:
+        if not self.irrigation_manager:
             return 0
             
-        data = self.irrigation_manager.running_zones[self._zone_id]
+        running = self.irrigation_manager.running_zones
+        data = (
+            running.get(self._zone_id)
+            or running.get(self._clean_zone_id)
+        )
+        if not data:
+            return 0
+            
         start_time = data.get("start_time")
         duration = data.get("duration")
         
