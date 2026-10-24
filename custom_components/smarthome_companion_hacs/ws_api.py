@@ -109,6 +109,8 @@ async def handle_get_devices(hass, connection, msg):
     vol.Optional("entities", default={}): dict,
     vol.Optional("custom_name"): str,
     vol.Optional("area_id"): str,
+    vol.Optional("options", default={}): dict,
+    vol.Optional("icon"): vol.Any(str, None),
 })
 @websocket_api.async_response
 async def handle_configure_device(hass, connection, msg):
@@ -123,6 +125,23 @@ async def handle_configure_device(hass, connection, msg):
     custom_icon = msg.get("icon")
 
     categories = store.get_categories()
+
+    # Enrich entities and sub_entities with immutable unique_ids from entity registry
+    ent_reg = er.async_get(hass)
+    if isinstance(entities, dict):
+        primary_id = entities.get("primary")
+        if primary_id and "primary_unique_id" not in entities:
+            entry = ent_reg.async_get(primary_id)
+            if entry and entry.unique_id:
+                entities["primary_unique_id"] = entry.unique_id
+        
+        sub_entities = entities.get("sub_entities")
+        if isinstance(sub_entities, dict):
+            for sub_id, sub_data in sub_entities.items():
+                if isinstance(sub_data, dict) and not sub_data.get("unique_id"):
+                    entry = ent_reg.async_get(sub_id) or ent_reg.async_get(sub_data.get("original_id", ""))
+                    if entry and entry.unique_id:
+                        sub_data["unique_id"] = entry.unique_id
 
     # Save device config
     devices = store.get_devices()
