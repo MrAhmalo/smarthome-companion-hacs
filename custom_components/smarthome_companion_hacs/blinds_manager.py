@@ -426,15 +426,12 @@ class BlindsManager:
                 self.hass, cover_ids, self._async_state_changed
             )
 
-        # Subscribe to immediate state changes of calendar entities so new appointments trigger immediate updates
-        calendar_ids = set()
-        for key in ["holiday_sensor", "globalHolidayCalendarId", "globalUrlaubCalendarId"]:
-            cal_id = settings.get(key, "")
-            if cal_id.startswith("calendar."):
-                calendar_ids.add(cal_id)
+        # Subscribe to immediate state changes of all calendar entities so new appointments trigger immediate updates
+        cal_states = self.hass.states.async_all("calendar")
+        calendar_ids = [s.entity_id for s in cal_states]
         if calendar_ids:
             self._calendar_unsub = async_track_state_change_event(
-                self.hass, list(calendar_ids), lambda event: self.hass.async_create_task(self._update_holidays())
+                self.hass, calendar_ids, lambda event: self.hass.async_create_task(self._update_holidays())
             )
             
         # Initial call for holiday evaluation
@@ -455,15 +452,12 @@ class BlindsManager:
                 is_urlaub = True
             else:
                 settings = self.store.data.get("settings", {})
-                calendar_ids = set()
-                
-                urlaub_cal_id = settings.get("globalUrlaubCalendarId", "")
-                
-                # Fetch all possible calendar configs
-                for key in ["holiday_sensor", "globalHolidayCalendarId", "globalUrlaubCalendarId"]:
-                    cal_id = settings.get(key, "")
-                    if cal_id.startswith("calendar."):
-                        calendar_ids.add(cal_id)
+                # Automatically scan all available calendars in Home Assistant
+                calendar_ids = {
+                    state.entity_id
+                    for state in self.hass.states.async_all("calendar")
+                    if state.state not in ("unavailable", "unknown")
+                }
                 
                 for cal_id in calendar_ids:
                     start = datetime.combine(target_date, time(0, 0), now.tzinfo)
