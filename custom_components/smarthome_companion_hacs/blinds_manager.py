@@ -19,6 +19,7 @@ class BlindsManager:
         self._watchdog_unsub = None
         self._regular_unsub = None
         self._state_change_unsub = None
+        self._calendar_unsub = None
         self._traces = {}
         self._started_at = dt_util.now()
         self._last_holiday_update_hour = -1
@@ -212,26 +213,27 @@ class BlindsManager:
             base_open_time_dt = sunrise_time_dt
 
         # Weekend override
+        is_kinderzimmer = config.get("enable_vacation_weekend_mode", False)
         is_weekend_or_holiday = False
-        is_vacation_day = False
         
         if date_val.weekday() >= 5:
             is_weekend_or_holiday = True
-            is_vacation_day = True
         else:
+            has_holiday = False
+            has_vacation = False
+            has_urlaub = False
+            
             if date_val == now.date():
-                if self.store.data.get("today_is_holiday") or self.store.data.get("today_is_urlaub"):
-                    is_weekend_or_holiday = True
-                if self.store.data.get("today_is_vacation"):
-                    is_vacation_day = True
+                has_holiday = bool(self.store.data.get("today_is_holiday"))
+                has_vacation = bool(self.store.data.get("today_is_vacation"))
+                has_urlaub = bool(self.store.data.get("today_is_urlaub"))
             elif date_val == (now.date() + timedelta(days=1)):
-                if self.store.data.get("tomorrow_is_holiday") or self.store.data.get("tomorrow_is_urlaub"):
-                    is_weekend_or_holiday = True
-                if self.store.data.get("tomorrow_is_vacation"):
-                    is_vacation_day = True
+                has_holiday = bool(self.store.data.get("tomorrow_is_holiday"))
+                has_vacation = bool(self.store.data.get("tomorrow_is_vacation"))
+                has_urlaub = bool(self.store.data.get("tomorrow_is_urlaub"))
             
             # Legacy fallback if no holiday found but workday sensor is active
-            if not is_weekend_or_holiday and not is_vacation_day:
+            if not has_holiday and not has_vacation and not has_urlaub:
                 settings = self.store.data.get("settings", {})
                 holiday_sensor_id = settings.get("holiday_sensor", "binary_sensor.workday_sensor")
                 if holiday_sensor_id and not holiday_sensor_id.startswith("calendar."):
@@ -239,12 +241,20 @@ class BlindsManager:
                     if sensor_state:
                         state_val = sensor_state.state.lower()
                         if "workday" in holiday_sensor_id.lower() and state_val == "off":
-                            is_weekend_or_holiday = True
+                            has_holiday = True
                         elif "workday" not in holiday_sensor_id.lower() and state_val == "on":
-                            is_weekend_or_holiday = True
+                            has_holiday = True
 
-        if is_vacation_day and config.get("enable_vacation_weekend_mode", False):
-            is_weekend_or_holiday = True
+            if has_holiday:
+                is_weekend_or_holiday = True
+            elif is_kinderzimmer:
+                # Kinderzimmer schlafen an Schulferientagen aus, ignorieren aber reinen Elternurlaub
+                if has_vacation:
+                    is_weekend_or_holiday = True
+            else:
+                # Alle anderen Räume (Eltern, Wohnbereich etc.) schlafen an Urlaubstagen aus
+                if has_urlaub:
+                    is_weekend_or_holiday = True
 
         if open_enabled:
             if config.get("enable_weekend_open", False) and is_weekend_or_holiday:
@@ -395,6 +405,10 @@ class BlindsManager:
             self._state_change_unsub()
             self._state_change_unsub = None
             
+        if self._calendar_unsub:
+            self._calendar_unsub()
+            self._calendar_unsub = None
+            
         # Register a 1-minute regular ticker for precise scheduled automation runs
         self._regular_unsub = async_track_time_interval(
             self.hass, self._regular_loop, timedelta(minutes=1)
@@ -410,6 +424,17 @@ class BlindsManager:
         if cover_ids:
             self._state_change_unsub = async_track_state_change_event(
                 self.hass, cover_ids, self._async_state_changed
+            )
+
+        # Subscribe to immediate state changes of calendar entities so new appointments trigger immediate updates
+        calendar_ids = set()
+        for key in ["holiday_sensor", "globalHolidayCalendarId", "globalUrlaubCalendarId"]:
+            cal_id = settings.get(key, "")
+            if cal_id.startswith("calendar."):
+                calendar_ids.add(cal_id)
+        if calendar_ids:
+            self._calendar_unsub = async_track_state_change_event(
+                self.hass, list(calendar_ids), lambda event: self.hass.async_create_task(self._update_holidays())
             )
             
         # Initial call for holiday evaluation
@@ -461,8 +486,12 @@ class BlindsManager:
                                 events = response[cal_id].get("events", [])
                                 for ev in events:
                                     ev_end = ev.get("end", "")
+                                    if isinstance(ev_end, dict):
+                                        ev_end = ev_end.get("date", ev_end.get("dateTime", ""))
+                                    ev_end_str = str(ev_end)
                                     # Home Assistant all-day events end at 00:00:00 of the next day
-                                    if len(ev_end) == 10 and ev_end == target_date.isoformat():
+                                    if (len(ev_end_str) == 10 and ev_end_str == target_date.isoformat()) or \
+                                       (ev_end_str.startswith(target_date.isoformat()) and "t00:00:00" in ev_end_str.lower()):
                                         continue
                                     
                                     # If it's the dedicated Urlaub calendar, it's always Urlaub
@@ -470,13 +499,16 @@ class BlindsManager:
                                         is_urlaub = True
                                         continue
                                         
-                                    # Keyword distinction for Holiday/Ferien calendars
-                                    msg = ev.get("summary", ev.get("message", "")).lower()
+                                    # Keyword distinction for Holiday/Ferien calendars (check summary, description, location)
+                                    summary = ev.get("summary", ev.get("message", "")) or ""
+                                    desc = ev.get("description", "") or ""
+                                    loc = ev.get("location", "") or ""
+                                    msg = f"{summary} {desc} {loc}".lower()
                                     if "ferien" in msg:
                                         is_vacation = True
-                                    elif "urlaub" in msg:
+                                    if "urlaub" in msg:
                                         is_urlaub = True
-                                    else:
+                                    if "ferien" not in msg and "urlaub" not in msg:
                                         is_holiday = True
                         except Exception as e:
                             pass

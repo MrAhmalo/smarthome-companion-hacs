@@ -212,20 +212,28 @@ class _SleepInTomorrowSwitch(SwitchEntity):
             if target_date.weekday() >= 5:
                 is_naturally = True
             else:
-                is_vacation_day = False
-                if target_date == now.date():
-                    if self.store.data.get("today_is_holiday") or self.store.data.get("today_is_urlaub"):
-                        is_naturally = True
-                    if self.store.data.get("today_is_vacation"):
-                        is_vacation_day = True
-                else:
-                    if self.store.data.get("tomorrow_is_holiday") or self.store.data.get("tomorrow_is_urlaub"):
-                        is_naturally = True
-                    if self.store.data.get("tomorrow_is_vacation"):
-                        is_vacation_day = True
+                is_kinderzimmer = config.get("enable_vacation_weekend_mode", False)
+                has_holiday = False
+                has_vacation = False
+                has_urlaub = False
                 
-                if is_vacation_day and config.get("enable_vacation_weekend_mode", False):
+                if target_date == now.date():
+                    has_holiday = bool(self.store.data.get("today_is_holiday"))
+                    has_vacation = bool(self.store.data.get("today_is_vacation"))
+                    has_urlaub = bool(self.store.data.get("today_is_urlaub"))
+                else:
+                    has_holiday = bool(self.store.data.get("tomorrow_is_holiday"))
+                    has_vacation = bool(self.store.data.get("tomorrow_is_vacation"))
+                    has_urlaub = bool(self.store.data.get("tomorrow_is_urlaub"))
+                
+                if has_holiday:
                     is_naturally = True
+                elif is_kinderzimmer:
+                    if has_vacation:
+                        is_naturally = True
+                else:
+                    if has_urlaub:
+                        is_naturally = True
                 
         return {
             "naturally_sleeping_in": is_naturally,
