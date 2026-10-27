@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Companion Dashboard – Preview</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --primary-color: #03a9f4;
+    --primary-text-color: #e1e1e1;
+    --secondary-text-color: #9b9b9b;
+    --card-background-color: #1c1c1c;
+    --secondary-background-color: #202020;
+    --primary-background-color: #111111;
+    --divider-color: rgba(225,225,225,.12);
+    --ha-card-border-radius: 12px;
+    --error-color: #db4437;
+    --warning-color: #ffa600;
+    --success-color: #43a047;
+    --text-primary-color: #fff;
+    --ha-card-background: #1c1c1c;
+  }
+  html, body { margin: 0; background: var(--primary-background-color); color: var(--primary-text-color);
+    font-family: Roboto, system-ui, sans-serif; }
+  companion-dashboard-panel { display: block; min-height: 100vh; }
+</style>
+</head>
+<body>
+<script>
+  // Stub for HA's <ha-icon>: renders MDI glyphs via CDN font, falls back to nothing.
+  customElements.define('ha-icon', class extends HTMLElement {
+    static get observedAttributes() { return ['icon']; }
+    constructor() {
+      super();
+      const root = this.attachShadow({ mode: 'open' });
+      root.innerHTML = `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+        <style>:host{display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;font-size:24px;line-height:1}
+        .mdi:before{font-size:inherit}</style><span class="mdi"></span>`;
+    }
+    connectedCallback() { this._r(); }
+    attributeChangedCallback() { this._r(); }
+    set icon(v) { this.setAttribute('icon', v); }
+    _r() {
+      const n = (this.getAttribute('icon') || '').split(':')[1] || '';
+      const s = this.shadowRoot.querySelector('span');
+      if (s) s.className = 'mdi mdi-' + n;
+    }
+  });
+</script>
+<script type="module">
+  const now = new Date().toISOString();
+  const st = (state, attributes = {}) => ({ state, attributes, last_changed: now, last_updated: now });
+  const states = {
+    'sensor.greeting_sensor': st('Guten Abend'),
+    'binary_sensor.fritz_box_7590_ax_verbindung': st('on'),
+    'sensor.lichter_zahler': st('3', { unit_of_measurement: '' }),
+    'sensor.einkaufsliste_zahl': st('4'),
+    'weather.forecast_home': st('sunny', { temperature: 18, temperature_unit: '°C' }),
+    'sensor.aussentemperatur_fallback': st('17.4', { unit_of_measurement: '°C', device_class: 'temperature' }),
+    'input_boolean.warmwasser_push': st('off', { friendly_name: 'Warmwasser' }),
+    'sensor.inverter_input_power': st('2350', { unit_of_measurement: 'W' }),
+    'sensor.power_house_load': st('0.4', { unit_of_measurement: 'kW' }),
+    'sensor.stadt_grevenbroich_aktuelle_warnstufe': st('2', { warning_1_headline: 'Amtliche Warnung vor Sturmböen' }),
+    'script.ankundigung': st('off', { friendly_name: 'Ankündigung' }),
+    'sensor.hp_officejet_3830_series': st('idle'),
+    'sensor.hp_officejet_3830_series_black_ink': st('72', { unit_of_measurement: '%' }),
+    'sensor.hp_officejet_3830_series_tri_color_ink': st('15', { unit_of_measurement: '%' }),
+    'device_tracker.rumpelbude': st('home', { friendly_name: 'Julian' }),
+    'device_tracker.pcvonmatilda': st('not_home', { friendly_name: 'Matilda' }),
+    'light.wz_decke': st('on', { friendly_name: 'Decke', brightness: 180, supported_color_modes: ['rgb'], rgb_color: [255, 180, 80] }),
+    'light.wz_stehlampe': st('off', { friendly_name: 'Stehlampe', supported_color_modes: ['brightness'] }),
+    'cover.wz_jalousie': st('open', { friendly_name: 'Jalousie', current_position: 80, supported_features: 15 }),
+    'switch.wz_steckdose': st('on', { friendly_name: 'Steckdose' }),
+    'sensor.wz_steckdose_power': st('42', { unit_of_measurement: 'W' }),
+    'media_player.wohnzimmer': st('playing', { friendly_name: 'Apple TV', media_title: 'Tatort', supported_features: 152461 }),
+    'sensor.wz_temp': st('21.5', { unit_of_measurement: '°C', device_class: 'temperature' }),
+    'sensor.wz_hum': st('48', { unit_of_measurement: '%', device_class: 'humidity' }),
+    'binary_sensor.wz_motion': st('on', { device_class: 'motion' }),
+    'climate.meacocool': st('cool', { friendly_name: 'Klima', current_temperature: 24, temperature: 22, hvac_modes: ['off', 'cool'] }),
+    'input_boolean.disco': st('off', { friendly_name: 'Disco' }),
+    'switch.garten_pumpe': st('unavailable', { friendly_name: 'Pumpe' }),
+    'binary_sensor.rauchmelder_flur': st('off', { device_class: 'smoke', friendly_name: 'Rauchmelder Flur' }),
+  };
+
+  const tile = (key, entity_id, name, category, extra = {}) => ({
+    key, entity_id, name, icon: null, category, color: null, power: null, energy: null,
+    hidden: false, users: [], ...extra,
+  });
+
+  const layout = {
+    rooms: [
+      { area_id: 'wohnzimmer', name: 'Wohnzimmer', icon: 'mdi:sofa', expanded: true, always_open: false, mode: 'collapsed',
+        visible_users: [], expanded_users: [],
+        sensors: { temperature: ['sensor.wz_temp'], humidity: ['sensor.wz_hum'], motion: ['binary_sensor.wz_motion'] },
+        tiles: [
+          tile('a', 'cover.wz_jalousie', 'Jalousie', 'jalousie'),
+          tile('b', 'light.wz_decke', 'Decke', 'leuchte', { color: 'amber' }),
+          tile('c', 'light.wz_stehlampe', 'Stehlampe', 'leuchte'),
+          tile('d', 'switch.wz_steckdose', 'Steckdose', 'steckdose', { power: 'sensor.wz_steckdose_power' }),
+          tile('e', 'media_player.wohnzimmer', 'Apple TV', null, { icon: 'mdi:television' }),
+        ] },
+      { area_id: 'julian_s_zimmer', name: "Julian's Zimmer", icon: 'mdi:bed', expanded: false, always_open: false, mode: 'collapsed',
+        visible_users: [], expanded_users: [], sensors: {},
+        tiles: [
+          tile('f', 'climate.meacocool', 'Klima', null),
+          tile('g', 'input_boolean.disco', 'Disco', null),
+        ] },
+      { area_id: 'garten', name: 'Garten', icon: 'mdi:flower', expanded: true, always_open: true, mode: 'always',
+        visible_users: [], expanded_users: [], sensors: {},
+        tiles: [ tile('h', 'switch.garten_pumpe', 'Pumpe', 'pumpe') ] },
+    ],
+    areas: [{ area_id: 'wohnzimmer', name: 'Wohnzimmer' }, { area_id: 'garten', name: 'Garten' }],
+  };
+
+  const config = {
+    greeting_entity: 'sensor.greeting_sensor',
+    badges: [
+      { entity_id: 'sensor.lichter_zahler', icon: 'mdi:lightbulb', color: 'amber', show_state: true, tap: 'more-info' },
+      { entity_id: 'sensor.einkaufsliste_zahl', icon: 'mdi:cart', color: 'green', show_state: true, tap: 'navigate', path: '/todo', visible_when: 'above', visible_value: '0' },
+      { entity_id: 'weather.forecast_home', name: 'Wetter', color: 'light-blue', show_name: true, show_state: true, tap: 'navigate', path: '/lovelace/solar' },
+      { entity_id: 'sensor.inverter_input_power', name: 'Ertrag', icon: 'mdi:solar-power-variant', color: 'yellow', show_name: true, show_state: true, tap: 'more-info', visible_when: 'above', visible_value: '0' },
+      { entity_id: 'binary_sensor.fritz_box_7590_ax_verbindung', name: 'Offline', icon: 'mdi:cloud-off', color: 'red', show_name: true, tap: 'more-info', visible_when: 'state_in', visible_value: 'unavailable, off' },
+    ],
+    warning: { entity_id: 'sensor.stadt_grevenbroich_aktuelle_warnstufe', headline_attribute: 'warning_1_headline', path: '/x' },
+    announce: { entity_id: 'script.ankundigung', name: 'Ankündigung', icon: 'mdi:bullhorn',
+      chips: [{ entity_id: 'sensor.hp_officejet_3830_series_black_ink', icon: 'mdi:water-black' }, { entity_id: 'sensor.hp_officejet_3830_series_tri_color_ink', icon: 'mdi:palette' }],
+      chips_visible_entity: 'sensor.hp_officejet_3830_series' },
+    trash: { calendar_entities: ['calendar.muellplan'], next_days: 2, patterns: [
+      { pattern: 'Bioabfall', icon: 'mdi:flower', color: 'lime', picture: '/local/x.png' },
+      { pattern: 'Papier', icon: 'mdi:newspaper', color: 'blue' },
+    ] },
+    persons: [{ entity_id: 'device_tracker.rumpelbude', users: [] }, { entity_id: 'device_tracker.pcvonmatilda', users: [] }],
+    nav: [{ name: 'Sicherheit', icon: 'mdi:shield-home', path: '/lovelace/sicherheit' }, { name: '', icon: 'mdi:home-export-outline', path: '/lovelace/mehr' }],
+    color_presets: [[234, 136, 140], [136, 198, 237], [140, 231, 185], [255, 119, 0]],
+    room_order: ['wohnzimmer'], rooms: {}, tile_order: {}, hidden_tiles: [], tile_users: {}, extra_tiles: [],
+  };
+
+  const hass = {
+    states,
+    user: { id: 'u1', name: 'Julian', is_admin: true },
+    language: 'de',
+    callWS: async (msg) => {
+      console.log('callWS', msg.type);
+      if (msg.type.endsWith('dashboard/get')) return { config, layout, user: { id: 'u1', name: 'Julian', is_admin: true } };
+      if (msg.type.endsWith('dashboard/users')) return { users: [{ id: 'u1', name: 'Julian' }, { id: 'u2', name: 'Matilda' }] };
+      if (msg.type.endsWith('dashboard/save')) { console.log('SAVE', JSON.stringify(msg.config).length); return { success: true, config: msg.config }; }
+      throw new Error('unknown ' + msg.type);
+    },
+    callService: async (d, s, data) => { console.log('callService', d, s, JSON.stringify(data)); return {}; },
+    callApi: async (m, path) => {
+      console.log('callApi', m, path);
+      const d = (o) => { const x = new Date(); x.setDate(x.getDate() + o); return x.toISOString().slice(0, 10); };
+      return [{ summary: 'Bioabfall', start: { date: d(1) }, end: { date: d(2) } }, { summary: 'Papier', start: { date: d(6) }, end: { date: d(7) } }];
+    },
+    connection: { subscribeMessage: async () => () => {} },
+  };
+
+  window.__errors = [];
+  window.addEventListener('error', (e) => window.__errors.push(String(e.message)));
+  window.addEventListener('unhandledrejection', (e) => window.__errors.push('rejection: ' + e.reason));
+
+  await import('../custom_components/smarthome_companion_hacs/frontend/companion-dashboard.js');
+  const el = document.createElement('companion-dashboard-panel');
+  document.body.append(el);
+  el.narrow = false;
+  el.hass = hass;
+  window.panel = el;
+  window.hass = hass;
+</script>
+</body>
+</html>

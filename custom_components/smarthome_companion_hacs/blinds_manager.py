@@ -212,11 +212,21 @@ class BlindsManager:
         elif sunrise_time_dt:
             base_open_time_dt = sunrise_time_dt
 
+        # Manual overrides (Sleep-in or Wake-early)
+        wake_early_date_str = config.get("wake_early_date")
+        sleep_in_date_str = config.get("sleep_in_date")
+        is_forced_early = (wake_early_date_str == date_val.isoformat())
+        is_forced_sleep_in = (sleep_in_date_str == date_val.isoformat())
+
         # Weekend override
         is_kinderzimmer = config.get("enable_vacation_weekend_mode", False)
         is_weekend_or_holiday = False
         
-        if date_val.weekday() >= 5:
+        if is_forced_early:
+            is_weekend_or_holiday = False
+        elif is_forced_sleep_in:
+            is_weekend_or_holiday = True
+        elif date_val.weekday() >= 5:
             is_weekend_or_holiday = True
         else:
             has_holiday = False
@@ -258,14 +268,6 @@ class BlindsManager:
 
         if open_enabled:
             if config.get("enable_weekend_open", False) and is_weekend_or_holiday:
-                weekend_dt = get_dt(self._parse_time(config.get("weekend_open_time"), time(9, 0)))
-                if base_open_time_dt:
-                    base_open_time_dt = max(base_open_time_dt, weekend_dt)
-                else:
-                    base_open_time_dt = weekend_dt
-
-            sleep_in_date_str = config.get("sleep_in_date")
-            if sleep_in_date_str and sleep_in_date_str == date_val.isoformat():
                 weekend_dt = get_dt(self._parse_time(config.get("weekend_open_time"), time(9, 0)))
                 if base_open_time_dt:
                     base_open_time_dt = max(base_open_time_dt, weekend_dt)
@@ -488,24 +490,24 @@ class BlindsManager:
                                        (ev_end_str.startswith(target_date.isoformat()) and "t00:00:00" in ev_end_str.lower()):
                                         continue
                                     
-                                    # If it's the dedicated Urlaub calendar, it's always Urlaub
-                                    if cal_id == urlaub_cal_id:
-                                        is_urlaub = True
-                                        continue
-                                        
-                                    # Keyword distinction for Holiday/Ferien calendars (check summary, description, location)
+                                    # Keyword distinction for Holiday/Ferien/Urlaub calendars
                                     summary = ev.get("summary", ev.get("message", "")) or ""
                                     desc = ev.get("description", "") or ""
                                     loc = ev.get("location", "") or ""
                                     msg = f"{summary} {desc} {loc}".lower()
-                                    if "ferien" in msg:
-                                        is_vacation = True
+                                    
+                                    holiday_cal_id = settings.get("globalHolidayCalendarId", "")
                                     if "urlaub" in msg:
                                         is_urlaub = True
-                                    if "ferien" not in msg and "urlaub" not in msg:
+                                        _LOGGER.info("BlindsManager: Urlaub erkannt am %s in '%s' (%s)", target_date, cal_id, summary)
+                                    if "ferien" in msg:
+                                        is_vacation = True
+                                        _LOGGER.info("BlindsManager: Ferien erkannt am %s in '%s' (%s)", target_date, cal_id, summary)
+                                    if (cal_id == holiday_cal_id or "feiertag" in msg) and "ferien" not in msg and "urlaub" not in msg:
                                         is_holiday = True
+                                        _LOGGER.info("BlindsManager: Feiertag erkannt am %s in '%s' (%s)", target_date, cal_id, summary)
                         except Exception as e:
-                            pass
+                            _LOGGER.warning("BlindsManager: Fehler beim Abrufen von Kalender %s: %s", cal_id, e)
                 
                 # Non-calendar sensors fallback
                 holiday_sensor_id = settings.get("holiday_sensor", "")

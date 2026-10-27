@@ -30,6 +30,12 @@ Backend integration for the **SmartHome Companion** kiosk and dashboard system. 
 - **Device Management & Label Registry**
   - Seamless Home Assistant label synchronization and custom categorization for frontend display.
 
+- **Integriertes Dashboard („Übersicht“)**
+  - Eigenständiges Panel in der Seitenleiste (`mdi:view-dashboard`) ohne HACS-Frontend-Abhängigkeiten.
+  - Dynamisches Layout direkt aus dem Gerätemanager und HA-Registries (selbstheilend bei Umbenennungen).
+  - Integrierte Bereichs-Expander, Status-Badges, Müllplan, Wetter- & Rauchmelder-Alarme, Lichtfarb-Presets.
+  - Vollständiger Admin-Einstellungsdialog zur individuellen Anpassung.
+
 - **100% Local & Privacy-Friendly**
   - All calculations run locally on your Home Assistant instance. No external API keys or telemetry required.
 

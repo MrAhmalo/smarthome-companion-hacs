@@ -10,7 +10,7 @@ class CompanionStore:
     def __init__(self, hass):
         self.hass = hass
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
-        self.data = {"blinds": {}, "irrigation": {}, "devices": {}, "categories": {}, "dismissed_devices": [], "simulation": {}}
+        self.data = {"blinds": {}, "irrigation": {}, "devices": {}, "categories": {}, "dismissed_devices": [], "simulation": {}, "dashboard": None}
 
     async def async_load(self):
         saved = await self._store.async_load()
@@ -22,6 +22,7 @@ class CompanionStore:
             self.data.setdefault("dismissed_devices", [])
             self.data.setdefault("adaptive_light", {})
             self.data.setdefault("simulation", {})
+            self.data.setdefault("dashboard", None)
 
             # Migrate / sanitize zone IDs in irrigation store if they contain invalid characters
             irrigation = self.data.get("irrigation")
@@ -123,4 +124,14 @@ class CompanionStore:
 
     async def save_adaptive_light_config(self, config: dict):
         self.data["adaptive_light"] = config
+        return await self.async_save()
+
+    # ── Dashboard ──
+
+    def get_dashboard_config(self):
+        """Returns the stored dashboard config or None if never initialised."""
+        return self.data.get("dashboard")
+
+    async def save_dashboard_config(self, config: dict):
+        self.data["dashboard"] = config
         return await self.async_save()

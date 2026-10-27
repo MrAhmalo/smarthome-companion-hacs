@@ -198,6 +198,7 @@ async def handle_configure_device(hass, connection, msg):
     except Exception as e:
         _LOGGER.warning("Could not update device registry for %s: %s", device_id, e)
 
+    safe_fire_event(hass, f"{DOMAIN}_dashboard_updated")
     connection.send_result(msg["id"], {"success": True})
 
 @websocket_api.websocket_command({
@@ -228,6 +229,7 @@ async def handle_remove_device_config(hass, connection, msg):
         if ents.get("energy"):
             _remove_entity_labels(hass, ents["energy"], [f"{cat}_energy"])
 
+    safe_fire_event(hass, f"{DOMAIN}_dashboard_updated")
     connection.send_result(msg["id"], {"success": True})
 
 @websocket_api.websocket_command({

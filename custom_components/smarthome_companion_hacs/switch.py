@@ -193,67 +193,86 @@ class _SleepInTomorrowSwitch(SwitchEntity):
     @property
     def is_on(self) -> bool:
         config = self.store.get_blinds().get(self._blind_id)
-        if not config: return False
+        if not config:
+            return False
         
         target_date = self._get_target_date()
-        return config.get("sleep_in_date") == target_date.isoformat()
+        target_str = target_date.isoformat()
+        
+        # 1. Manual early wake-up override
+        if config.get("wake_early_date") == target_str:
+            return False
+            
+        # 2. Manual sleep-in override
+        if config.get("sleep_in_date") == target_str:
+            return True
+            
+        # 3. Automatic detection (Urlaub, Ferien, Feiertag, Wochenende)
+        if not config.get("enable_weekend_open", False):
+            return False
+            
+        if target_date.weekday() >= 5:
+            return True
+            
+        import homeassistant.util.dt as dt_util
+        now = dt_util.now()
+        is_kinderzimmer = config.get("enable_vacation_weekend_mode", False)
+        
+        if target_date == now.date():
+            has_holiday = bool(self.store.data.get("today_is_holiday"))
+            has_vacation = bool(self.store.data.get("today_is_vacation"))
+            has_urlaub = bool(self.store.data.get("today_is_urlaub"))
+        else:
+            has_holiday = bool(self.store.data.get("tomorrow_is_holiday"))
+            has_vacation = bool(self.store.data.get("tomorrow_is_vacation"))
+            has_urlaub = bool(self.store.data.get("tomorrow_is_urlaub"))
+            
+        if has_holiday:
+            return True
+        if is_kinderzimmer and has_vacation:
+            return True
+        if not is_kinderzimmer and has_urlaub:
+            return True
+            
+        return False
 
     @property
     def extra_state_attributes(self):
         import homeassistant.util.dt as dt_util
         config = self.store.get_blinds().get(self._blind_id)
-        if not config: return {}
+        if not config:
+            return {}
         
         now = dt_util.now()
         target_date = self._get_target_date()
+        target_str = target_date.isoformat()
         
-        is_naturally = False
-        if config.get("enable_weekend_open", False):
-            if target_date.weekday() >= 5:
-                is_naturally = True
-            else:
-                is_kinderzimmer = config.get("enable_vacation_weekend_mode", False)
-                has_holiday = False
-                has_vacation = False
-                has_urlaub = False
-                
-                if target_date == now.date():
-                    has_holiday = bool(self.store.data.get("today_is_holiday"))
-                    has_vacation = bool(self.store.data.get("today_is_vacation"))
-                    has_urlaub = bool(self.store.data.get("today_is_urlaub"))
-                else:
-                    has_holiday = bool(self.store.data.get("tomorrow_is_holiday"))
-                    has_vacation = bool(self.store.data.get("tomorrow_is_vacation"))
-                    has_urlaub = bool(self.store.data.get("tomorrow_is_urlaub"))
-                
-                if has_holiday:
-                    is_naturally = True
-                elif is_kinderzimmer:
-                    if has_vacation:
-                        is_naturally = True
-                else:
-                    if has_urlaub:
-                        is_naturally = True
-                
+        is_manual_sleep = config.get("sleep_in_date") == target_str
+        is_manual_early = config.get("wake_early_date") == target_str
+        
         return {
-            "naturally_sleeping_in": is_naturally,
-            "target_day_relative": "heute" if target_date == now.date() else "morgen"
+            "naturally_sleeping_in": self.is_on,
+            "target_day_relative": "heute" if target_date == now.date() else "morgen",
+            "target_date": target_str,
+            "manual_override_active": is_manual_sleep or is_manual_early,
         }
 
     async def async_turn_on(self, **kwargs) -> None:
         target_date = self._get_target_date()
-        
         blinds = self.store.get_blinds()
         if self._blind_id in blinds:
             blinds[self._blind_id]["sleep_in_date"] = target_date.isoformat()
+            blinds[self._blind_id]["wake_early_date"] = None
             await self.store.async_save(self.store.data)
             await self.blinds_manager.async_reload()
             self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs) -> None:
+        target_date = self._get_target_date()
         blinds = self.store.get_blinds()
         if self._blind_id in blinds:
             blinds[self._blind_id]["sleep_in_date"] = None
+            blinds[self._blind_id]["wake_early_date"] = target_date.isoformat()
             await self.store.async_save(self.store.data)
             await self.blinds_manager.async_reload()
             self.async_write_ha_state()

@@ -14,6 +14,11 @@ from .sun_manager import SunManager
 from .irrigation_manager import IrrigationManager
 from .adaptive_light_manager import AdaptiveLightManager
 from .simulation_manager import SimulationManager
+from .dashboard import (
+    async_register_dashboard_panel,
+    async_register_dashboard_websockets,
+    async_remove_dashboard_panel,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,7 +41,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN]["sun_manager"] = sun_manager
         
         async_register_websockets(hass)
+        async_register_dashboard_websockets(hass)
         await sun_manager.async_setup()
+        try:
+            await async_register_dashboard_panel(hass)
+        except Exception as err:  # noqa: BLE001 - never block the backend because of the UI
+            _LOGGER.error("Could not register Companion dashboard panel: %s", err)
 
         async def handle_set_sleep_in(call):
             entity_ids = call.data.get("entity_ids", [])
@@ -173,6 +183,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "number", "button", "switch", "text", "select"])
     if unload_ok:
+        async_remove_dashboard_panel(hass)
         hass.data.pop(DOMAIN, None)
     return unload_ok
 
