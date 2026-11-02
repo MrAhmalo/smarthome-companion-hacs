@@ -46,6 +46,8 @@ class CompanionDashboardPanel extends HTMLElement {
   disconnectedCallback() {
     this._unsub?.();
     this._unsub = null;
+    this._ro?.disconnect();
+    this._ro = null;
     this._initialised = false;
     cancelAnimationFrame(this._raf);
   }
@@ -129,11 +131,10 @@ class CompanionDashboardPanel extends HTMLElement {
       this._persons.el,
       this._announce.el);
 
-    // Rooms
+    // Rooms (independent masonry columns layout)
     this._rooms = layout.rooms.map((r) => new Room(r, ctx));
-    const roomsEl = this._rooms.length
-      ? h('div', { class: 'rooms' }, this._rooms.map((r) => r.el))
-      : this._emptyState();
+    this._roomsWrap = h('div', { class: 'rooms' });
+    const roomsEl = this._rooms.length ? this._roomsWrap : this._emptyState();
 
     this._nav = new NavBar(config.nav);
 
@@ -148,8 +149,33 @@ class CompanionDashboardPanel extends HTMLElement {
         h('div', { class: 'main' }, roomsEl)),
       this._nav.el);
 
+    if (this._rooms.length) {
+      this._colCount = 0;
+      this._layoutRooms();
+      this._ro?.disconnect();
+      this._ro = new ResizeObserver(debounce(() => this._layoutRooms(), 100));
+      this._ro.observe(this._roomsWrap);
+    }
+
     this._push();
     this.scrollTop = scroll;
+  }
+
+  _layoutRooms() {
+    if (!this._roomsWrap || !this._rooms?.length) return;
+    const width = this._roomsWrap.clientWidth || this._content?.clientWidth || window.innerWidth || 1000;
+    const colWidth = 350;
+    const gap = 12;
+    const colCount = Math.max(1, Math.min(this._rooms.length, Math.floor((width + gap) / (colWidth + gap))));
+
+    if (colCount === this._colCount && this._roomsCols?.length === colCount) return;
+    this._colCount = colCount;
+
+    this._roomsCols = Array.from({ length: colCount }, () => h('div', { class: 'room-col' }));
+    this._rooms.forEach((r, idx) => {
+      this._roomsCols[idx % colCount].append(r.el);
+    });
+    this._roomsWrap.replaceChildren(...this._roomsCols);
   }
 
   _emptyState() {

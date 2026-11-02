@@ -50,7 +50,8 @@ button { font: inherit; color: inherit; }
   .layout.has-side { grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); }
 }
 .side, .main { display: grid; gap: 12px; min-width: 0; align-content: start; }
-.rooms { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); align-items: start; }
+.rooms { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr)); align-items: start; }
+.room-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 
 /* ── Cards ── */
 .card { background: var(--cd-card); border-radius: var(--cd-radius); overflow: hidden; }
@@ -64,9 +65,10 @@ button { font: inherit; color: inherit; }
   color: var(--cd-accent); background: rgba(3, 169, 244, 0.15);
   background: color-mix(in srgb, var(--cd-accent) 16%, transparent);
 }
-.room-title { flex: 1; min-width: 0; }
-.room-name { font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.room-meta { display: flex; gap: 10px; font-size: 12px; color: var(--cd-secondary); min-height: 16px; }
+.room-title { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.room-name { font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
+.room-meta { display: flex; gap: 10px; font-size: 12px; color: var(--cd-secondary); margin-top: 3px; line-height: 1.2; }
+.room-meta[hidden], .room-meta:empty { display: none !important; }
 .room-meta span { display: inline-flex; align-items: center; gap: 3px; }
 .room-meta ha-icon { --mdc-icon-size: 14px; }
 .room-meta .alert { color: var(--cd-active); font-weight: 600; }

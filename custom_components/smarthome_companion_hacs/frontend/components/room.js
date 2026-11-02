@@ -51,7 +51,7 @@ export class Room {
         return { ...g, btn, countEl };
       });
 
-    this.metaEl = h('div', { class: 'room-meta' });
+    this.metaEl = h('div', { class: 'room-meta', hidden: true });
     this.controlsEl = h('div', { class: 'room-controls' }, this.groups.map((g) => g.btn));
 
     this.head = h('div', {
@@ -126,6 +126,7 @@ export class Room {
     if (key !== this._metaKey) {
       this._metaKey = key;
       this.metaEl.replaceChildren(...chips);
+      this.metaEl.hidden = chips.length === 0;
     }
   }
 }
