@@ -1,6 +1,6 @@
 // Special cards: header badges, smoke alerts, weather warning, trash, persons, announcement, bottom navigation.
 import {
-  h, icon, domainOf, entityIcon, isUnavailable, stateLabel, numeric, moreInfo, navigate, resolveColor,
+  h, icon, domainOf, entityIcon, isUnavailable, stateLabel, numeric, moreInfo, navigate, resolveColor, renderTrashBin,
 } from '../lib/util.js';
 
 const allowed = (users, userId) => !users || users.length === 0 || users.includes(userId);
@@ -181,15 +181,19 @@ export class TrashCard {
     }
     entries.sort((a, b) => a.diff - b.diff);
     this.bins.replaceChildren(...entries.map(({ match, diff }) => {
-      const color = resolveColor(match.color) || 'var(--cd-secondary)';
+      const color = resolveColor(match.color) || match.color || 'var(--cd-secondary)';
       const when = diff === 0 ? 'Heute' : diff === 1 ? 'Morgen' : `in ${diff} T`;
-      const fallback = h('ha-icon', { icon: match.icon || 'mdi:trash-can-outline', style: { color } });
+      const fallback = renderTrashBin(color, 42);
       const visual = match.picture
         ? h('img', { src: match.picture, alt: match.pattern, onError: (e) => e.target.replaceWith(fallback) })
         : fallback;
-      return h('div', { class: 'bin' }, visual, h('span', { class: `when${diff === 0 ? ' today' : ''}` }, when));
+      return h('div', { class: 'bin' },
+        visual,
+        h('span', { class: `when${diff === 0 ? ' today' : diff === 1 ? ' tomorrow' : ''}` }, when),
+        h('span', { class: 'bin-label' }, match.pattern || ''));
     }));
     this.el.hidden = entries.length === 0;
+    this.el.style.display = entries.length === 0 ? 'none' : '';
   }
 }
 
@@ -222,6 +226,7 @@ export class PersonCards {
         h('div', { class: 'p-state' }, stateLabel(hass, st))));
     }
     this.el.hidden = !any;
+    this.el.style.display = any ? '' : 'none';
   }
 }
 
@@ -233,7 +238,7 @@ export class AnnounceCard {
     this.row = h('div', { class: 'full-tile', onClick: () => moreInfo(this.el, this.cfg.entity_id) },
       h('div', { class: 'tile-icon', style: { '--tile-color': 'var(--cd-accent)' } }, icon(this.cfg.icon || 'mdi:bullhorn')),
       h('div', { class: 'tile-name' }, this.cfg.name || 'Ankündigung'));
-    this.el = h('div', { hidden: !this.cfg.entity_id }, this.row, this.chips);
+    this.el = h('div', { hidden: !this.cfg.entity_id, style: this.cfg.entity_id ? {} : { display: 'none' } }, this.row, this.chips);
   }
 
   update(hass) {

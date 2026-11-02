@@ -40,7 +40,119 @@ export const COLORS = {
   indigo: '#3f51b5', purple: '#9c27b0', pink: '#e91e63', grey: '#9e9e9e',
 };
 export const COLOR_NAMES = Object.keys(COLORS);
+export const COLOR_LABELS_DE = {
+  '': 'Automatisch',
+  red: 'Rot',
+  orange: 'Orange',
+  amber: 'Bernstein / Gelb',
+  yellow: 'Hellgelb',
+  lime: 'Limette',
+  green: 'Grün',
+  teal: 'Türkis',
+  cyan: 'Cyan',
+  'light-blue': 'Hellblau',
+  blue: 'Blau',
+  indigo: 'Indigo',
+  purple: 'Lila',
+  pink: 'Pink',
+  grey: 'Grau / Schwarz',
+};
 export const resolveColor = (c) => (c && (COLORS[c] || c)) || '';
+
+/**
+ * Generates a crisp, detailed 3D wheelie bin (Mülltonne) vector SVG.
+ * Ensures consistent, high-fidelity rendering on any screen without broken images.
+ */
+export function renderTrashBin(color = '#ffc107', size = 44) {
+  const hex = resolveColor(color) || color || '#ffc107';
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 56 56');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.style.display = 'block';
+  svg.style.flexShrink = '0';
+  svg.innerHTML = `
+    <ellipse cx="28" cy="53" rx="18" ry="2.5" fill="rgba(0,0,0,0.35)"/>
+    <!-- Wheels -->
+    <circle cx="15" cy="48" r="5" fill="#1e293b"/>
+    <circle cx="15" cy="48" r="2.2" fill="#94a3b8"/>
+    <circle cx="41" cy="48" r="5" fill="#1e293b"/>
+    <circle cx="41" cy="48" r="2.2" fill="#94a3b8"/>
+    <!-- Body -->
+    <path d="M15 16 L41 16 L38 49 C38 50.8 36.5 52 34.5 52 L21.5 52 C19.5 52 18 50.8 18 49 Z" fill="${hex}"/>
+    <!-- Body 3D shading -->
+    <path d="M15 16 L28 16 L28 52 L21.5 52 C19.5 52 18 50.8 18 49 Z" fill="rgba(255,255,255,0.14)"/>
+    <path d="M28 16 L41 16 L38 49 C38 50.8 36.5 52 34.5 52 L28 52 Z" fill="rgba(0,0,0,0.18)"/>
+    <!-- Body Ribs -->
+    <rect x="22" y="22" width="2.4" height="23" rx="1.2" fill="rgba(0,0,0,0.2)"/>
+    <rect x="22" y="22" width="1.2" height="23" rx="0.6" fill="rgba(255,255,255,0.15)"/>
+    <rect x="26.8" y="22" width="2.4" height="23" rx="1.2" fill="rgba(0,0,0,0.2)"/>
+    <rect x="26.8" y="22" width="1.2" height="23" rx="0.6" fill="rgba(255,255,255,0.15)"/>
+    <rect x="31.6" y="22" width="2.4" height="23" rx="1.2" fill="rgba(0,0,0,0.2)"/>
+    <rect x="31.6" y="22" width="1.2" height="23" rx="0.6" fill="rgba(255,255,255,0.15)"/>
+    <!-- Lid Handle -->
+    <rect x="21" y="5.5" width="14" height="3" rx="1.5" fill="${hex}"/>
+    <rect x="21" y="5.5" width="14" height="1.5" rx="0.75" fill="rgba(255,255,255,0.2)"/>
+    <!-- Lid Body -->
+    <path d="M12 11 C12 9.5 13.5 8.5 15 8.5 L41 8.5 C42.5 8.5 44 9.5 44 11 L42.5 16 L13.5 16 Z" fill="${hex}"/>
+    <path d="M12 11 C12 9.5 13.5 8.5 15 8.5 L28 8.5 L28 16 L13.5 16 Z" fill="rgba(255,255,255,0.15)"/>
+    <path d="M28 8.5 L41 8.5 C42.5 8.5 44 9.5 44 11 L42.5 16 L28 16 Z" fill="rgba(0,0,0,0.15)"/>
+    <!-- Lid Rim -->
+    <rect x="11" y="14" width="34" height="3" rx="1.5" fill="${hex}"/>
+    <rect x="11" y="14" width="34" height="1.2" rx="0.6" fill="rgba(255,255,255,0.25)"/>
+    <rect x="11" y="15.8" width="34" height="1.2" rx="0.6" fill="rgba(0,0,0,0.2)"/>
+  `;
+  return svg;
+}
+
+export const POPULAR_ICONS = [
+  { icon: 'mdi:lightbulb', name: 'Lampe', cat: 'Licht' },
+  { icon: 'mdi:ceiling-light', name: 'Decke', cat: 'Licht' },
+  { icon: 'mdi:floor-lamp', name: 'Stehlampe', cat: 'Licht' },
+  { icon: 'mdi:lamp', name: 'Tischlampe', cat: 'Licht' },
+  { icon: 'mdi:led-strip', name: 'LED-Streifen', cat: 'Licht' },
+  { icon: 'mdi:power-socket-eu', name: 'Steckdose', cat: 'Schalter' },
+  { icon: 'mdi:power-plug', name: 'Stecker', cat: 'Schalter' },
+  { icon: 'mdi:toggle-switch', name: 'Schalter', cat: 'Schalter' },
+  { icon: 'mdi:router-wireless', name: 'WLAN', cat: 'Geräte' },
+  { icon: 'mdi:desktop-tower', name: 'PC', cat: 'Geräte' },
+  { icon: 'mdi:printer', name: 'Drucker', cat: 'Geräte' },
+  { icon: 'mdi:television', name: 'TV', cat: 'Medien' },
+  { icon: 'mdi:speaker', name: 'Audio', cat: 'Medien' },
+  { icon: 'mdi:window-shutter', name: 'Jalousie', cat: 'Jalousie' },
+  { icon: 'mdi:window-shutter-open', name: 'Jalousie Auf', cat: 'Jalousie' },
+  { icon: 'mdi:blinds', name: 'Rollo', cat: 'Jalousie' },
+  { icon: 'mdi:garage', name: 'Garage', cat: 'Jalousie' },
+  { icon: 'mdi:thermometer', name: 'Temperatur', cat: 'Klima' },
+  { icon: 'mdi:thermostat', name: 'Klima', cat: 'Klima' },
+  { icon: 'mdi:fan', name: 'Lüfter', cat: 'Klima' },
+  { icon: 'mdi:air-conditioner', name: 'Klimaanlage', cat: 'Klima' },
+  { icon: 'mdi:motion-sensor', name: 'Bewegung', cat: 'Sensoren' },
+  { icon: 'mdi:smoke-detector', name: 'Rauchmelder', cat: 'Sensoren' },
+  { icon: 'mdi:water-alert', name: 'Wasser', cat: 'Sensoren' },
+  { icon: 'mdi:water-percent', name: 'Feuchte', cat: 'Sensoren' },
+  { icon: 'mdi:solar-power-variant', name: 'Solar', cat: 'Energie' },
+  { icon: 'mdi:home-lightning-bolt-outline', name: 'Strom', cat: 'Energie' },
+  { icon: 'mdi:flash', name: 'Leistung', cat: 'Energie' },
+  { icon: 'mdi:door', name: 'Tür', cat: 'Sicherheit' },
+  { icon: 'mdi:door-closed', name: 'Tür Zu', cat: 'Sicherheit' },
+  { icon: 'mdi:window-closed', name: 'Fenster Zu', cat: 'Sicherheit' },
+  { icon: 'mdi:window-open', name: 'Fenster Auf', cat: 'Sicherheit' },
+  { icon: 'mdi:lock', name: 'Schloss', cat: 'Sicherheit' },
+  { icon: 'mdi:shield-home', name: 'Sicherheit', cat: 'Sicherheit' },
+  { icon: 'mdi:sofa', name: 'Wohnzimmer', cat: 'Räume' },
+  { icon: 'mdi:bed', name: 'Schlafzimmer', cat: 'Räume' },
+  { icon: 'mdi:flower', name: 'Garten', cat: 'Räume' },
+  { icon: 'mdi:pump', name: 'Pumpe', cat: 'Räume' },
+  { icon: 'mdi:home', name: 'Haus', cat: 'Räume' },
+  { icon: 'mdi:trash-can-outline', name: 'Mülltonne', cat: 'Info' },
+  { icon: 'mdi:recycle-variant', name: 'Wertstoff', cat: 'Info' },
+  { icon: 'mdi:newspaper', name: 'Papier', cat: 'Info' },
+  { icon: 'mdi:cart', name: 'Einkauf', cat: 'Info' },
+  { icon: 'mdi:bullhorn', name: 'Ankündigung', cat: 'Info' },
+  { icon: 'mdi:cloud-off', name: 'Offline', cat: 'Info' },
+  { icon: 'mdi:weather-partly-cloudy', name: 'Wetter', cat: 'Info' }
+];
 
 // ── State helpers ──
 const ACTIVE_STATES = new Set([

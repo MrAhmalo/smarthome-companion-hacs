@@ -1,5 +1,7 @@
-import { h, icon, COLOR_NAMES, resolveColor } from '../lib/util.js';
+import { h, icon, COLOR_NAMES, resolveColor, renderTrashBin } from '../lib/util.js';
 import { EntityPicker } from './entity_picker.js';
+import { IconPicker } from './icon_picker.js';
+import { ColorPicker } from './color_picker.js';
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 
@@ -166,7 +168,27 @@ export class Settings {
   }
 
   _color(obj, key, label) {
-    return this._select(obj, key, label, [['', 'Automatisch'], ...COLOR_NAMES.map((c) => [c, c])], '');
+    const picker = new ColorPicker({
+      value: obj[key] || '',
+      label,
+      onChange: (val) => {
+        if (val) obj[key] = val;
+        else delete obj[key];
+      },
+    });
+    return this._field(label, picker.el);
+  }
+
+  _icon(obj, key, label, placeholder = 'mdi:...') {
+    const picker = new IconPicker({
+      value: obj[key] || '',
+      placeholder,
+      onChange: (val) => {
+        if (val) obj[key] = val;
+        else delete obj[key];
+      },
+    });
+    return this._field(label, picker.el);
   }
 
   /** Reorderable list of object rows. */
@@ -209,7 +231,7 @@ export class Settings {
         fields: (b) => [
           this._entity(b, 'entity_id', 'Entität'),
           this._text(b, 'name', 'Anzeigename'),
-          this._text(b, 'icon', 'Icon (mdi:…)'),
+          this._icon(b, 'icon', 'Icon'),
           this._color(b, 'color', 'Farbe'),
           this._check(b, 'show_name', 'Name anzeigen'),
           this._check(b, 'show_state', 'Status anzeigen'),
@@ -241,12 +263,12 @@ export class Settings {
       h('div', { class: 'fields' },
         this._entity(d.announce, 'entity_id', 'Skript / Entität'),
         this._text(d.announce, 'name', 'Anzeigename'),
-        this._text(d.announce, 'icon', 'Icon (mdi:…)'),
+        this._icon(d.announce, 'icon', 'Icon'),
         this._entity(d.announce, 'chips_visible_entity', 'Chips nur sichtbar wenn verfügbar (z. B. Drucker)')),
       this._list(d.announce.chips, {
         rowTitle: (c) => c.entity_id || 'Chip',
         make: () => ({ entity_id: '', icon: '' }),
-        fields: (c) => [this._entity(c, 'entity_id', 'Entität'), this._text(c, 'icon', 'Icon (mdi:…)')],
+        fields: (c) => [this._entity(c, 'entity_id', 'Entität'), this._icon(c, 'icon', 'Icon')],
         addLabel: 'Chip hinzufügen',
       }),
       this._title('Personen'),
@@ -270,14 +292,29 @@ export class Settings {
       h('div', { class: 'fields' },
         this._csv(d.trash, 'calendar_entities', 'Kalender (kommagetrennt)', 'calendar.muellplan'),
         this._text(d.trash, 'next_days', 'Vorschau (Tage)', { type: 'number' })),
-      this._hint('• Terminname enthält Muster → Tonne\n• Bild optional, Fallback = Icon\n• Bild z. B. /local/custom-icons/trash-bins/blue.png'),
+      this._hint('• Terminname enthält Muster → Tonne\n• Standard = Hochwertiges 3D-Vektor-Design (Gelb, Blau, Braun, Grau usw.)\n• Eigenes Bild nur optional erforderlich'),
       this._list(d.trash.patterns, {
         rowTitle: (p) => p.pattern || 'Tonne',
         make: () => ({ pattern: '', icon: 'mdi:trash-can-outline', color: 'grey', picture: '' }),
-        fields: (p) => [
-          this._text(p, 'pattern', 'Muster im Terminnamen'), this._text(p, 'icon', 'Fallback-Icon'),
-          this._color(p, 'color', 'Farbe'), this._text(p, 'picture', 'Bild-URL (optional)'),
-        ],
+        fields: (p) => {
+          const previewWrap = h('div', { class: 'trash-preview-box' }, renderTrashBin(p.color || 'grey', 42));
+          const colorField = new ColorPicker({
+            value: p.color || 'grey',
+            label: 'Farbe',
+            allowAuto: false,
+            onChange: (val) => {
+              p.color = val || 'grey';
+              previewWrap.replaceChildren(renderTrashBin(p.color, 42));
+            },
+          });
+          return [
+            this._text(p, 'pattern', 'Muster im Terminnamen (z. B. Leichtverpackungen)'),
+            this._field('Farbe', colorField.el),
+            this._icon(p, 'icon', 'Fallback-Icon'),
+            this._text(p, 'picture', 'Eigenes Bild (optional)', { placeholder: '/local/custom-icons/...' }),
+            this._field('Tonnen-Vorschau', previewWrap),
+          ];
+        },
         addLabel: 'Tonne hinzufügen',
       }),
     ];
@@ -292,7 +329,7 @@ export class Settings {
         rowTitle: (n) => n.name || n.path || 'Button',
         make: () => ({ name: '', icon: 'mdi:home', path: '' }),
         fields: (n) => [
-          this._text(n, 'name', 'Beschriftung (optional)'), this._text(n, 'icon', 'Icon (mdi:…)'),
+          this._text(n, 'name', 'Beschriftung (optional)'), this._icon(n, 'icon', 'Icon'),
           this._text(n, 'path', 'Pfad', { placeholder: '/lovelace/sicherheit' }),
         ],
         addLabel: 'Button hinzufügen',
@@ -346,7 +383,7 @@ export class Settings {
         make: () => ({ entity_id: '', area_id: '' }),
         fields: (e) => [
           this._entity(e, 'entity_id', 'Entität'), this._select(e, 'area_id', 'Raum', areaOptions, ''),
-          this._text(e, 'name', 'Anzeigename (optional)'), this._text(e, 'icon', 'Icon (optional)'),
+          this._text(e, 'name', 'Anzeigename (optional)'), this._icon(e, 'icon', 'Icon (optional)'),
         ],
         addLabel: 'Kachel hinzufügen',
       }),

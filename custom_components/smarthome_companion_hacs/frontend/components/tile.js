@@ -190,10 +190,17 @@ export class Tile {
   _updateCover(st, unavailable) {
     const state = st?.state;
     const moving = state === 'opening' || state === 'closing';
-    const pos = st?.attributes?.current_position;
-    this.btnUp.disabled = unavailable || state === 'opening' || pos === 100 || (state === 'open' && pos === undefined);
-    this.btnDown.disabled = unavailable || state === 'closing' || state === 'closed';
-    this.btnStop.hidden = !moving;
+    this.btnUp.disabled = unavailable;
+    this.btnDown.disabled = unavailable;
+    this.btnStop.disabled = unavailable;
+    this.btnStop.hidden = false;
+    if (moving) {
+      this.btnStop.style.color = 'var(--cd-active, #ffc107)';
+      this.btnStop.style.background = 'color-mix(in srgb, var(--cd-active) 25%, transparent)';
+    } else {
+      this.btnStop.style.color = '';
+      this.btnStop.style.background = '';
+    }
   }
 
   _updateMedia(st, unavailable) {

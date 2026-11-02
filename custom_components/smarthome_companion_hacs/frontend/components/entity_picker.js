@@ -124,6 +124,7 @@ export class EntityPicker {
     this._renderDomainChips();
     this._updateList();
 
+    this.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     setTimeout(() => {
       this.searchInput.focus();
       document.addEventListener('pointerdown', this._onDocClick);
