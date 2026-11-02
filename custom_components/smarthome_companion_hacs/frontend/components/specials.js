@@ -187,7 +187,7 @@ export class TrashCard {
       const visual = match.picture
         ? h('img', { src: match.picture, alt: match.pattern, onError: (e) => e.target.replaceWith(fallback) })
         : fallback;
-      return h('div', { class: 'bin', title: match.pattern }, visual, h('span', { class: `when${diff === 0 ? ' today' : ''}` }, when));
+      return h('div', { class: 'bin' }, visual, h('span', { class: `when${diff === 0 ? ' today' : ''}` }, when));
     }));
     this.el.hidden = entries.length === 0;
   }
@@ -198,9 +198,13 @@ export class PersonCards {
   constructor(persons, user) {
     this.user = user;
     this.persons = (persons || []).filter((p) => p && p.entity_id && allowed(p.users, user?.id));
-    this.el = h('div', { class: 'bins', hidden: true });
-    this.items = this.persons.map((p) => ({ cfg: p, el: h('div', { class: 'person', hidden: true, onClick: () => moreInfo(this.el, p.entity_id) }) }));
-    this.el.append(...this.items.map((i) => i.el));
+    this.itemsWrap = h('div', { class: 'bins' });
+    this.el = h('div', { class: 'stack-row', hidden: true }, this.itemsWrap);
+    this.items = this.persons.map((p) => ({
+      cfg: p,
+      el: h('div', { class: 'person', hidden: true, onClick: () => moreInfo(this.el, p.entity_id) }),
+    }));
+    this.itemsWrap.append(...this.items.map((i) => i.el));
   }
 
   update(hass) {

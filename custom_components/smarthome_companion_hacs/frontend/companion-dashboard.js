@@ -8,6 +8,7 @@ import {
   Badges, SmokeAlerts, WarningCard, TrashCard, PersonCards, AnnounceCard, NavBar,
 } from './components/specials.js';
 import { Settings } from './components/settings.js';
+import { DeviceWizard } from './components/device_wizard.js';
 
 class CompanionDashboardPanel extends HTMLElement {
   constructor() {
@@ -59,12 +60,17 @@ class CompanionDashboardPanel extends HTMLElement {
       class: 'icon-btn', 'aria-label': 'Menü', hidden: !this._narrow,
       onClick: () => this.dispatchEvent(new CustomEvent('hass-toggle-menu', { bubbles: true, composed: true })),
     }, icon('mdi:menu'));
+    this._wizardBtn = h('button', {
+      class: 'icon-btn', 'aria-label': 'Gerät einrichten', title: 'Gerät einrichten', hidden: true,
+      onClick: () => this._openWizard(),
+    }, icon('mdi:plus-circle-outline'));
     this._settingsBtn = h('button', {
-      class: 'icon-btn', 'aria-label': 'Dashboard einrichten', hidden: true, onClick: () => this._openSettings(),
+      class: 'icon-btn', 'aria-label': 'Dashboard einrichten', title: 'Dashboard einrichten', hidden: true,
+      onClick: () => this._openSettings(),
     }, icon('mdi:cog-outline'));
     this._content = h('div');
     this._page = h('div', { class: 'page' },
-      h('div', { class: 'toolbar' }, this._menuBtn, h('div', { class: 'spacer' }), this._settingsBtn),
+      h('div', { class: 'toolbar' }, this._menuBtn, h('div', { class: 'spacer' }), this._wizardBtn, this._settingsBtn),
       this._content);
     this.shadowRoot.replaceChildren(style, this._page);
 
@@ -91,6 +97,7 @@ class CompanionDashboardPanel extends HTMLElement {
       this._error = null;
       this._data = res;
       this._settingsBtn.hidden = !res.user?.is_admin;
+      this._wizardBtn.hidden = !res.user?.is_admin;
       this._render();
     } catch (err) {
       this._error = err;
@@ -119,7 +126,7 @@ class CompanionDashboardPanel extends HTMLElement {
       || config.persons?.length || config.announce?.entity_id);
     const infoCard = h('div', { class: 'card stack' },
       this._trash.el,
-      h('div', { class: 'stack-row', hidden: !(config.persons || []).length }, this._persons.el),
+      this._persons.el,
       this._announce.el);
 
     // Rooms
@@ -146,10 +153,13 @@ class CompanionDashboardPanel extends HTMLElement {
   }
 
   _emptyState() {
+    const isAdmin = !!this._data?.user?.is_admin;
     return h('div', { class: 'card empty' },
       icon('mdi:devices'),
       h('div', { style: { fontWeight: '600', margin: '8px 0 4px', color: 'var(--primary-text-color)' } }, 'Noch keine Geräte im Dashboard'),
-      h('div', { class: 'hint' }, '• Geräte im Companion-Gerätemanager einrichten\n• Räume kommen automatisch aus Home Assistant\n• Zusatz-Kacheln über „Dashboard einrichten“'));
+      h('div', { class: 'hint' }, '• Geräte über den Zauberstab oben rechts einrichten\n• Räume kommen automatisch aus Home Assistant\n• Zusatz-Kacheln über „Dashboard einrichten“'),
+      isAdmin ? h('div', { style: { marginTop: '16px' } },
+        h('button', { class: 'btn primary', onClick: () => this._openWizard() }, icon('mdi:plus-circle-outline'), 'Gerät einrichten')) : null);
   }
 
   _renderError(err) {
@@ -186,6 +196,24 @@ class CompanionDashboardPanel extends HTMLElement {
       hello = hour < 5 ? 'Gute Nacht' : hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend';
     }
     return name ? `${hello}, ${name}` : hello;
+  }
+
+  // ── device wizard ──
+  _openWizard() {
+    this._wizard?.el.remove();
+    this._wizard = new DeviceWizard({
+      hass: this._hass,
+      onClose: () => { this._wizard?.el.remove(); this._wizard = null; },
+      onSaved: (err) => {
+        if (err) { this._toast(`Fehler: ${err.message || err}`); return; }
+        this._wizard?.el.remove();
+        this._wizard = null;
+        this._toast('Gerät erfolgreich eingerichtet');
+        this._serialized = null;
+        this._load();
+      },
+    });
+    this.shadowRoot.append(this._wizard.el);
   }
 
   // ── settings ──

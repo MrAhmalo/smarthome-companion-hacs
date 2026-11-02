@@ -1,5 +1,5 @@
-// Settings dialog (admin only): schema-driven editor for everything the dashboard shows.
 import { h, icon, COLOR_NAMES, resolveColor } from '../lib/util.js';
+import { EntityPicker } from './entity_picker.js';
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 
@@ -47,13 +47,10 @@ export class Settings {
 
   // ═══════════ Shell ═══════════
   _build() {
-    this.datalist = h('datalist', { id: 'cd-entities' },
-      Object.keys(this.hass.states).sort().map((id) => h('option', { value: id })));
     this.body = h('div', { class: 'dialog-body' });
     this.tabBar = h('div', { class: 'tabs' });
     this.saveBtn = h('button', { class: 'btn primary', onClick: () => this._save() }, icon('mdi:content-save'), 'Speichern');
     this.el = h('div', { class: 'overlay', onClick: (e) => { if (e.target === this.el) this.onClose(); } },
-      this.datalist,
       h('div', { class: 'dialog', role: 'dialog', 'aria-label': 'Dashboard-Einstellungen' },
         h('div', { class: 'dialog-head' }, h('h2', {}, 'Dashboard einrichten'),
           h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: () => this.onClose() }, icon('mdi:close'))),
@@ -119,8 +116,19 @@ export class Settings {
     return this._field(label, input);
   }
 
-  _entity(obj, key, label) {
-    return this._text(obj, key, label, { placeholder: 'domain.entity_id', list: 'cd-entities' });
+  _entity(obj, key, label, opts = {}) {
+    const picker = new EntityPicker({
+      hass: this.hass,
+      value: obj[key] || '',
+      placeholder: opts.placeholder || 'Entität suchen...',
+      domain: opts.domain,
+      filter: opts.filter,
+      onChange: (val) => {
+        if (val) obj[key] = val;
+        else delete obj[key];
+      },
+    });
+    return this._field(label, picker.el);
   }
 
   _select(obj, key, label, options, fallback = options[0][0]) {

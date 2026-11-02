@@ -125,14 +125,10 @@ async def _async_default_config(hass) -> dict:
             "calendar_entities": ["calendar.muellplan"],
             "next_days": 2,
             "patterns": [
-                {"pattern": "Bioabfall", "icon": "mdi:flower", "color": "lime",
-                 "picture": "/local/custom-icons/trash-bins/brown.png"},
-                {"pattern": "Papier", "icon": "mdi:newspaper", "color": "blue",
-                 "picture": "/local/custom-icons/trash-bins/blue.png"},
-                {"pattern": "Leichtverpackungen", "icon": "mdi:recycle-variant", "color": "amber",
-                 "picture": "/local/custom-icons/trash-bins/yellow.png"},
-                {"pattern": "Restabfall", "icon": "mdi:trash-can-outline", "color": "grey",
-                 "picture": "/local/custom-icons/trash-bins/black.png"},
+                {"pattern": "Bioabfall", "icon": "mdi:flower", "color": "lime"},
+                {"pattern": "Papier", "icon": "mdi:newspaper", "color": "blue"},
+                {"pattern": "Leichtverpackungen", "icon": "mdi:recycle-variant", "color": "amber"},
+                {"pattern": "Restabfall", "icon": "mdi:trash-can-outline", "color": "grey"},
             ],
         },
         "persons": [
@@ -155,18 +151,17 @@ async def _async_default_config(hass) -> dict:
         "tile_order": {},
         "hidden_tiles": [],
         "tile_users": {},
-        "extra_tiles": [
-            {"entity_id": "media_player.wohnzimmer", "area_id": "wohnzimmer", "name": "Apple TV",
-             "icon": "mdi:television"},
-            {"entity_id": "media_player.matilda", "area_id": "matilda_s_zimmer", "name": "Alexa",
-             "icon": "mdi:speaker"},
-            {"entity_id": "climate.meacocool_pro_10000_klimaanlage", "area_id": "julian_s_zimmer"},
-            {"entity_id": "input_boolean.disco", "area_id": "julian_s_zimmer"},
-            {"entity_id": "input_boolean.pc_system", "area_id": "julian_s_zimmer", "name": "PC",
-             "icon": "hue:room-computer"},
-        ],
+        "extra_tiles": [],
     }
 
+
+_LEGACY_SEEDED_EXTRA_ENTITIES = {
+    "media_player.wohnzimmer",
+    "media_player.matilda",
+    "climate.meacocool_pro_10000_klimaanlage",
+    "input_boolean.disco",
+    "input_boolean.pc_system",
+}
 
 _LIST_KEYS = ("badges", "nav", "persons", "color_presets", "room_order", "hidden_tiles", "extra_tiles")
 _DICT_KEYS = ("warning", "announce", "trash", "rooms", "tile_order", "tile_users")
@@ -192,6 +187,28 @@ async def async_get_or_create_config(hass, store) -> dict:
     if config is None:
         config = _sanitize_config(await _async_default_config(hass))
         await store.save_dashboard_config(config)
+    else:
+        # Migration: Purge legacy hardcoded default extra_tiles so only devices
+        # configured in the device manager appear on the dashboard.
+        changed = False
+        extras = config.get("extra_tiles", [])
+        if any(isinstance(e, dict) and e.get("entity_id") in _LEGACY_SEEDED_EXTRA_ENTITIES for e in extras):
+            config["extra_tiles"] = [
+                e for e in extras
+                if isinstance(e, dict) and e.get("entity_id") not in _LEGACY_SEEDED_EXTRA_ENTITIES
+            ]
+            changed = True
+
+        # Migration: Purge legacy custom-icons trash picture URLs that caused display distortion
+        trash = config.get("trash", {})
+        if isinstance(trash, dict):
+            for p in trash.get("patterns", []):
+                if isinstance(p, dict) and p.get("picture", "").startswith("/local/custom-icons/trash-bins/"):
+                    del p["picture"]
+                    changed = True
+
+        if changed:
+            await store.save_dashboard_config(config)
     return config
 
 
