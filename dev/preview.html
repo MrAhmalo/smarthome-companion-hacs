@@ -34,7 +34,7 @@
       super();
       const root = this.attachShadow({ mode: 'open' });
       root.innerHTML = `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
-        <style>:host{display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;font-size:24px;line-height:1}
+        <style>:host{display:inline-flex;width:var(--mdc-icon-size,22px);height:var(--mdc-icon-size,22px);align-items:center;justify-content:center;font-size:var(--mdc-icon-size,22px);line-height:1}
         .mdi:before{font-size:inherit}</style><span class="mdi"></span>`;
     }
     connectedCallback() { this._r(); }
@@ -125,7 +125,9 @@
     announce: { entity_id: 'script.ankundigung', name: 'Ankündigung', icon: 'mdi:bullhorn',
       chips: [{ entity_id: 'sensor.hp_officejet_3830_series_black_ink', icon: 'mdi:water-black' }, { entity_id: 'sensor.hp_officejet_3830_series_tri_color_ink', icon: 'mdi:palette' }],
       chips_visible_entity: 'sensor.hp_officejet_3830_series' },
-    trash: { calendar_entities: ['calendar.muellplan'], next_days: 2, patterns: [
+    trash: { calendar_entities: ['calendar.muellplan'], next_days: 4, patterns: [
+      { pattern: 'Leichtverpackungen', color: 'amber' },
+      { pattern: 'Restabfall', color: 'black' },
       { pattern: 'Bioabfall', icon: 'mdi:flower', color: 'lime', picture: '/local/x.png' },
       { pattern: 'Papier', icon: 'mdi:newspaper', color: 'blue' },
     ] },
@@ -141,6 +143,24 @@
     language: 'de',
     callWS: async (msg) => {
       console.log('callWS', msg.type);
+            if (msg.type === 'config/device_registry/list') return [
+        { id: 'd1', name: 'Shelly 2PM Wohnzimmer', manufacturer: 'Allterco', model: 'Shelly Plus 2PM', area_id: 'wohnzimmer' },
+        { id: 'd2', name: 'Hue Stehlampe', manufacturer: 'Signify', model: 'LCT015', area_id: 'wohnzimmer' },
+        { id: 'd3', name: 'Garten Pumpe Relais', manufacturer: 'Shelly', model: 'Shelly 1PM', area_id: 'garten' },
+        { id: 'd4', name: 'HACS', manufacturer: 'hacs.xyz', model: 'integration', entry_type: 'service' },
+        { id: 'd5', name: 'Forecast', manufacturer: 'Met.no', model: 'Forecast', entry_type: 'service' },
+      ];
+      if (msg.type === 'config/entity_registry/list') return [
+        { entity_id: 'cover.wz_jalousie', device_id: 'd1', unique_id: 'u_cov1' },
+        { entity_id: 'sensor.wz_steckdose_power', device_id: 'd1', unique_id: 'u_pow1' },
+        { entity_id: 'light.wz_stehlampe', device_id: 'd2', unique_id: 'u_l1' },
+        { entity_id: 'switch.garten_pumpe', device_id: 'd3', unique_id: 'u_sw1' },
+      ];
+      if (msg.type === 'config/area_registry/list') return [
+        { area_id: 'wohnzimmer', name: 'Wohnzimmer' },
+        { area_id: 'garten', name: 'Garten' },
+      ];
+      if (msg.type === 'smarthome_companion/devices/get') return { devices: {}, categories: {} };
       if (msg.type.endsWith('dashboard/get')) return { config, layout, user: { id: 'u1', name: 'Julian', is_admin: true } };
       if (msg.type.endsWith('dashboard/users')) return { users: [{ id: 'u1', name: 'Julian' }, { id: 'u2', name: 'Matilda' }] };
       if (msg.type.endsWith('dashboard/save')) { console.log('SAVE', JSON.stringify(msg.config).length); return { success: true, config: msg.config }; }
@@ -150,7 +170,7 @@
     callApi: async (m, path) => {
       console.log('callApi', m, path);
       const d = (o) => { const x = new Date(); x.setDate(x.getDate() + o); return x.toISOString().slice(0, 10); };
-      return [{ summary: 'Bioabfall', start: { date: d(1) }, end: { date: d(2) } }, { summary: 'Papier', start: { date: d(6) }, end: { date: d(7) } }];
+      return [{ summary: 'Leichtverpackungen', start: { date: d(1) }, end: { date: d(2) } }, { summary: 'Restabfall (4-wöchentlich)', start: { date: d(2) }, end: { date: d(3) } }, { summary: 'Papier', start: { date: d(3) }, end: { date: d(4) } }];
     },
     connection: { subscribeMessage: async () => () => {} },
   };

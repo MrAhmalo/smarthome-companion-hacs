@@ -35,27 +35,29 @@ export function setChildren(el, ...children) {
 
 // ── Colours ──
 export const COLORS = {
-  red: '#f44336', orange: '#ff9800', amber: '#ffc107', yellow: '#ffeb3b', lime: '#cddc39',
+  red: '#f44336', orange: '#ff9800', amber: '#ffc107', yellow: '#ffeb3b', lime: '#8bc34a',
   green: '#4caf50', teal: '#009688', cyan: '#00bcd4', 'light-blue': '#03a9f4', blue: '#2196f3',
-  indigo: '#3f51b5', purple: '#9c27b0', pink: '#e91e63', grey: '#9e9e9e',
+  indigo: '#3f51b5', purple: '#9c27b0', pink: '#e91e63', brown: '#8d5524', grey: '#64748b', black: '#334155',
 };
 export const COLOR_NAMES = Object.keys(COLORS);
 export const COLOR_LABELS_DE = {
   '': 'Automatisch',
   red: 'Rot',
   orange: 'Orange',
-  amber: 'Bernstein / Gelb',
+  amber: 'Gelb / Bernstein',
   yellow: 'Hellgelb',
-  lime: 'Limette',
+  lime: 'Hellgrün / Limette',
   green: 'Grün',
   teal: 'Türkis',
   cyan: 'Cyan',
   'light-blue': 'Hellblau',
-  blue: 'Blau',
+  blue: 'Blau (Papier)',
   indigo: 'Indigo',
   purple: 'Lila',
   pink: 'Pink',
-  grey: 'Grau / Schwarz',
+  brown: 'Braun (Bio)',
+  grey: 'Grau (Restmüll)',
+  black: 'Schwarz / Anthrazit',
 };
 export const resolveColor = (c) => (c && (COLORS[c] || c)) || '';
 

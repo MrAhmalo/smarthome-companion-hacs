@@ -327,8 +327,8 @@ export class DeviceWizard {
     this.body.replaceChildren(
       h('div', { class: 'section-title' }, 'Geräteinformationen'),
       h('div', { class: 'fields' },
-        h('label', { class: 'field' }, 'Anzeigename im Dashboard', nameInput),
-        h('label', { class: 'field' }, 'Raum (Bereich)', areaSelect)),
+        h('div', { class: 'field' }, 'Anzeigename im Dashboard', nameInput),
+        h('div', { class: 'field' }, 'Raum (Bereich)', areaSelect)),
       h('div', { class: 'section-title', style: { marginTop: '16px' } }, 'Haupt-Kategorie'),
       h('div', { class: 'hint' }, 'Bestimmt das Standard-Icon und das Verhalten im Dashboard:'),
       catGrid);
@@ -383,9 +383,9 @@ export class DeviceWizard {
           h('div', { class: 'ch-title' }, ch.name || ch.entity_id),
           h('span', { class: 'badge-tag' }, ch.entity_id)),
         h('div', { class: 'fields' },
-          h('label', { class: 'field' }, 'Kanal-Name', nameInput),
-          h('label', { class: 'field' }, 'Kategorie', catSelect),
-          h('label', { class: 'field' }, 'Leistungssensor (Watt)', powerPicker.el),
+          h('div', { class: 'field' }, 'Kanal-Name', nameInput),
+          h('div', { class: 'field' }, 'Kategorie', catSelect),
+          h('div', { class: 'field' }, 'Leistungssensor (Watt)', powerPicker.el),
           h('label', { class: 'field check' }, simCheck, 'Anwesenheitssimulation')));
     });
 

@@ -126,10 +126,10 @@ class CompanionDashboardPanel extends HTMLElement {
 
     const hasSide = !!(config.warning?.entity_id || config.trash?.calendar_entities?.length
       || config.persons?.length || config.announce?.entity_id);
+    const infoRight = h('div', { class: 'info-col' }, this._persons.el, this._announce.el);
     const infoCard = h('div', { class: 'card info-card' },
       this._trash.el,
-      this._persons.el,
-      this._announce.el);
+      infoRight);
 
     // Rooms (independent masonry columns layout)
     this._rooms = layout.rooms.map((r) => new Room(r, ctx));

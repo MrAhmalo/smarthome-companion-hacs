@@ -1,19 +1,14 @@
-// Rich Entity Picker for Companion Dashboard (native Home Assistant style).
-// Replaces plain text inputs with an interactive searchbox, entity icons, friendly names, and live states.
-import { h, icon, domainOf, entityIcon, stateLabel, resolveColor } from '../lib/util.js';
+// Rich Entity Picker for Companion Dashboard (Shadow-DOM safe, instant autocomplete).
+import { h, icon, domainOf, entityIcon, stateLabel } from '../lib/util.js';
+
+const DOMAIN_LABELS_DE = {
+  light: 'Lichter', switch: 'Schalter', sensor: 'Sensoren', binary_sensor: 'Binär',
+  cover: 'Jalousien', media_player: 'Medien', climate: 'Klima', script: 'Skripte',
+  scene: 'Szenen', input_boolean: 'Helfer', calendar: 'Kalender', device_tracker: 'Tracker',
+  person: 'Personen', weather: 'Wetter', fan: 'Lüfter', valve: 'Ventile',
+};
 
 export class EntityPicker {
-  /**
-   * @param {{
-   *   hass: object,
-   *   value: string,
-   *   onChange: (entityId: string) => void,
-   *   filter?: (entityId: string, stateObj: object) => boolean,
-   *   domain?: string | string[],
-   *   placeholder?: string,
-   *   allowClear?: boolean,
-   * }} opts
-   */
   constructor({ hass, value = '', onChange, filter, domain, placeholder = 'Entität suchen...', allowClear = true }) {
     this.hass = hass;
     this.value = value || '';
@@ -27,34 +22,15 @@ export class EntityPicker {
     this.searchQuery = '';
     this.selectedDomain = 'all';
 
-    // If running in Home Assistant and <ha-entity-picker> is defined, use the native component
-    if (typeof customElements !== 'undefined' && customElements.get('ha-entity-picker')) {
-      const el = document.createElement('ha-entity-picker');
-      el.hass = hass;
-      el.value = this.value;
-      el.label = placeholder;
-      if (this.domains) el.includeDomains = this.domains;
-      if (this.filter && typeof this.filter === 'function') el.entityFilter = this.filter;
-      el.allowCustomEntity = true;
-      el.style.width = '100%';
-      el.style.display = 'block';
-      el.addEventListener('value-changed', (e) => {
-        const val = e.detail?.value ?? '';
-        this.value = val;
-        this.onChange?.(val);
-      });
-      this.el = el;
-      return;
-    }
-
+    // Use composedPath() so Shadow DOM retargeting never closes the dropdown on inner clicks
     this._onDocClick = (e) => {
-      if (!this.el.contains(e.target)) this._close();
+      if (!e.composedPath().includes(this.el)) this._close();
     };
 
-    this._buildCustom();
+    this._build();
   }
 
-  _buildCustom() {
+  _build() {
     this.boxIcon = h('div', { class: 'ep-icon' });
     this.boxTitle = h('div', { class: 'ep-title' });
     this.boxSub = h('div', { class: 'ep-sub' });
@@ -69,20 +45,29 @@ export class EntityPicker {
 
     this.box = h('div', {
       class: 'ep-box', tabindex: '0', role: 'combobox', 'aria-expanded': 'false',
-      onClick: () => this._toggle(),
+      onClick: (e) => { e.stopPropagation(); this._toggle(); },
       onKeydown: (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._toggle(); }
         else if (e.key === 'Escape') { this._close(); }
+        else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+          this._open(e.key);
+        }
       },
     }, this.boxIcon, this.boxContent, this.clearBtn, this.chevron);
 
     // Dropdown popover
     this.searchInput = h('input', {
-      type: 'text', placeholder: 'Suchen nach Name oder ID...',
+      type: 'text', class: 'ep-search-input', placeholder: 'Name, Raum oder entity_id eintippen...',
       onInput: (e) => { this.searchQuery = e.target.value.toLowerCase().trim(); this._updateList(); },
       onKeydown: (e) => {
-        if (e.key === 'Escape') this._close();
+        if (e.key === 'Escape') { e.stopPropagation(); this._close(); }
         else if (e.key === 'ArrowDown') { e.preventDefault(); this._focusFirstItem(); }
+        else if (e.key === 'Enter') {
+          e.preventDefault();
+          const first = this.listEl.querySelector('.ep-item');
+          if (first) first.click();
+          else if (this.searchInput.value.includes('.')) this._setValue(this.searchInput.value.trim());
+        }
       },
     });
 
@@ -118,11 +103,13 @@ export class EntityPicker {
       const ic = entityIcon(this.value, st);
       this.boxIcon.replaceChildren(icon(ic));
       this.boxTitle.textContent = name;
+      this.boxTitle.classList.remove('ep-placeholder');
       this.boxSub.textContent = this.value;
       this.boxSub.hidden = false;
     } else {
       this.boxIcon.replaceChildren(icon('mdi:magnify'));
       this.boxTitle.textContent = this.placeholder;
+      this.boxTitle.classList.add('ep-placeholder');
       this.boxSub.textContent = '';
       this.boxSub.hidden = true;
     }
@@ -133,22 +120,21 @@ export class EntityPicker {
     else this._open();
   }
 
-  _open() {
+  _open(initialChar = '') {
     if (this.isOpen) return;
     this.isOpen = true;
     this.dropdown.hidden = false;
     this.box.dataset.open = '';
     this.box.setAttribute('aria-expanded', 'true');
-    this.searchQuery = '';
-    this.searchInput.value = '';
+    this.searchQuery = initialChar.toLowerCase();
+    this.searchInput.value = initialChar;
     this._renderDomainChips();
     this._updateList();
 
-    this.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     setTimeout(() => {
       this.searchInput.focus();
       document.addEventListener('pointerdown', this._onDocClick);
-    }, 20);
+    }, 10);
   }
 
   _close() {
@@ -188,13 +174,15 @@ export class EntityPicker {
     this.chipsRow.hidden = false;
 
     const chips = [['all', `Alle (${all.length})`]];
-    for (const [dom, count] of Array.from(domainCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5)) {
-      chips.push([dom, `${dom} (${count})`]);
+    for (const [dom, count] of Array.from(domainCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6)) {
+      const label = DOMAIN_LABELS_DE[dom] || dom;
+      chips.push([dom, `${label} (${count})`]);
     }
 
     this.chipsRow.replaceChildren(...chips.map(([id, label]) => h('button', {
       type: 'button', class: 'filter-chip', ...(id === this.selectedDomain ? { 'data-active': '' } : {}),
-      onClick: () => {
+      onClick: (e) => {
+        e.stopPropagation();
         this.selectedDomain = id;
         this._renderDomainChips();
         this._updateList();
@@ -215,34 +203,37 @@ export class EntityPicker {
     });
 
     if (!filtered.length) {
-      this.listEl.replaceChildren(h('div', { class: 'empty', style: { padding: '24px 12px' } },
+      this.listEl.replaceChildren(h('div', { class: 'empty', style: { padding: '20px 12px' } },
         icon('mdi:file-search-outline'),
         h('div', { style: { fontSize: '12px', marginTop: '4px' } }, 'Keine passenden Entitäten gefunden')));
       return;
     }
 
-    // Sort: selected item on top, then alphabetical by friendly name
     filtered.sort((a, b) => {
       if (a.entityId === this.value) return -1;
       if (b.entityId === this.value) return 1;
-      const an = a.st?.attributes?.friendly_name || a.entityId;
-      const bn = b.st?.attributes?.friendly_name || b.entityId;
+      const an = (a.st?.attributes?.friendly_name || a.entityId).toLowerCase();
+      const bn = (b.st?.attributes?.friendly_name || b.entityId).toLowerCase();
+      if (q) {
+        const aStarts = an.startsWith(q) || a.entityId.toLowerCase().startsWith(q);
+        const bStarts = bn.startsWith(q) || b.entityId.toLowerCase().startsWith(q);
+        if (aStarts !== bStarts) return aStarts ? -1 : 1;
+      }
       return an.localeCompare(bn);
     });
 
-    // Limit to 100 items to guarantee instant zero-lag rendering
-    this.listEl.replaceChildren(...filtered.slice(0, 100).map(({ entityId, st }) => {
+    this.listEl.replaceChildren(...filtered.slice(0, 80).map(({ entityId, st }) => {
       const isSel = entityId === this.value;
       const name = st?.attributes?.friendly_name || entityId;
       const ic = entityIcon(entityId, st);
       const stateTxt = stateLabel(this.hass, st);
 
-      const item = h('div', {
+      return h('div', {
         class: 'ep-item', ...(isSel ? { 'data-active': '' } : {}),
         tabindex: '0', role: 'option', 'aria-selected': String(isSel),
-        onClick: () => this._setValue(entityId),
+        onClick: (e) => { e.stopPropagation(); this._setValue(entityId); },
         onKeydown: (e) => {
-          if (e.key === 'Enter') { e.preventDefault(); this._setValue(entityId); }
+          if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); this._setValue(entityId); }
         },
       },
       icon(ic),
@@ -251,7 +242,6 @@ export class EntityPicker {
         h('div', { class: 'ep-sub' }, entityId)),
       stateTxt ? h('span', { class: 'item-state' }, stateTxt) : null,
       isSel ? icon('mdi:check', 'ep-check') : null);
-      return item;
     }));
   }
 

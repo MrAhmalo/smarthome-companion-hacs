@@ -171,26 +171,43 @@ export class TrashCard {
       if (!raw) continue;
       const diff = Math.round((parseDay(raw) - start) / DAY);
       if (diff < 0 || diff >= days) continue;
-      const summary = String(ev.summary || '').toLowerCase();
-      const match = patterns.find((p) => p.pattern && summary.includes(String(p.pattern).toLowerCase()));
-      if (!match) continue; // filter_events: only known bin types
-      const key = `${match.pattern}|${diff}`;
+      const rawSummary = String(ev.summary || '').trim();
+      const summary = rawSummary.toLowerCase();
+      let match = patterns.find((p) => p.pattern && summary.includes(String(p.pattern).toLowerCase()));
+      if (!match) {
+        if (/gelb|leichtverpack|wertstoff|grüner punkt|verpackung/.test(summary)) {
+          match = { pattern: rawSummary, color: 'amber', picture: '/local/custom-icons/trash-bins/yellow.png' };
+        } else if (/papier|pappe|karton|blau/.test(summary)) {
+          match = { pattern: rawSummary, color: 'blue', picture: '/local/custom-icons/trash-bins/blue.png' };
+        } else if (/bio|kompost|braun|grünschnitt|laub/.test(summary)) {
+          match = { pattern: rawSummary, color: 'brown', picture: '/local/custom-icons/trash-bins/brown.png' };
+        } else if (/rest|hausmüll|grau|schwarz/.test(summary)) {
+          match = { pattern: rawSummary, color: 'black', picture: '/local/custom-icons/trash-bins/black.png' };
+        } else {
+          continue;
+        }
+      }
+      const label = rawSummary || match.pattern || 'Müllabfuhr';
+      const key = `${match.pattern || label}|${diff}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      entries.push({ match, diff });
+      entries.push({ match, label, diff });
     }
     entries.sort((a, b) => a.diff - b.diff);
-    this.bins.replaceChildren(...entries.map(({ match, diff }) => {
-      const color = resolveColor(match.color) || match.color || 'var(--cd-secondary)';
+    this.bins.replaceChildren(...entries.map(({ match, label, diff }) => {
+      // Bioabfall historically used 'lime' for flower icon; map to brown/green for 3D bin if brown.png is used
+      let cName = match.color;
+      if (cName === 'lime' && String(match.pattern || '').toLowerCase().includes('bio')) cName = 'brown';
+      const color = resolveColor(cName) || cName || '#64748b';
       const when = diff === 0 ? 'Heute' : diff === 1 ? 'Morgen' : `In ${diff} Tagen`;
       const fallback = renderTrashBin(color, 38);
       const visual = match.picture
-        ? h('img', { src: match.picture, alt: match.pattern, onError: (e) => e.target.replaceWith(fallback) })
+        ? h('img', { src: match.picture, alt: label, onError: (e) => e.target.replaceWith(fallback) })
         : fallback;
       return h('div', { class: 'bin' },
         h('div', { class: 'visual' }, visual),
         h('div', { class: 'b-info' },
-          h('div', { class: 'bin-label' }, match.pattern || ''),
+          h('div', { class: 'bin-label', title: label }, label),
           h('div', { class: `when${diff === 0 ? ' today' : diff === 1 ? ' tomorrow' : ''}` }, when)));
     }));
     this.el.hidden = entries.length === 0;

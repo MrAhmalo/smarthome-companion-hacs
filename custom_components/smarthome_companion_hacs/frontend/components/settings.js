@@ -103,7 +103,7 @@ export class Settings {
 
   // ═══════════ Field builders ═══════════
   _field(label, input, cls = '') {
-    return h('label', { class: `field ${cls}` }, label, input);
+    return h('div', { class: `field ${cls}`.trim() }, h('span', { class: 'field-label' }, label), input);
   }
 
   _text(obj, key, label, { placeholder = '', list = '', type = 'text' } = {}) {

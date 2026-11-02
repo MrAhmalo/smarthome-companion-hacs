@@ -17,7 +17,7 @@ export class ColorPicker {
     this.isOpen = false;
 
     this._onDocClick = (e) => {
-      if (!this.el.contains(e.target)) this._close();
+      if (!e.composedPath().includes(this.el)) this._close();
     };
 
     this._build();
@@ -72,7 +72,7 @@ export class ColorPicker {
     this.dropdown.hidden = false;
     this.box.dataset.open = '';
     this._renderOptions();
-    this.el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    
     setTimeout(() => document.addEventListener('pointerdown', this._onDocClick), 20);
   }
 

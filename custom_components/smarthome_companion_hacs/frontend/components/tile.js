@@ -222,8 +222,10 @@ export class Tile {
     const presets = this.ctx.presets || [];
     const showSlider = active && brightness;
     const showSwatches = active && color && presets.length > 0;
-    this.feature.hidden = !(showSlider || showSwatches);
-    if (this.feature.hidden) return;
+    const hasFeature = showSlider || showSwatches;
+    this.feature.hidden = !hasFeature;
+    this.el.classList.toggle('wide', hasFeature);
+    if (!hasFeature) return;
     this.slider.hidden = !showSlider;
     this.swatches.hidden = !showSwatches;
     if (showSwatches) this._renderPresets();

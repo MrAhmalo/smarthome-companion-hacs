@@ -1,59 +1,39 @@
+// Rich Icon Picker for Companion Dashboard (Shadow-DOM safe, instant visual search).
 import { h, icon, POPULAR_ICONS } from '../lib/util.js';
 
 export class IconPicker {
-  /**
-   * @param {{
-   *   value: string,
-   *   onChange: (iconName: string) => void,
-   *   placeholder?: string,
-   * }} opts
-   */
   constructor({ hass, value = '', onChange, placeholder = 'mdi:...' }) {
     this.hass = hass;
     this.value = value || '';
     this.onChange = onChange;
     this.placeholder = placeholder;
-
-    // Use native Home Assistant <ha-icon-picker> when running inside HA
-    if (typeof customElements !== 'undefined' && customElements.get('ha-icon-picker')) {
-      const el = document.createElement('ha-icon-picker');
-      if (hass) el.hass = hass;
-      el.value = this.value;
-      el.label = placeholder || 'Icon';
-      el.style.width = '100%';
-      el.style.display = 'block';
-      el.addEventListener('value-changed', (e) => {
-        const val = e.detail?.value ?? '';
-        this.value = val;
-        this.onChange?.(val);
-      });
-      this.el = el;
-      return;
-    }
-
     this.isOpen = false;
     this.searchQuery = '';
 
     this._onDocClick = (e) => {
-      if (!this.el.contains(e.target)) this._close();
+      if (!e.composedPath().includes(this.el)) this._close();
     };
 
-    this._buildCustom();
+    this._build();
   }
 
-  _buildCustom() {
-    this.previewIcon = h('div', { class: 'ip-preview' });
+  _build() {
+    this.previewIcon = h('div', { class: 'ip-preview', onClick: (e) => { e.stopPropagation(); this._toggle(); } });
     this.textInput = h('input', {
       type: 'text',
       class: 'ip-input',
       value: this.value,
       placeholder: this.placeholder,
       onInput: (e) => {
-        this.value = e.target.value.trim();
+        const raw = e.target.value.trim();
+        this.value = raw;
+        this.searchQuery = raw.replace(/^mdi:/i, '').toLowerCase();
         this._updatePreview();
+        if (!this.isOpen) this._open(false);
+        else this._renderGrid();
         this.onChange?.(this.value);
       },
-      onFocus: () => this._open(),
+      onFocus: () => this._open(false),
     });
 
     this.toggleBtn = h('button', {
@@ -61,19 +41,17 @@ export class IconPicker {
       class: 'ip-toggle',
       'aria-label': 'Icon auswählen',
       onClick: (e) => { e.stopPropagation(); this._toggle(); },
-    }, icon('mdi:magnify'));
+    }, icon('mdi:chevron-down'));
 
     this.box = h('div', { class: 'ip-box' }, this.previewIcon, this.textInput, this.toggleBtn);
 
-    // Dropdown popover
     this.searchInput = h('input', {
       type: 'text',
       class: 'ip-search-input',
-      placeholder: 'Icon suchen (z. B. Lampe, Jalousie, TV)...',
+      placeholder: 'Icon suchen (z. B. Lampe, Jalousie, TV, Müll)...',
       onInput: (e) => {
         this.searchQuery = e.target.value.toLowerCase().trim();
         this._renderGrid();
-    this.el.scrollIntoView({ behavior: "smooth", block: "nearest" });
       },
     });
     this.searchRow = h('div', { class: 'ip-search-row' }, icon('mdi:magnify'), this.searchInput);
@@ -93,16 +71,16 @@ export class IconPicker {
   }
 
   _updatePreview() {
-    const ic = this.value || 'mdi:help-circle-outline';
+    const ic = this.value && this.value.includes(':') ? this.value : 'mdi:star-four-points-outline';
     this.previewIcon.replaceChildren(icon(ic));
   }
 
   _toggle() {
     if (this.isOpen) this._close();
-    else this._open();
+    else this._open(true);
   }
 
-  _open() {
+  _open(focusSearch = true) {
     if (this.isOpen) return;
     this.isOpen = true;
     this.dropdown.hidden = false;
@@ -110,11 +88,10 @@ export class IconPicker {
     this.searchQuery = '';
     this.searchInput.value = '';
     this._renderGrid();
-    this.el.scrollIntoView({ behavior: "smooth", block: "nearest" });
     setTimeout(() => {
-      this.searchInput.focus();
+      if (focusSearch) this.searchInput.focus();
       document.addEventListener('pointerdown', this._onDocClick);
-    }, 20);
+    }, 10);
   }
 
   _close() {
@@ -127,30 +104,38 @@ export class IconPicker {
 
   _renderGrid() {
     const q = this.searchQuery;
-    const filtered = POPULAR_ICONS.filter((item) => {
+    const filtered = POPULAR_ICONS.filter(([ic, label, tags]) => {
       if (!q) return true;
-      return item.icon.toLowerCase().includes(q)
-        || item.name.toLowerCase().includes(q)
-        || item.cat.toLowerCase().includes(q);
+      return ic.toLowerCase().includes(q) || label.toLowerCase().includes(q) || (tags && tags.toLowerCase().includes(q));
     });
 
-    if (!filtered.length) {
-      this.grid.replaceChildren(h('div', { class: 'ip-empty' },
-        h('div', {}, 'Kein passendes Vorschlags-Icon gefunden'),
-        h('div', { class: 'hint', style: { fontSize: '11px', marginTop: '4px' } }, `„${this.value || q}“ kann direkt im Textfeld eingetragen werden.`)));
-      return;
-    }
-
-    this.grid.replaceChildren(...filtered.map((item) => {
-      const isSel = this.value === item.icon;
+    const items = filtered.map(([ic, label]) => {
+      const isSel = this.value === ic;
       return h('button', {
         type: 'button',
         class: `ip-chip${isSel ? ' active' : ''}`,
-        title: `${item.name} (${item.icon})`,
-        onClick: (e) => { e.stopPropagation(); this._setValue(item.icon); },
-      },
-      icon(item.icon),
-      h('span', { class: 'ip-chip-name' }, item.name));
-    }));
+        title: `${label} (${ic})`,
+        onClick: (e) => { e.stopPropagation(); this._setValue(ic); },
+      }, icon(ic), h('span', { class: 'ip-chip-name' }, label));
+    });
+
+    if (q && !q.startsWith('mdi:')) {
+      const customMdi = `mdi:${q.replace(/\s+/g, '-')}`;
+      if (!filtered.some(([ic]) => ic === customMdi)) {
+        items.unshift(h('button', {
+          type: 'button',
+          class: 'ip-chip',
+          title: customMdi,
+          onClick: (e) => { e.stopPropagation(); this._setValue(customMdi); },
+        }, icon(customMdi), h('span', { class: 'ip-chip-name' }, customMdi)));
+      }
+    }
+
+    if (!items.length) {
+      this.grid.replaceChildren(h('div', { class: 'ip-empty' }, 'Kein Icon gefunden – direkt „mdi:name“ oben eingeben'));
+      return;
+    }
+
+    this.grid.replaceChildren(...items);
   }
 }
