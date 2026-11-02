@@ -27,14 +27,34 @@ export class EntityPicker {
     this.searchQuery = '';
     this.selectedDomain = 'all';
 
+    // If running in Home Assistant and <ha-entity-picker> is defined, use the native component
+    if (typeof customElements !== 'undefined' && customElements.get('ha-entity-picker')) {
+      const el = document.createElement('ha-entity-picker');
+      el.hass = hass;
+      el.value = this.value;
+      el.label = placeholder;
+      if (this.domains) el.includeDomains = this.domains;
+      if (this.filter && typeof this.filter === 'function') el.entityFilter = this.filter;
+      el.allowCustomEntity = true;
+      el.style.width = '100%';
+      el.style.display = 'block';
+      el.addEventListener('value-changed', (e) => {
+        const val = e.detail?.value ?? '';
+        this.value = val;
+        this.onChange?.(val);
+      });
+      this.el = el;
+      return;
+    }
+
     this._onDocClick = (e) => {
       if (!this.el.contains(e.target)) this._close();
     };
 
-    this._build();
+    this._buildCustom();
   }
 
-  _build() {
+  _buildCustom() {
     this.boxIcon = h('div', { class: 'ep-icon' });
     this.boxTitle = h('div', { class: 'ep-title' });
     this.boxSub = h('div', { class: 'ep-sub' });

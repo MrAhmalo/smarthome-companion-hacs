@@ -182,15 +182,16 @@ export class TrashCard {
     entries.sort((a, b) => a.diff - b.diff);
     this.bins.replaceChildren(...entries.map(({ match, diff }) => {
       const color = resolveColor(match.color) || match.color || 'var(--cd-secondary)';
-      const when = diff === 0 ? 'Heute' : diff === 1 ? 'Morgen' : `in ${diff} T`;
-      const fallback = renderTrashBin(color, 42);
+      const when = diff === 0 ? 'Heute' : diff === 1 ? 'Morgen' : `In ${diff} Tagen`;
+      const fallback = renderTrashBin(color, 38);
       const visual = match.picture
         ? h('img', { src: match.picture, alt: match.pattern, onError: (e) => e.target.replaceWith(fallback) })
         : fallback;
       return h('div', { class: 'bin' },
-        visual,
-        h('span', { class: `when${diff === 0 ? ' today' : diff === 1 ? ' tomorrow' : ''}` }, when),
-        h('span', { class: 'bin-label' }, match.pattern || ''));
+        h('div', { class: 'visual' }, visual),
+        h('div', { class: 'b-info' },
+          h('div', { class: 'bin-label' }, match.pattern || ''),
+          h('div', { class: `when${diff === 0 ? ' today' : diff === 1 ? ' tomorrow' : ''}` }, when)));
     }));
     this.el.hidden = entries.length === 0;
     this.el.style.display = entries.length === 0 ? 'none' : '';

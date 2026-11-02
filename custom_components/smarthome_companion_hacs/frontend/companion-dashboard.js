@@ -126,7 +126,7 @@ class CompanionDashboardPanel extends HTMLElement {
 
     const hasSide = !!(config.warning?.entity_id || config.trash?.calendar_entities?.length
       || config.persons?.length || config.announce?.entity_id);
-    const infoCard = h('div', { class: 'card stack' },
+    const infoCard = h('div', { class: 'card info-card' },
       this._trash.el,
       this._persons.el,
       this._announce.el);

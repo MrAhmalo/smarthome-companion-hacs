@@ -125,10 +125,10 @@ async def _async_default_config(hass) -> dict:
             "calendar_entities": ["calendar.muellplan"],
             "next_days": 2,
             "patterns": [
-                {"pattern": "Bioabfall", "icon": "mdi:flower", "color": "lime"},
-                {"pattern": "Papier", "icon": "mdi:newspaper", "color": "blue"},
-                {"pattern": "Leichtverpackungen", "icon": "mdi:recycle-variant", "color": "amber"},
-                {"pattern": "Restabfall", "icon": "mdi:trash-can-outline", "color": "grey"},
+                {"pattern": "Bioabfall", "icon": "mdi:flower", "color": "lime", "picture": "/local/custom-icons/trash-bins/brown.png"},
+                {"pattern": "Papier", "icon": "mdi:newspaper", "color": "blue", "picture": "/local/custom-icons/trash-bins/blue.png"},
+                {"pattern": "Leichtverpackungen", "icon": "mdi:recycle-variant", "color": "amber", "picture": "/local/custom-icons/trash-bins/yellow.png"},
+                {"pattern": "Restabfall", "icon": "mdi:trash-can-outline", "color": "grey", "picture": "/local/custom-icons/trash-bins/black.png"},
             ],
         },
         "persons": [
@@ -361,6 +361,37 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
         )
         add_tile(extra.get("area_id") or area_id, tile)
 
+    # ── Auto-discover controllable entities in HA areas so no room is missing ──
+    _CONTROLLABLE = {"light", "switch", "cover", "media_player", "climate", "fan", "valve"}
+    _DOM_CAT = {
+        "light": "leuchte",
+        "switch": "schalter",
+        "cover": "jalousie",
+        "media_player": "fernseher",
+        "climate": "klima",
+        "fan": "schalter",
+        "valve": "wasserventil",
+    }
+    for entry in ent_reg.entities.values():
+        if entry.disabled_by or entry.hidden_by:
+            continue
+        if entry.domain not in _CONTROLLABLE:
+            continue
+        if entry.entity_id in seen_entities:
+            continue
+        area_id = entry.area_id
+        dev = dev_reg.async_get(entry.device_id) if entry.device_id else None
+        if not area_id and dev:
+            area_id = dev.area_id
+        if not area_id:
+            continue
+        name = entry.name or entry.original_name or (dev.name_by_user if dev else None) or (dev.name if dev else None) or entry.entity_id
+        cat = _DOM_CAT.get(entry.domain, "schalter")
+        area_id, tile = make_tile(
+            f"auto:{entry.entity_id}", entry, entry.entity_id, name, cat, entry.icon, dev,
+        )
+        add_tile(area_id, tile)
+
     # ── Area sensors / alerts straight from the registries ──
     sensors: dict[str, dict[str, list[str]]] = {}
     for entry in ent_reg.entities.values():
@@ -383,14 +414,14 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
 
     # ── Assemble rooms ──
     order = [a for a in config.get("room_order", []) if isinstance(a, str)]
-    all_ids = set(tiles_by_area)
+    all_ids = set(tiles_by_area) | {a for a in areas if a in sensors} | {a for a in order if a in areas}
     ordered = [a for a in order if a in all_ids]
     rest = sorted(
         (a for a in all_ids if a not in order and a != NO_AREA_ID),
         key=lambda a: (areas[a].name.lower() if a in areas else a),
     )
     ordered += rest
-    if NO_AREA_ID in all_ids:
+    if NO_AREA_ID in all_ids and NO_AREA_ID not in ordered:
         ordered.append(NO_AREA_ID)
 
     rooms = []

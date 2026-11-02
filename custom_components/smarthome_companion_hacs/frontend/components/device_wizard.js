@@ -172,14 +172,31 @@ export class DeviceWizard {
 
     const filtered = this.devices.filter((d) => {
       if (d.disabled_by) return false;
+      if (d.entry_type === 'service') return false;
+
+      const devEntities = this.entities.filter((e) => e.device_id === d.id && !e.disabled_by);
+      const controllable = devEntities.filter((e) => CONTROLLABLE_DOMAINS.has(domainOf(e.entity_id)));
+      const sensors = devEntities.filter((e) => ['sensor', 'binary_sensor'].includes(domainOf(e.entity_id)));
+      if (!controllable.length && !sensors.length) return false;
+
+      const name = (d.name_by_user || d.name || '').toLowerCase();
+      const mfg = (d.manufacturer || '').toLowerCase();
+      const model = (d.model || '').toLowerCase();
+      const isSystem = (
+        name.includes('hacs') || mfg.includes('hacs') ||
+        name.includes('forecast') || mfg.includes('met.no') ||
+        name.includes('bluetooth') || mfg.includes('bluetooth') || name.startsWith('hci') ||
+        name.includes('plugin') || model.includes('plugin') ||
+        mfg.includes('integration') || model.includes('integration') ||
+        name === 'sun'
+      );
+      if (isSystem && !controllable.length) return false;
+
       const isConfigured = !!this.configuredDevices[d.id];
       if (this.statusFilter === 'unconfigured' && isConfigured) return false;
       if (this.statusFilter === 'configured' && !isConfigured) return false;
 
       if (!q) return true;
-      const name = (d.name_by_user || d.name || '').toLowerCase();
-      const mfg = (d.manufacturer || '').toLowerCase();
-      const model = (d.model || '').toLowerCase();
       const area = (areaMap.get(d.area_id) || '').toLowerCase();
       return name.includes(q) || mfg.includes(q) || model.includes(q) || area.includes(q);
     });

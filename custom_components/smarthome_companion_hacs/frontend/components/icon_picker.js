@@ -8,10 +8,29 @@ export class IconPicker {
    *   placeholder?: string,
    * }} opts
    */
-  constructor({ value = '', onChange, placeholder = 'mdi:...' }) {
+  constructor({ hass, value = '', onChange, placeholder = 'mdi:...' }) {
+    this.hass = hass;
     this.value = value || '';
     this.onChange = onChange;
     this.placeholder = placeholder;
+
+    // Use native Home Assistant <ha-icon-picker> when running inside HA
+    if (typeof customElements !== 'undefined' && customElements.get('ha-icon-picker')) {
+      const el = document.createElement('ha-icon-picker');
+      if (hass) el.hass = hass;
+      el.value = this.value;
+      el.label = placeholder || 'Icon';
+      el.style.width = '100%';
+      el.style.display = 'block';
+      el.addEventListener('value-changed', (e) => {
+        const val = e.detail?.value ?? '';
+        this.value = val;
+        this.onChange?.(val);
+      });
+      this.el = el;
+      return;
+    }
+
     this.isOpen = false;
     this.searchQuery = '';
 
@@ -19,10 +38,10 @@ export class IconPicker {
       if (!this.el.contains(e.target)) this._close();
     };
 
-    this._build();
+    this._buildCustom();
   }
 
-  _build() {
+  _buildCustom() {
     this.previewIcon = h('div', { class: 'ip-preview' });
     this.textInput = h('input', {
       type: 'text',

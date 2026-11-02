@@ -181,6 +181,7 @@ export class Settings {
 
   _icon(obj, key, label, placeholder = 'mdi:...') {
     const picker = new IconPicker({
+      hass: this.hass,
       value: obj[key] || '',
       placeholder,
       onChange: (val) => {
