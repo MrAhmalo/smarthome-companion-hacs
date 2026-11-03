@@ -290,3 +290,4 @@ export class RoomDetailView {
     this.metaEl.replaceChildren(...chips);
   }
 }
+
