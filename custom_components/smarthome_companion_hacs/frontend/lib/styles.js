@@ -98,7 +98,6 @@ button { font: inherit; color: inherit; }
 .room[data-open] .room-body { grid-template-rows: 1fr; }
 .room-body-inner { overflow: hidden; min-height: 0; }
 .tile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 8px 10px; }
-@media (max-width: 420px) { .tile-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* ── Tiles ── */
 .tile {
@@ -107,7 +106,6 @@ button { font: inherit; color: inherit; }
   background: var(--cd-tile-bg); transition: background .2s, opacity .2s;
 }
 .tile.wide { grid-column: span 2; }
-@media (max-width: 420px) { .tile.wide { grid-column: span 1; } }
 .tile[data-active="false"] { --tile-color: var(--cd-secondary); }
 .tile[data-unavailable] { opacity: .5; }
 .tile-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -226,6 +224,30 @@ input[type=range].slider::-moz-range-thumb {
 .bin .when.tomorrow { color: #f59e0b; font-weight: 600; }
 .bin-label { font-size: 13px; font-weight: 600; color: var(--primary-text-color, #fff); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trash-empty { font-size: 12px; color: var(--cd-secondary); padding: 6px; }
+
+/* ── Standalone Trash Card (Horizontal Layout) ── */
+.trash-card { padding: 10px 14px; }
+.trash-card .bins {
+  display: flex; flex-direction: row; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%; min-width: 0;
+}
+.trash-card .bin {
+  display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: var(--cd-tile-radius, 12px);
+  background: var(--cd-tile-bg); min-height: 48px; transition: transform .15s, background .15s;
+  flex: 1 1 140px; min-width: 120px;
+}
+.trash-card .bin:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--primary-text-color, #fff) 10%, transparent); }
+
+/* ── Standalone Announce Card ── */
+.announce-card { padding: 0; overflow: hidden; cursor: pointer; }
+.announce-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; transition: background .15s; }
+.announce-row:hover { background: color-mix(in srgb, var(--primary-text-color, #fff) 6%, transparent); }
+.announce-icon {
+  width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  color: var(--cd-accent); background: color-mix(in srgb, var(--cd-accent) 18%, transparent);
+}
+.announce-icon ha-icon { --mdc-icon-size: 20px; }
+.announce-name { flex: 1; font-weight: 600; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.announce-row .chevron { color: var(--cd-secondary); --mdc-icon-size: 20px; flex: none; }
 .person {
   display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px; border-radius: 14px; background: var(--cd-tile-bg);
 }
@@ -518,7 +540,7 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 }
 .room-detail-head {
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
-  padding: 12px 18px; border-radius: var(--cd-radius); background: var(--cd-card);
+  padding: 16px; border-radius: var(--cd-radius); background: var(--cd-card);
   box-shadow: 0 4px 20px rgba(0,0,0,.25);
 }
 .room-detail-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -545,10 +567,11 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 
 .room-detail-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .room-detail-body {
-  display: grid; gap: 14px; padding: 18px;
+  display: grid; gap: 14px; padding: 16px;
   border-radius: var(--cd-radius); background: var(--cd-card);
   box-shadow: 0 2px 14px rgba(0,0,0,.25);
 }
+.room-detail-body .tile-grid { padding: 0; }
 .cover-detail-list { display: grid; gap: 10px; }
 
 .cover-detail-row {

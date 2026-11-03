@@ -51,11 +51,6 @@ export class RoomDetailView {
     const { spec } = this;
 
     // ── Header Left ──
-    const backBtn = h('button', {
-      class: 'room-detail-back', 'aria-label': 'Zurück',
-      onClick: () => this.onBack?.(),
-    }, icon('mdi:arrow-left'), 'Zurück');
-
     const titleWrap = h('div', { class: 'room-detail-title-wrap' },
       h('div', { class: 'icon' }, icon(spec.icon || 'mdi:home')),
       h('h2', { class: 'room-detail-title' }, spec.name));
@@ -88,7 +83,7 @@ export class RoomDetailView {
     this.actionsEl = h('div', { class: 'room-detail-actions' }, ...this.groups.map((g) => g.btn));
 
     const head = h('div', { class: 'room-detail-head' },
-      h('div', { class: 'room-detail-left' }, backBtn, titleWrap, this.metaEl),
+      h('div', { class: 'room-detail-left' }, titleWrap, this.metaEl),
       this.actionsEl);
 
     // ── Body: Unified Device Container ──

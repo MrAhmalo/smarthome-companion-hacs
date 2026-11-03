@@ -131,7 +131,7 @@ export class TrashCard {
   constructor(cfg) {
     this.cfg = cfg || {};
     this.bins = h('div', { class: 'bins' });
-    this.el = h('div', { class: 'stack-row', hidden: true }, this.bins);
+    this.el = h('div', { class: 'card trash-card', hidden: true }, this.bins);
     this._day = '';
     this._lastLoad = 0;
   }
@@ -221,7 +221,7 @@ export class PersonCards {
     this.user = user;
     this.persons = (persons || []).filter((p) => p && p.entity_id && allowed(p.users, user?.id));
     this.itemsWrap = h('div', { class: 'bins' });
-    this.el = h('div', { class: 'stack-row', hidden: true }, this.itemsWrap);
+    this.el = h('div', { class: 'card persons-card', hidden: true }, this.itemsWrap);
     this.items = this.persons.map((p) => ({
       cfg: p,
       el: h('div', { class: 'person', hidden: true, onClick: () => moreInfo(this.el, p.entity_id) }),
@@ -253,10 +253,11 @@ export class AnnounceCard {
   constructor(cfg) {
     this.cfg = cfg || {};
     this.chips = h('div', { class: 'chips', hidden: true });
-    this.row = h('div', { class: 'full-tile', onClick: () => moreInfo(this.el, this.cfg.entity_id) },
-      h('div', { class: 'tile-icon', style: { '--tile-color': 'var(--cd-accent)' } }, icon(this.cfg.icon || 'mdi:bullhorn')),
-      h('div', { class: 'tile-name' }, this.cfg.name || 'Ankündigung'));
-    this.el = h('div', { hidden: !this.cfg.entity_id, style: this.cfg.entity_id ? {} : { display: 'none' } }, this.row, this.chips);
+    this.row = h('div', { class: 'announce-row', onClick: () => moreInfo(this.el, this.cfg.entity_id) },
+      h('div', { class: 'announce-icon' }, icon(this.cfg.icon || 'mdi:bullhorn')),
+      h('div', { class: 'announce-name' }, this.cfg.name || 'Ankündigung'),
+      icon('mdi:chevron-right', 'chevron'));
+    this.el = h('div', { class: 'card announce-card', hidden: !this.cfg.entity_id, style: this.cfg.entity_id ? {} : { display: 'none' } }, this.row, this.chips);
   }
 
   update(hass) {

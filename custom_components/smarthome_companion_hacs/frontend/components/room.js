@@ -112,7 +112,7 @@ export class GroupedCoverTile {
     this.btnDetail = h('button', {
       class: 'mini-btn', 'aria-label': 'Details', title: 'Einzelne Rollläden anzeigen',
       onClick: (e) => { e.stopPropagation(); this.ctx.onOpenRoom?.(this.roomSpec.area_id); },
-    }, icon('mdi:tune-vertical'));
+    }, icon('mdi:arrow-right'));
 
     this.btns = h('div', { class: 'tile-btns' }, this.btnUp, this.btnStop, this.btnDown, this.btnDetail);
 
@@ -220,11 +220,11 @@ export class Room {
         return { ...g, btn, countEl };
       });
 
-    // Room detail view button
+    // Room detail view button (sub-menu navigation)
     this.detailBtn = h('button', {
       class: 'ctrl-btn', 'aria-label': `${spec.name} Details`, title: `${spec.name} öffnen`,
       onClick: (e) => { e.stopPropagation(); this.ctx.onOpenRoom?.(this.spec.area_id); },
-    }, icon('mdi:tune-vertical'));
+    }, icon('mdi:arrow-right'));
 
     this.metaEl = h('div', { class: 'room-meta', hidden: true });
     this.controlsEl = h('div', { class: 'room-controls' }, ...this.groups.map((g) => g.btn), this.detailBtn);

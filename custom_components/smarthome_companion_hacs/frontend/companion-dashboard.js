@@ -64,6 +64,10 @@ class CompanionDashboardPanel extends HTMLElement {
       class: 'icon-btn', 'aria-label': 'Menü', hidden: !this._narrow,
       onClick: () => this.dispatchEvent(new CustomEvent('hass-toggle-menu', { bubbles: true, composed: true })),
     }, icon('mdi:menu'));
+    this._backBtn = h('button', {
+      class: 'icon-btn back-btn', 'aria-label': 'Zurück zum Dashboard', title: 'Zurück', hidden: true,
+      onClick: () => this._closeRoom(),
+    }, icon('mdi:arrow-left'));
     this._wizardBtn = h('button', {
       class: 'icon-btn', 'aria-label': 'Gerät einrichten', title: 'Gerät einrichten', hidden: true,
       onClick: () => this._openWizard(),
@@ -74,7 +78,7 @@ class CompanionDashboardPanel extends HTMLElement {
     }, icon('mdi:cog-outline'));
     this._content = h('div');
     this._page = h('div', { class: 'page' },
-      h('div', { class: 'toolbar' }, this._menuBtn, h('div', { class: 'spacer' }), this._wizardBtn, this._settingsBtn),
+      h('div', { class: 'toolbar' }, this._menuBtn, this._backBtn, h('div', { class: 'spacer' }), this._wizardBtn, this._settingsBtn),
       this._content);
     this.shadowRoot.replaceChildren(style, this._page);
 
@@ -123,6 +127,8 @@ class CompanionDashboardPanel extends HTMLElement {
       const roomSpec = layout.rooms.find((r) => r.area_id === this._activeRoomId);
       if (roomSpec) {
         this._ro?.disconnect();
+        this._backBtn.hidden = false;
+        this._menuBtn.hidden = true;
         this._roomDetail = new RoomDetailView(roomSpec, ctx, () => this._closeRoom());
         this._nav = new NavBar(config.nav);
         this._components = [this._roomDetail];
@@ -132,6 +138,9 @@ class CompanionDashboardPanel extends HTMLElement {
       }
       this._activeRoomId = null;
     }
+
+    this._backBtn.hidden = true;
+    this._menuBtn.hidden = !this._narrow;
 
     const scroll = this.scrollTop;
 
@@ -148,10 +157,6 @@ class CompanionDashboardPanel extends HTMLElement {
 
     const hasSide = !!(config.warning?.entity_id || config.trash?.calendar_entities?.length
       || config.persons?.length || config.announce?.entity_id);
-    const infoRight = h('div', { class: 'info-col' }, this._persons.el, this._announce.el);
-    const infoCard = h('div', { class: 'card info-card' },
-      this._trash.el,
-      infoRight);
 
     // Rooms (independent masonry columns layout)
     this._rooms = layout.rooms.map((r) => new Room(r, ctx));
@@ -167,7 +172,7 @@ class CompanionDashboardPanel extends HTMLElement {
       this._badges.el,
       this._smoke.el,
       h('div', { class: `layout${hasSide ? ' has-side' : ''}` },
-        hasSide ? h('div', { class: 'side' }, this._warning.el, infoCard) : null,
+        hasSide ? h('div', { class: 'side' }, this._warning.el, this._trash.el, this._persons.el, this._announce.el) : null,
         h('div', { class: 'main' }, roomsEl)),
       this._nav.el);
 
@@ -257,6 +262,8 @@ class CompanionDashboardPanel extends HTMLElement {
 
   _closeRoom() {
     this._activeRoomId = null;
+    this._backBtn.hidden = true;
+    this._menuBtn.hidden = !this._narrow;
     this._render();
   }
 
