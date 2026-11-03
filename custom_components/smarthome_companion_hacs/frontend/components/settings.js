@@ -2,6 +2,7 @@ import { h, icon, COLOR_NAMES, resolveColor, renderTrashBin } from '../lib/util.
 import { EntityPicker } from './entity_picker.js';
 import { IconPicker } from './icon_picker.js';
 import { ColorPicker } from './color_picker.js';
+import { CustomDropdown } from './custom_dropdown.js';
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 
@@ -134,9 +135,13 @@ export class Settings {
   }
 
   _select(obj, key, label, options, fallback = options[0][0]) {
-    const select = h('select', { onChange: (e) => { obj[key] = e.target.value; } },
-      options.map(([v, l]) => h('option', { value: v, selected: (obj[key] ?? fallback) === v }, l)));
-    return this._field(label, select);
+    const val = obj[key] ?? fallback;
+    const cdd = new CustomDropdown({
+      options: options.map(([v, l]) => ({ value: v, label: l })),
+      value: val,
+      onChange: (v) => { obj[key] = v; },
+    });
+    return this._field(label, cdd.el);
   }
 
   _check(obj, key, label) {

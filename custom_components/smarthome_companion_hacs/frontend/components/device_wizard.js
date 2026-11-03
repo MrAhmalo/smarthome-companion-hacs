@@ -1,18 +1,19 @@
 import { h, icon, domainOf } from '../lib/util.js';
 import { EntityPicker } from './entity_picker.js';
+import { CustomDropdown } from './custom_dropdown.js';
 
 export const DEVICE_CATEGORIES = [
-  { id: 'leuchte', name: 'Leuchte', icon: 'mdi:lightbulb', color: '#f59e0b', desc: 'Lampen, Spots & LED-Streifen' },
-  { id: 'steckdose', name: 'Steckdose', icon: 'mdi:power-socket-eu', color: '#10b981', desc: 'Zwischenstecker & Dosen' },
-  { id: 'schalter', name: 'Gerät / Relais', icon: 'mdi:power-plug', color: '#3b82f6', desc: 'Allgemeine Schalter' },
-  { id: 'jalousie', name: 'Jalousie', icon: 'mdi:window-shutter', color: '#6366f1', desc: 'Rollläden & Markisen' },
-  { id: 'wasserventil', name: 'Wasserventil', icon: 'mdi:water-pump', color: '#06b6d4', desc: 'Bewässerungsventile' },
-  { id: 'pumpe', name: 'Pumpe', icon: 'mdi:pump', color: '#0ea5e9', desc: 'Garten- & Wasserpumpen' },
-  { id: 'klima', name: 'Klima', icon: 'mdi:thermometer', color: '#ef4444', desc: 'Thermostate & Klima' },
-  { id: 'fernseher', name: 'Fernseher', icon: 'mdi:television', color: '#8b5cf6', desc: 'TVs & Mediaplayer' },
-  { id: 'bewegungsmelder', name: 'Bewegungsmelder', icon: 'mdi:motion-sensor', color: '#f43f5e', desc: 'Präsenz- & Bewegung' },
-  { id: 'bodenmessgeraet', name: 'Bodenmessgerät', icon: 'mdi:sprout', color: '#14b8a6', desc: 'Bodenfeuchte & Pflanzen' },
-  { id: 'raummessgeraet', name: 'Raummessgerät', icon: 'mdi:thermometer-lines', color: '#f43f5e', desc: 'Raumluft- & Temperatursensoren' },
+  { id: 'leuchte', name: 'Leuchte', icon: 'mdi:lightbulb', color: '#ffc107', desc: 'Lampen, Spots & LED-Streifen' },
+  { id: 'steckdose', name: 'Steckdose', icon: 'mdi:power-socket-eu', color: '#009688', desc: 'Zwischenstecker & Dosen' },
+  { id: 'schalter', name: 'Gerät / Relais', icon: 'mdi:power-plug', color: '#2196f3', desc: 'Allgemeine Schalter' },
+  { id: 'jalousie', name: 'Jalousie', icon: 'mdi:window-shutter', color: '#9c27b0', desc: 'Rollläden & Markisen' },
+  { id: 'wasserventil', name: 'Wasserventil', icon: 'mdi:water-pump', color: '#00bcd4', desc: 'Bewässerungsventile' },
+  { id: 'pumpe', name: 'Pumpe', icon: 'mdi:pump', color: '#03a9f4', desc: 'Garten- & Wasserpumpen' },
+  { id: 'klima', name: 'Klima', icon: 'mdi:thermometer', color: '#ff9800', desc: 'Thermostate & Klima' },
+  { id: 'fernseher', name: 'Fernseher', icon: 'mdi:television', color: '#03a9f4', desc: 'TVs & Mediaplayer' },
+  { id: 'bewegungsmelder', name: 'Bewegungsmelder', icon: 'mdi:motion-sensor', color: '#e91e63', desc: 'Präsenz- & Bewegung' },
+  { id: 'bodenmessgeraet', name: 'Bodenmessgerät', icon: 'mdi:sprout', color: '#4caf50', desc: 'Bodenfeuchte & Pflanzen' },
+  { id: 'raummessgeraet', name: 'Raummessgerät', icon: 'mdi:thermometer-lines', color: '#ff5722', desc: 'Raumluft- & Temperatursensoren' },
 ];
 
 const CONTROLLABLE_DOMAINS = new Set(['light', 'switch', 'cover', 'valve', 'climate', 'media_player', 'fan']);
@@ -49,6 +50,9 @@ export class DeviceWizard {
 
     this.searchQuery = '';
     this.statusFilter = 'unconfigured'; // 'unconfigured' | 'all' | 'configured'
+
+    this.isCelebration = false;
+    this._dropdowns = [];
 
     this._build();
     this._load();
@@ -91,12 +95,23 @@ export class DeviceWizard {
   }
 
   _render() {
+    this._cleanupDropdowns();
+    if (this.isCelebration) {
+      this._renderCelebration();
+      return;
+    }
     this._renderSteps();
     this._renderBody();
     this._renderFoot();
   }
 
+  _cleanupDropdowns() {
+    this._dropdowns.forEach((d) => d.destroy?.());
+    this._dropdowns = [];
+  }
+
   _renderSteps() {
+    this.stepBar.hidden = false;
     this.stepBar.replaceChildren(...this.steps.map((name, i) => {
       const el = h('div', { class: 'wizard-step' },
         h('div', {}, `${i + 1}. ${name}`),
@@ -108,6 +123,7 @@ export class DeviceWizard {
   }
 
   _renderFoot() {
+    this.foot.hidden = false;
     const isFirst = this.step === 0;
     const isLast = this.step === this.steps.length - 1;
 
@@ -140,6 +156,8 @@ export class DeviceWizard {
   _renderStep0() {
     const areaMap = new Map(this.areas.map((a) => [a.area_id, a.name]));
 
+    const hero = h('div', { class: 'win11-hero-badge' }, icon('mdi:devices'));
+
     const searchInput = h('input', {
       type: 'text', placeholder: 'Gerät suchen (Name, Hersteller, Modell, Raum)...', value: this.searchQuery,
       onInput: (e) => { this.searchQuery = e.target.value.toLowerCase().trim(); this._updateDeviceList(); },
@@ -160,7 +178,9 @@ export class DeviceWizard {
     this._updateDeviceList();
 
     this.body.replaceChildren(
-      h('div', { class: 'hint' }, '• Wähle das Gerät aus, das im Dashboard eingerichtet werden soll.\n• Mehrkanal-Geräte (z. B. Shelly 2PM) können separat benannt werden.'),
+      hero,
+      h('div', { class: 'hint', style: { textAlign: 'center', marginBottom: '12px' } },
+        '• Wähle das Gerät aus, das im Dashboard eingerichtet werden soll.\n• Mehrkanal-Geräte (z. B. Shelly 2PM) können separat benannt werden.'),
       searchWrap,
       filterChips,
       this.deviceListEl);
@@ -296,16 +316,23 @@ export class DeviceWizard {
 
   // ═══════════════ STEP 1: Details (Name, Kategorie, Raum) ═══════════════
   _renderStep1() {
-    const areaOptions = [['', 'Kein Raum'], ...this.areas.map((a) => [a.area_id, a.name])];
+    const areaOptions = [
+      { value: '', label: 'Kein Raum', icon: 'mdi:map-marker-off' },
+      ...this.areas.map((a) => ({ value: a.area_id, label: a.name, icon: 'mdi:map-marker' })),
+    ];
+
+    const areaDropdown = new CustomDropdown({
+      options: areaOptions,
+      value: this.selectedAreaId,
+      placeholder: 'Raum auswählen...',
+      onChange: (val) => { this.selectedAreaId = val; },
+    });
+    this._dropdowns.push(areaDropdown);
 
     const nameInput = h('input', {
       type: 'text', value: this.customName, placeholder: 'Gerätename...',
       onInput: (e) => { this.customName = e.target.value; },
     });
-
-    const areaSelect = h('select', {
-      onChange: (e) => { this.selectedAreaId = e.target.value; },
-    }, areaOptions.map(([id, label]) => h('option', { value: id, selected: id === this.selectedAreaId }, label)));
 
     const catGrid = h('div', { class: 'cat-grid' },
       ...DEVICE_CATEGORIES.map((c) => {
@@ -314,7 +341,6 @@ export class DeviceWizard {
           ...(this.selectedCategory === c.id ? { 'data-selected': '' } : {}),
           onClick: () => {
             this.selectedCategory = c.id;
-            // Also update category of channels that haven't been manually diverged
             this.channels.forEach((ch) => { ch.category = c.id; });
             this._renderStep1();
           },
@@ -324,11 +350,15 @@ export class DeviceWizard {
         return card;
       }));
 
+    const curCat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
+    const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color } }, icon(curCat.icon));
+
     this.body.replaceChildren(
+      hero,
       h('div', { class: 'section-title' }, 'Geräteinformationen'),
       h('div', { class: 'fields' },
         h('div', { class: 'field' }, 'Anzeigename im Dashboard', nameInput),
-        h('div', { class: 'field' }, 'Raum (Bereich)', areaSelect)),
+        h('div', { class: 'field' }, 'Raum (Bereich)', areaDropdown.el)),
       h('div', { class: 'section-title', style: { marginTop: '16px' } }, 'Haupt-Kategorie'),
       h('div', { class: 'hint' }, 'Bestimmt das Standard-Icon und das Verhalten im Dashboard:'),
       catGrid);
@@ -346,23 +376,23 @@ export class DeviceWizard {
       return;
     }
 
-    const catOptions = DEVICE_CATEGORIES.map((c) => [c.id, c.name]);
+    const catOptions = DEVICE_CATEGORIES.map((c) => ({
+      value: c.id, label: c.name, icon: c.icon, color: c.color,
+    }));
 
     const channelCards = this.channels.map((ch, idx) => {
-      const enabledCheck = h('input', {
-        type: 'checkbox', checked: ch.enabled,
-        onChange: (e) => { ch.enabled = e.target.checked; this._renderStep2(); },
-      });
-
       const nameInput = h('input', {
         type: 'text', value: ch.name, placeholder: `Kanal ${idx + 1} Name...`, disabled: !ch.enabled,
         onInput: (e) => { ch.name = e.target.value; },
       });
 
-      const catSelect = h('select', {
+      const catDropdown = new CustomDropdown({
+        options: catOptions,
+        value: ch.category,
         disabled: !ch.enabled,
-        onChange: (e) => { ch.category = e.target.value; },
-      }, catOptions.map(([id, label]) => h('option', { value: id, selected: id === ch.category }, label)));
+        onChange: (val) => { ch.category = val; },
+      });
+      this._dropdowns.push(catDropdown);
 
       const powerPicker = new EntityPicker({
         hass: this.hass,
@@ -372,55 +402,160 @@ export class DeviceWizard {
         onChange: (val) => { ch.power = val; },
       });
 
-      const simCheck = h('input', {
-        type: 'checkbox', checked: ch.presence_simulation, disabled: !ch.enabled,
-        onChange: (e) => { ch.presence_simulation = e.target.checked; },
+      // Anwesenheitssimulation interactive card
+      const simCard = h('div', {
+        class: `feature-card${ch.presence_simulation && ch.enabled ? ' active' : ''}`,
+        style: { '--feat-color': '#ba68c8' },
+        onClick: () => {
+          if (!ch.enabled) return;
+          ch.presence_simulation = !ch.presence_simulation;
+          simCard.toggleAttribute('data-active', ch.presence_simulation);
+          simCard.classList.toggle('active', ch.presence_simulation);
+        },
+      },
+      h('div', { class: 'feature-icon' }, icon('mdi:home-clock')),
+      h('div', { class: 'feature-info' },
+        h('div', { class: 'feature-title' }, 'Anwesenheitssimulation'),
+        h('div', { class: 'feature-desc' }, 'Zufälliges automatisches Schalten bei Abwesenheit zum Einbruchschutz')),
+      h('div', { class: 'switch-ui' }));
+
+      // Power measurement info badge
+      const isAutoPower = ch.power && ch.power === this.powerEntityId;
+      const powerBadge = isAutoPower
+        ? h('span', { class: 'badge-tag ok', style: { marginLeft: '8px' } }, icon('mdi:check-circle'), 'Automatisch erkannt')
+        : null;
+
+      const enabledToggle = h('div', {
+        class: 'switch-ui',
+        style: { cursor: 'pointer' },
+        onClick: (e) => {
+          e.stopPropagation();
+          ch.enabled = !ch.enabled;
+          this._renderStep2();
+        },
       });
 
-      return h('div', { class: 'channel-card', style: ch.enabled ? {} : { opacity: '0.6' } },
-        h('div', { class: 'channel-head' },
-          enabledCheck,
-          h('div', { class: 'ch-title' }, ch.name || ch.entity_id),
-          h('span', { class: 'badge-tag' }, ch.entity_id)),
+      const headCard = h('div', {
+        class: 'channel-head',
+        style: { cursor: 'pointer' },
+        onClick: () => { ch.enabled = !ch.enabled; this._renderStep2(); },
+      },
+      enabledToggle,
+      h('div', { class: 'ch-title' }, ch.name || ch.entity_id),
+      h('span', { class: 'badge-tag' }, ch.entity_id));
+
+      if (ch.enabled) headCard.setAttribute('data-active', '');
+
+      return h('div', { class: 'channel-card', style: ch.enabled ? {} : { opacity: '0.5' } },
+        headCard,
         h('div', { class: 'fields' },
           h('div', { class: 'field' }, 'Kanal-Name', nameInput),
-          h('div', { class: 'field' }, 'Kategorie', catSelect),
-          h('div', { class: 'field' }, 'Leistungssensor (Watt)', powerPicker.el),
-          h('label', { class: 'field check' }, simCheck, 'Anwesenheitssimulation')));
+          h('div', { class: 'field' }, 'Kategorie', catDropdown.el),
+          h('div', { class: 'field' },
+            h('div', { style: { display: 'flex', alignItems: 'center' } }, 'Leistungssensor (Watt)', powerBadge),
+            powerPicker.el)),
+        simCard);
     });
 
     this.body.replaceChildren(
       h('div', { class: 'hint' }, isMulti
         ? '• Mehrkanal-Gerät erkannt (z. B. Shelly 2PM).\n• Jeder Kanal kann aktiviert, benannt und einer Kategorie zugeordnet werden.'
-        : '• Einzel-Entität erkannt. Name und Leistungsmessung können angepasst werden.'),
+        : '• Einzel-Entität erkannt. Name, Leistungsmessung und Anwesenheitssimulation können angepasst werden.'),
       ...channelCards);
   }
 
   // ═══════════════ STEP 3: Zusammenfassung & Speichern ═══════════════
   _renderStep3() {
-    const areaName = this.areas.find((a) => a.area_id === this.selectedAreaId)?.name || 'Kein Raum';
+    const area = this.areas.find((a) => a.area_id === this.selectedAreaId);
+    const areaName = area?.name || 'Kein Raum';
     const cat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
     const activeChannels = this.channels.filter((c) => c.enabled);
 
-    const renameCheck = h('input', {
-      type: 'checkbox', checked: this.renameInHA,
-      onChange: (e) => { this.renameInHA = e.target.checked; },
-    });
+    const hero = h('div', { class: 'win11-hero-badge', style: { color: cat.color } }, icon('mdi:sparkles'));
 
-    const summaryCard = h('div', { class: 'row-card' },
-      h('div', { class: 'row-head' },
-        icon(cat.icon),
-        h('div', { class: 'row-title' }, this.customName || 'Gerät'),
-        h('span', { class: 'badge-tag area' }, areaName),
-        h('span', { class: 'badge-tag ok' }, cat.name)),
-      h('div', { class: 'hint' }, `• Modell: ${this.selectedDevice?.manufacturer || ''} ${this.selectedDevice?.model || ''}\n• ${activeChannels.length} aktive(r) Kanal/Kanäle:\n${activeChannels.map((c) => `  – ${c.name} (${c.entity_id})`).join('\n')}`));
+    // Live visual preview card
+    const hasSim = activeChannels.some((c) => c.presence_simulation);
+    const hasPower = activeChannels.some((c) => c.power);
+
+    const previewCard = h('div', {
+      class: 'win11-preview-card',
+      style: { '--preview-color': cat.color },
+    },
+    h('div', { class: 'win11-preview-icon' }, icon(cat.icon)),
+    h('div', { class: 'win11-preview-info' },
+      h('div', { class: 'win11-preview-name' }, this.customName || 'Mein Gerät'),
+      h('div', { class: 'win11-preview-meta' },
+        h('span', { class: 'badge-tag ok' }, icon(cat.icon), cat.name),
+        h('span', { class: 'badge-tag area' }, icon('mdi:map-marker'), areaName),
+        hasPower ? h('span', { class: 'badge-tag', style: { color: '#ffb74d' } }, icon('mdi:flash'), 'Leistungsmessung') : null,
+        hasSim ? h('span', { class: 'badge-tag', style: { color: '#ce93d8' } }, icon('mdi:home-clock'), 'Simulation') : null)));
+
+    // Home Assistant sync card
+    const syncCard = h('div', {
+      class: `feature-card${this.renameInHA ? ' active' : ''}`,
+      style: { '--feat-color': '#2196f3', marginTop: '14px' },
+      onClick: () => {
+        this.renameInHA = !this.renameInHA;
+        syncCard.toggleAttribute('data-active', this.renameInHA);
+        syncCard.classList.toggle('active', this.renameInHA);
+      },
+    },
+    h('div', { class: 'feature-icon' }, icon('mdi:home-assistant')),
+    h('div', { class: 'feature-info' },
+      h('div', { class: 'feature-title' }, 'In Home Assistant synchronisieren'),
+      h('div', { class: 'feature-desc' }, 'Aktualisiert Gerätename und Raumzuweisung direkt in den HA-Registries')),
+    h('div', { class: 'switch-ui' }));
+
+    // Channel details
+    const channelSummary = h('div', { class: 'row-card', style: { marginTop: '12px' } },
+      h('div', { style: { fontWeight: '600', fontSize: '13px' } }, `Kanäle (${activeChannels.length} aktiv)`),
+      h('div', { class: 'hint' }, activeChannels.map((c) => {
+        const cCat = DEVICE_CATEGORIES.find((catItem) => catItem.id === c.category);
+        return `• ${c.name} (${c.entity_id}) – ${cCat?.name || c.category}`;
+      }).join('\n')));
 
     this.body.replaceChildren(
-      h('div', { class: 'section-title' }, 'Zusammenfassung'),
-      summaryCard,
-      h('div', { style: { marginTop: '16px' } },
-        h('label', { class: 'field check' }, renameCheck, 'In Home Assistant umbenennen & Raum zuweisen'),
-        h('div', { class: 'hint', style: { marginLeft: '28px' } }, 'Aktualisiert die Gerätenamen und Entitäten direkt in den Home Assistant Registries.')));
+      hero,
+      h('div', { style: { textAlign: 'center', marginBottom: '14px' } },
+        h('h3', { style: { margin: '0 0 4px', fontSize: '18px', fontWeight: '700' } }, 'Fast fertig!'),
+        h('div', { class: 'hint' }, 'Überprüfe die Einstellungen vor dem Speichern im Dashboard:')),
+      previewCard,
+      syncCard,
+      channelSummary);
+  }
+
+  // ═══════════════ POST-SAVE CELEBRATION (Windows 11 Setup Vibe) ═══════════════
+  _renderCelebration() {
+    this.stepBar.hidden = true;
+    this.foot.hidden = true;
+
+    const cat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
+    const area = this.areas.find((a) => a.area_id === this.selectedAreaId);
+
+    const celebration = h('div', { class: 'win11-celebration' },
+      h('div', { class: 'win11-success-badge' }, icon('mdi:check')),
+      h('h2', { style: { margin: '8px 0 2px', fontSize: '22px', fontWeight: '700', color: 'var(--primary-text-color, #fff)' } }, 'Alles bereit!'),
+      h('div', { class: 'hint', style: { fontSize: '14px', maxWidth: '420px', lineHeight: '1.5' } },
+        `„${this.customName}“ wurde erfolgreich im Raum „${area?.name || 'Dashboard'}“ eingerichtet und steht ab sofort zur Verfügung.`),
+      h('div', { style: { display: 'flex', gap: '10px', marginTop: '16px' } },
+        h('button', {
+          class: 'btn secondary',
+          onClick: () => {
+            this.isCelebration = false;
+            this.step = 0;
+            this.selectedDevice = null;
+            this._render();
+          },
+        }, icon('mdi:plus'), 'Weiteres Gerät einrichten'),
+        h('button', {
+          class: 'btn primary',
+          onClick: () => {
+            this.onClose();
+            this.onSaved(null);
+          },
+        }, icon('mdi:view-dashboard'), 'Zum Dashboard')));
+
+    this.body.replaceChildren(celebration);
   }
 
   _renderBody() {
@@ -517,7 +652,9 @@ export class DeviceWizard {
 
       if (res?.save_failed) throw new Error('Speichern im Backend fehlgeschlagen');
 
-      this.onSaved(null);
+      this._saving = false;
+      this.isCelebration = true;
+      this._renderCelebration();
     } catch (err) {
       this._saving = false;
       this._renderFoot();

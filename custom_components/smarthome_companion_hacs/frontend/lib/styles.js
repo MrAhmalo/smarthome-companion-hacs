@@ -50,8 +50,13 @@ button { font: inherit; color: inherit; }
   .layout.has-side { grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); }
 }
 .side, .main { display: grid; gap: 12px; min-width: 0; align-content: start; }
-.rooms { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr)); align-items: start; }
-.room-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.rooms {
+  display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start;
+}
+.room-col {
+  flex: 1 1 360px; max-width: 440px; min-width: min(100%, 320px);
+  display: flex; flex-direction: column; gap: 12px;
+}
 
 /* ── Cards ── */
 .card { background: var(--cd-card); border-radius: var(--cd-radius); overflow: hidden; }
@@ -549,5 +554,137 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   --tile-color: #9c27b0;
   height: 24px;
 }
+
+/* ── Custom Dropdown (No native browser <select>) ── */
+.custom-dropdown { position: relative; width: 100%; font-size: 13px; }
+.cdd-box {
+  display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 4px 12px;
+  border-radius: 10px; border: 1px solid rgba(128,128,128,.3); background: var(--cd-card);
+  cursor: pointer; transition: border-color .2s, box-shadow .2s; outline: none; user-select: none;
+}
+.cdd-box:hover:not(.disabled) { border-color: var(--cd-accent); }
+.cdd-box[data-open] { border-color: var(--cd-accent); box-shadow: 0 0 0 1px var(--cd-accent); }
+.cdd-box.disabled { opacity: .5; cursor: default; }
+.cdd-icon { flex: none; display: grid; place-items: center; font-size: 18px; }
+.cdd-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.cdd-text { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cdd-text.placeholder { color: var(--cd-secondary); }
+.cdd-chevron { flex: none; color: var(--cd-secondary); transition: transform .2s ease; }
+.cdd-box[data-open] .cdd-chevron { transform: rotate(180deg); }
+.cdd-menu {
+  position: absolute; z-index: 120; left: 0; right: 0; top: calc(100% + 4px);
+  background: var(--cd-card); border-radius: 12px; border: 1px solid rgba(128,128,128,.25);
+  box-shadow: 0 14px 40px rgba(0,0,0,.65); max-height: 280px; display: flex; flex-direction: column; overflow: hidden;
+  animation: cddSlideDown .15s ease-out;
+}
+@keyframes cddSlideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.cdd-search-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  background: var(--cd-tile-bg); border-bottom: 1px solid rgba(128,128,128,.15);
+}
+.cdd-search-input { flex: 1; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; outline: none; }
+.cdd-list { overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.cdd-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px;
+  cursor: pointer; transition: background .12s; user-select: none;
+}
+.cdd-item:hover { background: rgba(128,128,128,.15); }
+.cdd-item.selected { background: color-mix(in srgb, var(--cd-accent) 18%, transparent); }
+.cdd-item-texts { flex: 1; min-width: 0; }
+.cdd-item-label { font-size: 13px; font-weight: 600; color: var(--primary-text-color, #fff); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cdd-item-sub { font-size: 11px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cdd-item-check { color: var(--cd-accent); flex: none; font-size: 16px; }
+.cdd-empty { padding: 16px 12px; text-align: center; color: var(--cd-secondary); font-size: 12px; }
+
+/* ── Windows 11 OOBE Setup Styling & Animations ── */
+.win11-hero-badge {
+  width: 60px; height: 60px; border-radius: 50%; margin: 4px auto 14px;
+  display: grid; place-items: center;
+  background: radial-gradient(circle, rgba(3,169,244,0.28) 0%, rgba(3,169,244,0.06) 70%);
+  box-shadow: 0 0 24px rgba(3, 169, 244, 0.4);
+  color: var(--cd-accent);
+  animation: win11GlowPulse 3.5s infinite ease-in-out, win11Float 4s infinite ease-in-out;
+}
+.win11-hero-badge ha-icon { --mdc-icon-size: 32px; }
+@keyframes win11GlowPulse {
+  0%, 100% { box-shadow: 0 0 18px rgba(3,169,244,0.3); }
+  50% { box-shadow: 0 0 32px rgba(3,169,244,0.65); }
+}
+@keyframes win11Float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes win11Pop {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ── Interactive Feature Cards (Anwesenheitssimulation & Leistung) ── */
+.feature-card {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px;
+  background: var(--cd-tile-bg); border: 1px solid rgba(128,128,128,.18); cursor: pointer;
+  transition: background .15s, border-color .15s, transform .1s;
+}
+.feature-card:hover { border-color: rgba(255,255,255,.25); }
+.feature-card[data-active] {
+  border-color: var(--feat-color, var(--cd-accent));
+  background: color-mix(in srgb, var(--feat-color, var(--cd-accent)) 12%, var(--cd-tile-bg));
+}
+.feature-icon {
+  width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; flex: none;
+  color: var(--feat-color, var(--cd-accent));
+  background: color-mix(in srgb, var(--feat-color, var(--cd-accent)) 18%, transparent);
+}
+.feature-info { flex: 1; min-width: 0; }
+.feature-title { font-size: 13px; font-weight: 600; color: var(--primary-text-color, #fff); }
+.feature-desc { font-size: 11px; color: var(--cd-secondary); margin-top: 2px; line-height: 1.3; }
+
+/* ── Switch UI Toggle ── */
+.switch-ui {
+  position: relative; width: 44px; height: 24px; border-radius: 12px;
+  background: rgba(128,128,128,.35); flex: none; transition: background .2s;
+}
+.switch-ui::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px;
+  border-radius: 50%; background: #fff; transition: transform .2s cubic-bezier(.4, 0, .2, 1);
+  box-shadow: 0 2px 4px rgba(0,0,0,.3);
+}
+.feature-card[data-active] .switch-ui {
+  background: var(--feat-color, var(--cd-accent));
+}
+.feature-card[data-active] .switch-ui::after {
+  transform: translateX(20px);
+}
+
+/* ── Wizard Endscreen Preview & Celebration ── */
+.win11-preview-card {
+  display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 14px;
+  background: var(--cd-tile-bg); border: 1px solid rgba(255,255,255,.12);
+  box-shadow: 0 6px 20px rgba(0,0,0,.35);
+}
+.win11-preview-icon {
+  width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  color: var(--preview-color, var(--cd-accent));
+  background: color-mix(in srgb, var(--preview-color, var(--cd-accent)) 20%, transparent);
+}
+.win11-preview-info { flex: 1; min-width: 0; }
+.win11-preview-name { font-size: 15px; font-weight: 700; color: var(--primary-text-color, #fff); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.win11-preview-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+
+.win11-celebration {
+  text-align: center; padding: 24px 16px 16px; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  animation: win11Pop .35s cubic-bezier(.2, .9, .3, 1);
+}
+.win11-success-badge {
+  width: 68px; height: 68px; border-radius: 50%; display: grid; place-items: center;
+  background: radial-gradient(circle, rgba(76,175,80,0.3) 0%, rgba(76,175,80,0.08) 70%);
+  color: #4caf50; box-shadow: 0 0 30px rgba(76,175,80,0.5);
+  animation: win11GlowPulse 3s infinite ease-in-out;
+}
+.win11-success-badge ha-icon { --mdc-icon-size: 38px; }
+
 
 `;
