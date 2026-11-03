@@ -140,28 +140,28 @@ input[type=range].slider {
 input[type=range].slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   box-sizing: content-box;
-  width: 6px;
-  height: 18px;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
+  width: 5px;
+  height: 16px;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
   background-clip: padding-box;
   background-color: #fff;
-  border-radius: 8px;
+  border-radius: 3px;
   filter: drop-shadow(0 0 1px rgba(0,0,0,.45));
 }
 input[type=range].slider::-moz-range-thumb {
   box-sizing: content-box;
-  width: 6px;
-  height: 18px;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
+  width: 5px;
+  height: 16px;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
   background-clip: padding-box;
   background-color: #fff;
-  border-radius: 8px;
+  border-radius: 3px;
   filter: drop-shadow(0 0 1px rgba(0,0,0,.45));
 }
 
@@ -601,20 +601,31 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   box-sizing: border-box;
 }
 .cover-slider-wrap input[type=range].slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  box-sizing: content-box;
+  width: 5px;
   height: 16px;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
   border-top: 4px solid transparent;
   border-bottom: 4px solid transparent;
-  border-radius: 7px;
+  background-clip: padding-box;
+  background-color: #fff;
+  border-radius: 3px;
+  filter: drop-shadow(0 0 1px rgba(0,0,0,.45));
 }
 .cover-slider-wrap input[type=range].slider::-moz-range-thumb {
+  box-sizing: content-box;
+  width: 5px;
   height: 16px;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
   border-top: 4px solid transparent;
   border-bottom: 4px solid transparent;
-  border-radius: 7px;
+  background-clip: padding-box;
+  background-color: #fff;
+  border-radius: 3px;
+  filter: drop-shadow(0 0 1px rgba(0,0,0,.45));
 }
 
 /* ── Custom Dropdown (No native browser <select>) ── */

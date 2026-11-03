@@ -91,23 +91,54 @@ export const DOMAIN_COLORS = {
   sensor: '#2196f3',
 };
 
+export function effectiveCategory(t) {
+  if (!t) return '';
+  const cat = t.category || t.spec?.category;
+  if (cat === 'leuchte' || cat === 'light') return 'light';
+  if (cat === 'jalousie' || cat === 'cover') return 'cover';
+  if (cat === 'steckdose' || cat === 'outlet') return 'outlet';
+  if (cat === 'fernseher' || cat === 'medien' || cat === 'media_player') return 'media_player';
+  if (cat === 'klima' || cat === 'climate') return 'climate';
+  if (cat === 'schalter' || cat === 'switch') return 'switch';
+  if (cat === 'pumpe' || cat === 'wasserventil' || cat === 'valve') return 'switch';
+  const d = domainOf(t.entity_id || t.entityId);
+  if (d === 'light') return 'light';
+  if (d === 'cover') return 'cover';
+  if (d === 'switch') return 'switch';
+  if (d === 'media_player') return 'media_player';
+  if (d === 'climate') return 'climate';
+  return d;
+}
+
 export function getEntityColor(entityId, st, category, specColor) {
-  if (specColor) return resolveColor(specColor) || specColor;
-  const domain = domainOf(entityId);
-  const dc = st?.attributes?.device_class;
-  if (domain === 'cover' || category === 'jalousie') return DOMAIN_COLORS.cover;
-  if (domain === 'light' || category === 'leuchte') {
+  const cat = category || '';
+  if (cat === 'jalousie' || cat === 'cover') return DOMAIN_COLORS.cover;
+  if (cat === 'leuchte' || cat === 'light') {
     if (Array.isArray(st?.attributes?.rgb_color)) return `rgb(${st.attributes.rgb_color.join(',')})`;
     return DOMAIN_COLORS.light;
   }
-  if (domain === 'switch' || category === 'schalter' || category === 'steckdose') {
-    if (dc === 'outlet' || category === 'steckdose') return DOMAIN_COLORS.steckdose;
-    return DOMAIN_COLORS.switch;
-  }
-  if (domain === 'climate' || category === 'klima') {
+  if (cat === 'steckdose' || cat === 'outlet') return DOMAIN_COLORS.steckdose;
+  if (cat === 'fernseher' || cat === 'medien' || cat === 'media_player') return DOMAIN_COLORS.media_player;
+  if (cat === 'klima' || cat === 'climate') {
     return st?.attributes?.hvac_action === 'cooling' ? '#00bcd4' : '#ff9800';
   }
-  if (domain === 'media_player' || category === 'fernseher') return DOMAIN_COLORS.media_player;
+  if (cat === 'schalter' || cat === 'switch') return DOMAIN_COLORS.switch;
+  if (specColor) return resolveColor(specColor) || specColor;
+  const domain = domainOf(entityId);
+  const dc = st?.attributes?.device_class;
+  if (domain === 'cover') return DOMAIN_COLORS.cover;
+  if (domain === 'light') {
+    if (Array.isArray(st?.attributes?.rgb_color)) return `rgb(${st.attributes.rgb_color.join(',')})`;
+    return DOMAIN_COLORS.light;
+  }
+  if (domain === 'switch') {
+    if (dc === 'outlet') return DOMAIN_COLORS.steckdose;
+    return DOMAIN_COLORS.switch;
+  }
+  if (domain === 'climate') {
+    return st?.attributes?.hvac_action === 'cooling' ? '#00bcd4' : '#ff9800';
+  }
+  if (domain === 'media_player') return DOMAIN_COLORS.media_player;
   if (domain === 'fan') return DOMAIN_COLORS.fan;
   if (domain === 'valve') return DOMAIN_COLORS.valve;
   return DOMAIN_COLORS[domain] || '#2196f3';

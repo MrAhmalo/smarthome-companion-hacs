@@ -1,23 +1,10 @@
 // Room component: collapsible "expander" card with area header (sensors, alerts, group controls) and tiles.
 import {
-  h, icon, domainOf, isActive, numeric,
+  h, icon, domainOf, isActive, numeric, effectiveCategory,
 } from '../lib/util.js';
 import { Tile } from './tile.js';
 
-export function effectiveCategory(t) {
-  const cat = t.category || t.spec?.category;
-  if (cat === 'leuchte' || cat === 'light') return 'light';
-  if (cat === 'jalousie' || cat === 'cover') return 'cover';
-  if (cat === 'steckdose' || cat === 'outlet') return 'outlet';
-  if (cat === 'schalter' || cat === 'switch') return 'switch';
-  if (cat === 'fernseher' || cat === 'medien' || cat === 'media_player') return 'media_player';
-  const d = domainOf(t.entity_id || t.entityId);
-  if (d === 'light') return 'light';
-  if (d === 'cover') return 'cover';
-  if (d === 'switch') return 'switch';
-  if (d === 'media_player') return 'media_player';
-  return d;
-}
+export { effectiveCategory };
 
 const GROUPS = [
   { key: 'light', icon: 'mdi:lightbulb', label: 'Alle Lichter', color: '#ffc107' },
@@ -105,9 +92,9 @@ export class GroupedCoverTile {
       onClick: (e) => { e.stopPropagation(); fn(); },
     }, icon(ic));
 
-    this.btnUp = mk('mdi:arrow-up', 'Alle öffnen', () => this.hass?.callService('cover', 'open_cover', { entity_id: this.entityIds }));
-    this.btnStop = mk('mdi:stop', 'Alle stoppen', () => this.hass?.callService('cover', 'stop_cover', { entity_id: this.entityIds }));
-    this.btnDown = mk('mdi:arrow-down', 'Alle schließen', () => this.hass?.callService('cover', 'close_cover', { entity_id: this.entityIds }));
+    this.btnUp = mk('mdi:arrow-up', 'Alle öffnen', () => this._service('open'));
+    this.btnStop = mk('mdi:stop', 'Alle stoppen', () => this._service('stop'));
+    this.btnDown = mk('mdi:arrow-down', 'Alle schließen', () => this._service('close'));
 
     this.btnDetail = h('button', {
       class: 'mini-btn', 'aria-label': 'Details', title: 'Einzelne Rollläden anzeigen',
@@ -120,6 +107,23 @@ export class GroupedCoverTile {
       class: 'tile grouped-cover wide',
       'data-active': 'true',
     }, h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns));
+  }
+
+  _service(cmd) {
+    if (!this.hass) return;
+    const byDomain = {};
+    for (const id of this.entityIds) {
+      const d = domainOf(id);
+      (byDomain[d] ||= []).push(id);
+    }
+    for (const [dom, ids] of Object.entries(byDomain)) {
+      if (dom === 'cover') {
+        this.hass.callService('cover', cmd === 'stop' ? 'stop_cover' : `${cmd}_cover`, { entity_id: ids });
+      } else {
+        const svc = cmd === 'stop' ? 'turn_off' : cmd === 'open' ? 'turn_on' : 'turn_off';
+        this.hass.callService(dom, svc, { entity_id: ids });
+      }
+    }
   }
 
   update(hass) {
@@ -159,10 +163,10 @@ export class Room {
 
     // Smart Rollladen Gruppierung:
     // If room has > 1 cover, group them into a single master GroupedCoverTile
-    const covers = spec.tiles.filter((t) => domainOf(t.entity_id) === 'cover');
+    const covers = spec.tiles.filter((t) => effectiveCategory(t) === 'cover');
     if (covers.length > 1) {
       this.groupedCover = new GroupedCoverTile(spec, covers, ctx);
-      const nonCovers = spec.tiles.filter((t) => domainOf(t.entity_id) !== 'cover');
+      const nonCovers = spec.tiles.filter((t) => effectiveCategory(t) !== 'cover');
       this.tiles = [this.groupedCover, ...nonCovers.map((t) => new Tile(t, ctx))];
     } else {
       this.tiles = spec.tiles.map((t) => new Tile(t, ctx));

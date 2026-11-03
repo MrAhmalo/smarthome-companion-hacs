@@ -1,17 +1,22 @@
 DOMAIN = "smarthome_companion_hacs"
 STORAGE_KEY = "smarthome_companion_hacs.configuration"
 STORAGE_VERSION = 1
-VERSION = "2.8.10"
+VERSION = "2.8.11"
 
 DEFAULT_CATEGORIES = {
     "leuchte": {
         "icon": "mdi:lightbulb",
-        "color": "#F59E0B",
+        "color": "#FFC107",
         "display_name": "Beleuchtung",
+    },
+    "steckdose": {
+        "icon": "mdi:power-socket-eu",
+        "color": "#009688",
+        "display_name": "Steckdosen",
     },
     "schalter": {
         "icon": "mdi:power-plug",
-        "color": "#3B82F6",
+        "color": "#2196F3",
         "display_name": "Geräte",
     },
     "jalousie": {
@@ -24,10 +29,40 @@ DEFAULT_CATEGORIES = {
         "color": "#FF9800",
         "display_name": "Klima",
     },
+    "fernseher": {
+        "icon": "mdi:television",
+        "color": "#03A9F4",
+        "display_name": "Fernseher",
+    },
     "medien": {
         "icon": "mdi:speaker",
         "color": "#03A9F4",
         "display_name": "Medien",
+    },
+    "wasserventil": {
+        "icon": "mdi:water-pump",
+        "color": "#00BCD4",
+        "display_name": "Wasserventile",
+    },
+    "pumpe": {
+        "icon": "mdi:pump",
+        "color": "#03A9F4",
+        "display_name": "Pumpen",
+    },
+    "bewegungsmelder": {
+        "icon": "mdi:motion-sensor",
+        "color": "#E91E63",
+        "display_name": "Bewegungsmelder",
+    },
+    "bodenmessgeraet": {
+        "icon": "mdi:sprout",
+        "color": "#4CAF50",
+        "display_name": "Bodenmessgeräte",
+    },
+    "raummessgeraet": {
+        "icon": "mdi:thermometer-lines",
+        "color": "#FF5722",
+        "display_name": "Raummessgeräte",
     },
 }
 

@@ -1,7 +1,7 @@
 // Tile component: one entity as a HA-tile-like card (lights, switches, covers, climate, media, sensors).
 import {
   h, icon, domainOf, entityIcon, isActive, isUnavailable, stateLabel, numeric, moreInfo, toggleEntity,
-  isToggleable, resolveColor,
+  isToggleable, resolveColor, effectiveCategory,
 } from '../lib/util.js';
 
 const DOMAIN_COLORS = {
@@ -64,7 +64,11 @@ export class Tile {
     this.spec = spec;
     this.ctx = ctx;
     this.entityId = spec.entity_id;
-    this.domain = domainOf(spec.entity_id);
+    this.rawDomain = domainOf(spec.entity_id);
+    const cat = effectiveCategory(spec);
+    // Effective domain overrides raw domain for UI purposes
+    this.domain = (cat === 'light' || cat === 'cover' || cat === 'media_player' || cat === 'climate')
+      ? cat : this.rawDomain;
     this.kind = ['cover', 'media_player', 'climate', 'sensor', 'binary_sensor'].includes(this.domain)
       ? this.domain : 'toggle';
     this.hass = null;
@@ -98,6 +102,11 @@ export class Tile {
 
   // ── builders ──
   _service(domain, service, data = {}) {
+    if (domain === 'cover' && this.rawDomain !== 'cover') {
+      if (service === 'open_cover') return this.hass?.callService(this.rawDomain, 'turn_on', { entity_id: this.entityId });
+      if (service === 'close_cover') return this.hass?.callService(this.rawDomain, 'turn_off', { entity_id: this.entityId });
+      if (service === 'stop_cover') return this.hass?.callService(this.rawDomain, 'turn_off', { entity_id: this.entityId });
+    }
     return this.hass?.callService(domain, service, { entity_id: this.entityId, ...data });
   }
 
