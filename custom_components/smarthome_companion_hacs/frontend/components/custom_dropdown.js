@@ -126,7 +126,20 @@ export class CustomDropdown {
     this._renderMenu();
 
     if (this.searchInput) {
-      setTimeout(() => this.searchInput.focus(), 50);
+      setTimeout(() => {
+        this.searchInput.focus();
+        const rect = this.menu.getBoundingClientRect();
+        if (rect.bottom > window.innerHeight - 30) {
+          this.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 30);
+    } else {
+      setTimeout(() => {
+        const rect = this.menu.getBoundingClientRect();
+        if (rect.bottom > window.innerHeight - 30) {
+          this.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 30);
     }
   }
 

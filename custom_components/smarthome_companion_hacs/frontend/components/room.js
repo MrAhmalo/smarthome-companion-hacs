@@ -153,6 +153,17 @@ export class Room {
       this.tiles = spec.tiles.map((t) => new Tile(t, ctx));
     }
 
+    // Strict priority in room: 1. Jalousien (Rollläden), 2. Medien / TV, 3. Der Rest
+    const tileWeight = (t) => {
+      if (t instanceof GroupedCoverTile || t.domain === 'cover' || t.spec?.category === 'jalousie') return 0;
+      if (t.domain === 'media_player' || t.spec?.category === 'fernseher' || t.spec?.category === 'medien') return 1;
+      if (t.domain === 'light' || t.spec?.category === 'leuchte') return 2;
+      if (t.spec?.category === 'steckdose') return 3;
+      if (t.domain === 'switch' || t.spec?.category === 'schalter') return 4;
+      return 5;
+    };
+    this.tiles.sort((a, b) => tileWeight(a) - tileWeight(b));
+
     this._build();
   }
 

@@ -234,8 +234,9 @@ input[type=range].slider::-moz-range-thumb { width: 6px; height: 18px; border: 0
   overflow-y: auto;
 }
 .dialog {
-  width: min(940px, 100%);
-  max-height: min(88vh, 840px);
+  width: min(1140px, 95vw);
+  min-height: min(680px, 88vh);
+  max-height: min(92vh, 920px);
   margin: auto;
   display: flex; flex-direction: column;
   border-radius: var(--cd-radius);
@@ -251,8 +252,9 @@ input[type=range].slider::-moz-range-thumb { width: 6px; height: 18px; border: 0
 .tab { flex-shrink: 0; border: 0; background: transparent; cursor: pointer; padding: 9px 14px; border-radius: 10px 10px 0 0; font-weight: 600; font-size: 13px; color: var(--cd-secondary); white-space: nowrap; transition: color .15s, background .15s; }
 .tab:hover { color: var(--primary-text-color, #fff); background: rgba(128,128,128,.08); }
 .tab[data-active] { color: var(--cd-accent); box-shadow: inset 0 -2px 0 var(--cd-accent); }
-.dialog-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 16px 20px; display: grid; gap: 14px; align-content: start; }
-.dialog-foot { flex-shrink: 0; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid rgba(128,128,128,.18); }
+.dialog-body { flex: 1; min-height: 520px; overflow-y: auto; overflow-x: hidden; padding: 22px 28px 80px; display: grid; gap: 16px; align-content: start; }
+.dialog-foot { flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 24px; border-top: 1px solid rgba(128,128,128,.18); background: var(--cd-card); }
+.dialog-foot-actions { display: flex; align-items: center; gap: 10px; }
 .hint { font-size: 12px; color: var(--cd-secondary); line-height: 1.5; white-space: pre-line; }
 .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--cd-secondary); margin-top: 6px; }
 .row-card { border-radius: var(--cd-tile-radius, 12px); background: var(--cd-tile-bg); padding: 10px 12px; display: grid; gap: 10px; }
@@ -606,16 +608,16 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   background: radial-gradient(circle, rgba(3,169,244,0.28) 0%, rgba(3,169,244,0.06) 70%);
   box-shadow: 0 0 24px rgba(3, 169, 244, 0.4);
   color: var(--cd-accent);
-  animation: win11GlowPulse 3.5s infinite ease-in-out, win11Float 4s infinite ease-in-out;
+  animation: win11GlowPulse 3.5s infinite ease-in-out;
 }
-.win11-hero-badge ha-icon { --mdc-icon-size: 32px; }
+.win11-hero-badge ha-icon {
+  --mdc-icon-size: 32px; width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: inherit; fill: currentColor;
+}
 @keyframes win11GlowPulse {
-  0%, 100% { box-shadow: 0 0 18px rgba(3,169,244,0.3); }
-  50% { box-shadow: 0 0 32px rgba(3,169,244,0.65); }
-}
-@keyframes win11Float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+  0%, 100% { box-shadow: 0 0 18px rgba(3,169,244,0.3); transform: scale(1); }
+  50% { box-shadow: 0 0 32px rgba(3,169,244,0.65); transform: scale(1.03); }
 }
 @keyframes win11Pop {
   from { opacity: 0; transform: scale(0.9); }
@@ -675,16 +677,44 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .win11-preview-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 
 .win11-celebration {
-  text-align: center; padding: 24px 16px 16px; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  text-align: center; padding: 36px 24px 28px; display: flex; flex-direction: column; align-items: center; gap: 14px;
   animation: win11Pop .35s cubic-bezier(.2, .9, .3, 1);
+  background: radial-gradient(circle at center, rgba(76, 175, 80, 0.22) 0%, rgba(76, 175, 80, 0.05) 60%, transparent 100%);
+  border-radius: 16px; border: 1px solid rgba(76, 175, 80, 0.3);
+  margin: 12px auto; max-width: 600px;
 }
 .win11-success-badge {
   width: 68px; height: 68px; border-radius: 50%; display: grid; place-items: center;
-  background: radial-gradient(circle, rgba(76,175,80,0.3) 0%, rgba(76,175,80,0.08) 70%);
-  color: #4caf50; box-shadow: 0 0 30px rgba(76,175,80,0.5);
+  background: radial-gradient(circle, rgba(76,175,80,0.35) 0%, rgba(76,175,80,0.12) 70%);
+  color: #4caf50; box-shadow: 0 0 32px rgba(76,175,80,0.6);
   animation: win11GlowPulse 3s infinite ease-in-out;
 }
 .win11-success-badge ha-icon { --mdc-icon-size: 38px; }
+
+/* ── Advanced options details ── */
+details.adv-options {
+  border-radius: 12px; background: rgba(128,128,128,.08); padding: 8px 14px; margin-top: 10px;
+  border: 1px solid rgba(128,128,128,.15);
+}
+details.adv-options summary {
+  cursor: pointer; font-size: 13px; font-weight: 600; color: var(--cd-secondary); user-select: none;
+  display: flex; align-items: center; gap: 6px;
+}
+details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
+.adv-content { margin-top: 10px; display: grid; gap: 8px; }
+
+.btn.danger {
+  background: rgba(244, 67, 54, 0.15); color: #f44336; border: 1px solid rgba(244, 67, 54, 0.3);
+}
+.btn.danger:hover {
+  background: rgba(244, 67, 54, 0.25);
+}
+.icon-btn.danger {
+  color: #f44336; background: rgba(244, 67, 54, 0.1); border-radius: 8px;
+}
+.icon-btn.danger:hover {
+  background: rgba(244, 67, 54, 0.22);
+}
 
 
 `;

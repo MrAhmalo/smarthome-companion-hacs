@@ -46,16 +46,21 @@ _WATCHED_EVENTS = (
 )
 
 # Sort weight of device categories inside a room (lower = further up).
+# Strict priority: 1. Jalousien (Rollläden), 2. Medien (TV / Apple TV), 3. Der Rest (Lichter, Schalter, etc.)
 _CATEGORY_WEIGHT = {
     "jalousie": 0,
-    "leuchte": 1,
-    "steckdose": 2,
-    "schalter": 3,
-    "wasserventil": 4,
-    "pumpe": 5,
-    "klima": 6,
-    "fernseher": 7,
-    "medien": 7,
+    "cover": 0,
+    "fernseher": 1,
+    "medien": 1,
+    "media_player": 1,
+    "leuchte": 2,
+    "light": 2,
+    "steckdose": 3,
+    "schalter": 4,
+    "switch": 4,
+    "klima": 5,
+    "wasserventil": 6,
+    "pumpe": 7,
     "bewegungsmelder": 8,
     "raummessgeraet": 9,
     "bodenmessgeraet": 9,
@@ -414,9 +419,10 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
         tiles = list(tiles_by_area.get(area_id, []))
         custom_order = config.get("tile_order", {}).get(area_id, [])
         pos = {k: i for i, k in enumerate(custom_order)}
+        # Strict hierarchy: 1. Jalousien, 2. Medien/TV, 3. Rest. Custom order applies within category.
         tiles.sort(key=lambda t: (
-            pos.get(t["key"], 10_000),
             _CATEGORY_WEIGHT.get(t["category"], 50),
+            pos.get(t["key"], 10_000),
             t["name"].lower(),
         ))
         mode = rcfg.get("expanded", "collapsed")

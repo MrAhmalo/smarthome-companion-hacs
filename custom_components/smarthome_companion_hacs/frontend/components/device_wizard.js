@@ -126,30 +126,69 @@ export class DeviceWizard {
     this.foot.hidden = false;
     const isFirst = this.step === 0;
     const isLast = this.step === this.steps.length - 1;
+    const isConfigured = !!(this.selectedDevice && this.configuredDevices[this.selectedDevice.id]);
 
-    const backBtn = isFirst
-      ? h('button', { class: 'btn', onClick: () => this.onClose() }, 'Abbrechen')
-      : h('button', { class: 'btn', onClick: () => { this.step--; this._render(); } }, icon('mdi:chevron-left'), 'Zurück');
-
-    let nextBtn;
+    const leftActions = [];
     if (isFirst) {
-      nextBtn = h('button', {
-        class: 'btn primary', disabled: !this.selectedDevice,
-        onClick: () => { if (this.selectedDevice) { this._initDevice(); this.step = 1; this._render(); } },
-      }, 'Weiter', icon('mdi:chevron-right'));
-    } else if (!isLast) {
-      nextBtn = h('button', {
-        class: 'btn primary',
-        onClick: () => { this.step++; this._render(); },
-      }, 'Weiter', icon('mdi:chevron-right'));
+      leftActions.push(h('button', { class: 'btn', onClick: () => this.onClose() }, 'Abbrechen'));
     } else {
-      nextBtn = h('button', {
-        class: 'btn success', disabled: this._saving,
-        onClick: () => this._save(),
-      }, icon('mdi:check'), this._saving ? 'Wird gespeichert...' : 'Fertigstellen');
+      leftActions.push(h('button', { class: 'btn', onClick: () => { this.step--; this._render(); } }, icon('mdi:chevron-left'), 'Zurück'));
+      if (isConfigured) {
+        leftActions.push(h('button', {
+          class: 'btn danger',
+          title: 'Companion-Einrichtung für dieses Gerät aufheben',
+          onClick: () => this._removeDevice(this.selectedDevice.id, this.customName),
+        }, icon('mdi:delete-outline'), 'Einrichtung aufheben'));
+      }
     }
 
-    this.foot.replaceChildren(backBtn, nextBtn);
+    const rightActions = [];
+    if (isFirst) {
+      rightActions.push(h('button', {
+        class: 'btn primary', disabled: !this.selectedDevice,
+        onClick: () => { if (this.selectedDevice) { this._initDevice(); this.step = 1; this._render(); } },
+      }, 'Weiter', icon('mdi:chevron-right')));
+    } else if (!isLast) {
+      rightActions.push(h('button', {
+        class: 'btn primary',
+        onClick: () => { this.step++; this._render(); },
+      }, 'Weiter', icon('mdi:chevron-right')));
+    } else {
+      rightActions.push(h('button', {
+        class: 'btn success', disabled: this._saving,
+        onClick: () => this._save(),
+      }, icon('mdi:check'), this._saving ? 'Wird gespeichert...' : 'Fertigstellen'));
+    }
+
+    const leftWrap = h('div', { class: 'dialog-foot-actions' }, ...leftActions);
+    const rightWrap = h('div', { class: 'dialog-foot-actions' }, ...rightActions);
+    this.foot.replaceChildren(leftWrap, rightWrap);
+  }
+
+  async _removeDevice(deviceId, name) {
+    const devName = name || this.customName || 'diesem Gerät';
+    const confirmed = window.confirm(
+      `Soll die Companion-Einrichtung von „${devName}“ wirklich aufgehoben werden?\n\nDas Gerät bleibt in Home Assistant bestehen, wird aber nicht mehr als Companion-Gerät geführt.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await this.hass.callWS({
+        type: 'smarthome_companion/devices/remove',
+        device_id: deviceId,
+      });
+      if (res?.save_failed) throw new Error('Löschen fehlgeschlagen');
+
+      delete this.configuredDevices[deviceId];
+      if (this.selectedDevice?.id === deviceId) {
+        this.selectedDevice = null;
+        this.step = 0;
+      }
+      this._render();
+      this.onSaved(null);
+    } catch (err) {
+      alert(`Fehler beim Aufheben der Einrichtung: ${err.message || err}`);
+    }
   }
 
   // ═══════════════ STEP 0: Gerät auswählen ═══════════════
@@ -180,7 +219,7 @@ export class DeviceWizard {
     this.body.replaceChildren(
       hero,
       h('div', { class: 'hint', style: { textAlign: 'center', marginBottom: '12px' } },
-        '• Wähle das Gerät aus, das im Dashboard eingerichtet werden soll.\n• Mehrkanal-Geräte (z. B. Shelly 2PM) können separat benannt werden.'),
+        'Wähle das Gerät aus, das im Dashboard eingerichtet oder bearbeitet werden soll:'),
       searchWrap,
       filterChips,
       this.deviceListEl);
@@ -245,6 +284,20 @@ export class DeviceWizard {
         badges.push(h('span', { class: 'badge-tag' }, `${controllable.length} steuerbar`));
       }
 
+      const actions = [];
+      if (isConfigured) {
+        actions.push(h('button', {
+          class: 'icon-btn danger',
+          title: 'Einrichtung aufheben',
+          'aria-label': 'Einrichtung aufheben',
+          onClick: (e) => {
+            e.stopPropagation();
+            this._removeDevice(d.id, name);
+          },
+        }, icon('mdi:delete-outline')));
+      }
+      actions.push(icon('mdi:chevron-right', 'chevron'));
+
       const card = h('div', {
         class: 'device-card', ...(this.selectedDevice?.id === d.id ? { 'data-selected': '' } : {}),
         onClick: () => {
@@ -258,7 +311,7 @@ export class DeviceWizard {
       h('div', { class: 'd-info' },
         h('div', { class: 'd-name' }, name),
         h('div', { class: 'd-meta' }, mfg ? h('span', {}, mfg) : null, ...badges)),
-      icon('mdi:chevron-right', 'chevron'));
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, ...actions));
       return card;
     }));
   }
@@ -303,9 +356,9 @@ export class DeviceWizard {
         enabled: sub.enabled !== undefined ? !!sub.enabled : true,
         name: channelName,
         category: sub.category || this.selectedCategory,
-        power: sub.power || (idx === 0 ? powerSensor : ''),
-        energy: sub.energy || (idx === 0 ? energySensor : ''),
-        presence_simulation: !!sub.presence_simulation,
+        power: sub.power || (idx === 0 ? (existing?.entities?.power || powerSensor) : ''),
+        energy: sub.energy || (idx === 0 ? (existing?.entities?.energy || energySensor) : ''),
+        presence_simulation: !!(sub.presence_simulation || (idx === 0 && existing?.entities?.presence_simulation)),
       };
     });
 
@@ -376,6 +429,64 @@ export class DeviceWizard {
       return;
     }
 
+    const curCat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
+    const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color || 'var(--cd-accent)' } }, icon('mdi:tune-vertical'));
+
+    const header = h('div', { style: { textAlign: 'center', marginBottom: '14px' } },
+      h('h3', { style: { margin: '0 0 4px', fontSize: '18px', fontWeight: '700' } }, isMulti ? 'Kanäle & Messung' : 'Messung & Simulation'),
+      h('div', { class: 'hint' }, isMulti
+        ? 'Mehrkanal-Gerät: Kanäle separat konfigurieren und zuordnen'
+        : 'Optionale Leistungsmessung (Watt) und automatische Anwesenheitssimulation'));
+
+    if (!isMulti) {
+      // SINGLE ENTITY: No duplicate channel name, no duplicate category, no confusing disable switch!
+      const ch = this.channels[0];
+
+      const powerPicker = new EntityPicker({
+        hass: this.hass,
+        value: ch.power || '',
+        placeholder: 'sensor.xxx_power (optional)',
+        domain: 'sensor',
+        onChange: (val) => {
+          ch.power = val;
+          this.powerEntityId = val;
+        },
+      });
+
+      const isAutoPower = ch.power && ch.power === this.powerEntityId;
+      const powerBadge = isAutoPower
+        ? h('span', { class: 'badge-tag ok', style: { marginLeft: '8px' } }, icon('mdi:check-circle'), 'Automatisch erkannt')
+        : null;
+
+      const powerCard = h('div', { class: 'row-card', style: { padding: '16px 20px', gap: '12px' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+          h('div', { class: 'feature-icon', style: { color: '#ffb74d', display: 'grid', placeItems: 'center', width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(255,183,77,0.15)' } }, icon('mdi:flash')),
+          h('div', { style: { flex: 1 } },
+            h('div', { style: { fontWeight: '600', fontSize: '15px', display: 'flex', alignItems: 'center' } },
+              'Leistungssensor (Watt)', powerBadge),
+            h('div', { class: 'hint', style: { marginTop: '2px' } }, 'Zeigt den aktuellen Stromverbrauch live auf der Kachel an'))),
+        powerPicker.el);
+
+      const simCard = h('div', {
+        class: `feature-card${ch.presence_simulation ? ' active' : ''}`,
+        style: { '--feat-color': '#ba68c8', cursor: 'pointer' },
+        onClick: () => {
+          ch.presence_simulation = !ch.presence_simulation;
+          simCard.toggleAttribute('data-active', ch.presence_simulation);
+          simCard.classList.toggle('active', ch.presence_simulation);
+        },
+      },
+      h('div', { class: 'feature-icon' }, icon('mdi:home-clock')),
+      h('div', { class: 'feature-info' },
+        h('div', { class: 'feature-title' }, 'Anwesenheitssimulation'),
+        h('div', { class: 'feature-desc' }, 'Zufälliges automatisches Schalten bei Abwesenheit zum Einbruchschutz')),
+      h('div', { class: 'switch-ui' }));
+
+      this.body.replaceChildren(hero, header, powerCard, simCard);
+      return;
+    }
+
+    // MULTI-CHANNEL DEVICE (e.g. Shelly 2PM)
     const catOptions = DEVICE_CATEGORIES.map((c) => ({
       value: c.id, label: c.name, icon: c.icon, color: c.color,
     }));
@@ -402,10 +513,9 @@ export class DeviceWizard {
         onChange: (val) => { ch.power = val; },
       });
 
-      // Anwesenheitssimulation interactive card
       const simCard = h('div', {
         class: `feature-card${ch.presence_simulation && ch.enabled ? ' active' : ''}`,
-        style: { '--feat-color': '#ba68c8' },
+        style: { '--feat-color': '#ba68c8', cursor: ch.enabled ? 'pointer' : 'default' },
         onClick: () => {
           if (!ch.enabled) return;
           ch.presence_simulation = !ch.presence_simulation;
@@ -419,7 +529,6 @@ export class DeviceWizard {
         h('div', { class: 'feature-desc' }, 'Zufälliges automatisches Schalten bei Abwesenheit zum Einbruchschutz')),
       h('div', { class: 'switch-ui' }));
 
-      // Power measurement info badge
       const isAutoPower = ch.power && ch.power === this.powerEntityId;
       const powerBadge = isAutoPower
         ? h('span', { class: 'badge-tag ok', style: { marginLeft: '8px' } }, icon('mdi:check-circle'), 'Automatisch erkannt')
@@ -457,11 +566,7 @@ export class DeviceWizard {
         simCard);
     });
 
-    this.body.replaceChildren(
-      h('div', { class: 'hint' }, isMulti
-        ? '• Mehrkanal-Gerät erkannt (z. B. Shelly 2PM).\n• Jeder Kanal kann aktiviert, benannt und einer Kategorie zugeordnet werden.'
-        : '• Einzel-Entität erkannt. Name, Leistungsmessung und Anwesenheitssimulation können angepasst werden.'),
-      ...channelCards);
+    this.body.replaceChildren(hero, header, ...channelCards);
   }
 
   // ═══════════════ STEP 3: Zusammenfassung & Speichern ═══════════════
@@ -471,7 +576,12 @@ export class DeviceWizard {
     const cat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
     const activeChannels = this.channels.filter((c) => c.enabled);
 
-    const hero = h('div', { class: 'win11-hero-badge', style: { color: cat.color } }, icon('mdi:sparkles'));
+    // Reliable Hero Badge with Category Icon and glowing ring
+    const hero = h('div', { class: 'win11-hero-badge', style: { color: cat.color } }, icon(cat.icon || 'mdi:check-circle'));
+
+    const header = h('div', { style: { textAlign: 'center', marginBottom: '14px' } },
+      h('h3', { style: { margin: '0 0 4px', fontSize: '18px', fontWeight: '700' } }, 'Fast fertig!'),
+      h('div', { class: 'hint' }, 'Überprüfe die Einstellungen vor dem Speichern'));
 
     // Live visual preview card
     const hasSim = activeChannels.some((c) => c.presence_simulation);
@@ -490,10 +600,10 @@ export class DeviceWizard {
         hasPower ? h('span', { class: 'badge-tag', style: { color: '#ffb74d' } }, icon('mdi:flash'), 'Leistungsmessung') : null,
         hasSim ? h('span', { class: 'badge-tag', style: { color: '#ce93d8' } }, icon('mdi:home-clock'), 'Simulation') : null)));
 
-    // Home Assistant sync card
+    // Home Assistant sync card: Hidden inside collapsible <details>, default active
     const syncCard = h('div', {
       class: `feature-card${this.renameInHA ? ' active' : ''}`,
-      style: { '--feat-color': '#2196f3', marginTop: '14px' },
+      style: { '--feat-color': '#2196f3', cursor: 'pointer' },
       onClick: () => {
         this.renameInHA = !this.renameInHA;
         syncCard.toggleAttribute('data-active', this.renameInHA);
@@ -502,26 +612,33 @@ export class DeviceWizard {
     },
     h('div', { class: 'feature-icon' }, icon('mdi:home-assistant')),
     h('div', { class: 'feature-info' },
-      h('div', { class: 'feature-title' }, 'In Home Assistant synchronisieren'),
+      h('div', { class: 'feature-title' }, 'In Home Assistant synchronisieren (Standard: Aktiv)'),
       h('div', { class: 'feature-desc' }, 'Aktualisiert Gerätename und Raumzuweisung direkt in den HA-Registries')),
     h('div', { class: 'switch-ui' }));
 
-    // Channel details
-    const channelSummary = h('div', { class: 'row-card', style: { marginTop: '12px' } },
-      h('div', { style: { fontWeight: '600', fontSize: '13px' } }, `Kanäle (${activeChannels.length} aktiv)`),
-      h('div', { class: 'hint' }, activeChannels.map((c) => {
-        const cCat = DEVICE_CATEGORIES.find((catItem) => catItem.id === c.category);
-        return `• ${c.name} (${c.entity_id}) – ${cCat?.name || c.category}`;
-      }).join('\n')));
+    const syncAccordion = h('details', { class: 'adv-options' },
+      h('summary', {}, icon('mdi:cog-outline'), 'Erweiterte Optionen: Home Assistant Synchronisierung'),
+      h('div', { class: 'adv-content' }, syncCard));
 
-    this.body.replaceChildren(
+    // Channel details (only shown if multi-channel)
+    const channelSummary = this.channels.length > 1
+      ? h('div', { class: 'row-card', style: { marginTop: '12px' } },
+        h('div', { style: { fontWeight: '600', fontSize: '13px' } }, `Kanäle (${activeChannels.length} aktiv)`),
+        h('div', { class: 'hint' }, activeChannels.map((c) => {
+          const cCat = DEVICE_CATEGORIES.find((catItem) => catItem.id === c.category);
+          return `• ${c.name} (${c.entity_id}) – ${cCat?.name || c.category}`;
+        }).join('\n')))
+      : null;
+
+    const items = [
       hero,
-      h('div', { style: { textAlign: 'center', marginBottom: '14px' } },
-        h('h3', { style: { margin: '0 0 4px', fontSize: '18px', fontWeight: '700' } }, 'Fast fertig!'),
-        h('div', { class: 'hint' }, 'Überprüfe die Einstellungen vor dem Speichern im Dashboard:')),
+      header,
       previewCard,
-      syncCard,
-      channelSummary);
+      channelSummary,
+      syncAccordion,
+    ].filter(Boolean);
+
+    this.body.replaceChildren(...items);
   }
 
   // ═══════════════ POST-SAVE CELEBRATION (Windows 11 Setup Vibe) ═══════════════
@@ -531,13 +648,14 @@ export class DeviceWizard {
 
     const cat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
     const area = this.areas.find((a) => a.area_id === this.selectedAreaId);
+    const areaName = area?.name || 'Dashboard';
 
     const celebration = h('div', { class: 'win11-celebration' },
       h('div', { class: 'win11-success-badge' }, icon('mdi:check')),
       h('h2', { style: { margin: '8px 0 2px', fontSize: '22px', fontWeight: '700', color: 'var(--primary-text-color, #fff)' } }, 'Alles bereit!'),
-      h('div', { class: 'hint', style: { fontSize: '14px', maxWidth: '420px', lineHeight: '1.5' } },
-        `„${this.customName}“ wurde erfolgreich im Raum „${area?.name || 'Dashboard'}“ eingerichtet und steht ab sofort zur Verfügung.`),
-      h('div', { style: { display: 'flex', gap: '10px', marginTop: '16px' } },
+      h('div', { class: 'hint', style: { fontSize: '15px', maxWidth: '440px', lineHeight: '1.5', color: 'rgba(255,255,255,0.85)' } },
+        `„${this.customName}“ wurde erfolgreich im Raum „${areaName}“ eingerichtet.`),
+      h('div', { style: { display: 'flex', gap: '12px', marginTop: '18px' } },
         h('button', {
           class: 'btn secondary',
           onClick: () => {
@@ -638,6 +756,7 @@ export class DeviceWizard {
           primary_unique_id: primary?.unique_id,
           power: primary?.power || undefined,
           energy: primary?.energy || undefined,
+          presence_simulation: primary?.presence_simulation || false,
         };
       }
 

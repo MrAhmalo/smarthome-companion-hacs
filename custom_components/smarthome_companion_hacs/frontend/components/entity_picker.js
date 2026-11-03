@@ -134,7 +134,11 @@ export class EntityPicker {
     setTimeout(() => {
       this.searchInput.focus();
       document.addEventListener('pointerdown', this._onDocClick);
-    }, 10);
+      const rect = this.dropdown.getBoundingClientRect();
+      if (rect.bottom > window.innerHeight - 30) {
+        this.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 20);
   }
 
   _close() {
