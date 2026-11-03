@@ -1,11 +1,13 @@
 // Room component: collapsible "expander" card with area header (sensors, alerts, group controls) and tiles.
-import { h, icon, domainOf, isActive, numeric } from '../lib/util.js';
+import {
+  h, icon, domainOf, isActive, numeric,
+} from '../lib/util.js';
 import { Tile } from './tile.js';
 
 const GROUPS = [
-  { domain: 'light', icon: 'mdi:lightbulb', label: 'Alle Lichter' },
-  { domain: 'switch', icon: 'mdi:toggle-switch', label: 'Alle Schalter' },
-  { domain: 'cover', icon: 'mdi:window-shutter', label: 'Alle Jalousien' },
+  { domain: 'light', icon: 'mdi:lightbulb', label: 'Alle Lichter', color: '#ffc107' },
+  { domain: 'switch', icon: 'mdi:toggle-switch', label: 'Alle Schalter', color: '#2196f3' },
+  { domain: 'cover', icon: 'mdi:window-shutter', label: 'Alle Jalousien', color: '#9c27b0' },
 ];
 
 function average(hass, ids) {
@@ -16,16 +18,141 @@ function average(hass, ids) {
   return `${avg.toFixed(1).replace(/\.0$/, '')}${unit ? ` ${unit}` : ''}`.replace(' %', '%').replace(' °', '°');
 }
 
+/**
+ * Smart 2-per-row pairing layout algorithm.
+ * Pairs compact/half tiles side-by-side (2 in a row).
+ * Expands any odd leftover half tile to full-width (span 2) so no empty gap exists.
+ */
+export function applySmartTileLayout(tiles) {
+  let halfPending = null;
+  for (const t of tiles) {
+    const wide = t.isWide;
+    if (wide) {
+      if (halfPending) {
+        halfPending.setWide(true);
+        halfPending = null;
+      }
+      t.setWide(true);
+    } else {
+      if (halfPending) {
+        halfPending.setWide(false);
+        t.setWide(false);
+        halfPending = null;
+      } else {
+        halfPending = t;
+      }
+    }
+  }
+  if (halfPending) {
+    halfPending.setWide(true);
+  }
+}
+
+/**
+ * Smart Grouped Cover Tile for rooms with > 1 shutter.
+ * Simultaneously operates all shutters in the room and opens the room subview on click.
+ */
+export class GroupedCoverTile {
+  constructor(roomSpec, coverSpecs, ctx) {
+    this.roomSpec = roomSpec;
+    this.coverSpecs = coverSpecs;
+    this.ctx = ctx;
+    this.hass = null;
+    this.entityIds = coverSpecs.map((c) => c.entity_id);
+    this.isWide = true;
+    this._build();
+  }
+
+  setWide(wide) {
+    this.el.classList.toggle('wide', !!wide);
+  }
+
+  _build() {
+    this.iconEl = icon('mdi:window-shutter');
+    this.iconBtn = h('button', {
+      class: 'tile-icon',
+      style: { color: '#9c27b0', background: 'rgba(156, 39, 176, 0.18)' },
+      onClick: (e) => {
+        e.stopPropagation();
+        this.ctx.onOpenRoom?.(this.roomSpec.area_id);
+      },
+    }, this.iconEl);
+
+    this.nameEl = h('div', { class: 'tile-name' }, 'Rollläden');
+    this.stateEl = h('div', { class: 'tile-state' }, `${this.coverSpecs.length} Rollläden`);
+    this.info = h('div', {
+      class: 'tile-info',
+      onClick: () => this.ctx.onOpenRoom?.(this.roomSpec.area_id),
+    }, this.nameEl, this.stateEl);
+
+    const mk = (ic, label, fn) => h('button', {
+      class: 'mini-btn', 'aria-label': label,
+      onClick: (e) => { e.stopPropagation(); fn(); },
+    }, icon(ic));
+
+    this.btnUp = mk('mdi:arrow-up', 'Alle öffnen', () => this.hass?.callService('cover', 'open_cover', { entity_id: this.entityIds }));
+    this.btnStop = mk('mdi:stop', 'Alle stoppen', () => this.hass?.callService('cover', 'stop_cover', { entity_id: this.entityIds }));
+    this.btnDown = mk('mdi:arrow-down', 'Alle schließen', () => this.hass?.callService('cover', 'close_cover', { entity_id: this.entityIds }));
+
+    this.btnDetail = h('button', {
+      class: 'mini-btn', 'aria-label': 'Details', title: 'Einzelne Rollläden anzeigen',
+      onClick: (e) => { e.stopPropagation(); this.ctx.onOpenRoom?.(this.roomSpec.area_id); },
+    }, icon('mdi:tune-vertical'));
+
+    this.btns = h('div', { class: 'tile-btns' }, this.btnUp, this.btnStop, this.btnDown, this.btnDetail);
+
+    this.el = h('div', {
+      class: 'tile grouped-cover wide',
+      'data-active': 'true',
+    }, h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns));
+  }
+
+  update(hass) {
+    this.hass = hass;
+    const states = this.entityIds.map((id) => hass.states[id]).filter(Boolean);
+    const openCount = states.filter((s) => s.state !== 'closed' && s.state !== 'unavailable').length;
+    const closedCount = states.filter((s) => s.state === 'closed').length;
+    const moving = states.some((s) => s.state === 'opening' || s.state === 'closing');
+
+    if (moving) {
+      this.stateEl.textContent = 'In Bewegung...';
+      this.btnStop.style.color = '#9c27b0';
+      this.btnStop.style.background = 'rgba(156, 39, 176, 0.25)';
+    } else {
+      this.btnStop.style.color = '';
+      this.btnStop.style.background = '';
+      if (openCount === states.length && states.length > 0) {
+        this.stateEl.textContent = 'Alle geöffnet';
+      } else if (closedCount === states.length && states.length > 0) {
+        this.stateEl.textContent = 'Alle geschlossen';
+      } else {
+        this.stateEl.textContent = `${closedCount} geschlossen · ${openCount} geöffnet`;
+      }
+    }
+  }
+}
+
 export class Room {
   /**
    * @param {object} spec  room from backend layout
-   * @param {object} ctx   {presets, openState: Map<string, boolean>}
+   * @param {object} ctx   {presets, openState: Map<string, boolean>, onOpenRoom: (areaId) => void}
    */
   constructor(spec, ctx) {
     this.spec = spec;
     this.ctx = ctx;
     this.hass = null;
-    this.tiles = spec.tiles.map((t) => new Tile(t, ctx));
+
+    // Smart Rollladen Gruppierung:
+    // If room has > 1 cover, group them into a single master GroupedCoverTile
+    const covers = spec.tiles.filter((t) => domainOf(t.entity_id) === 'cover');
+    if (covers.length > 1) {
+      this.groupedCover = new GroupedCoverTile(spec, covers, ctx);
+      const nonCovers = spec.tiles.filter((t) => domainOf(t.entity_id) !== 'cover');
+      this.tiles = [this.groupedCover, ...nonCovers.map((t) => new Tile(t, ctx))];
+    } else {
+      this.tiles = spec.tiles.map((t) => new Tile(t, ctx));
+    }
+
     this._build();
   }
 
@@ -40,19 +167,29 @@ export class Room {
 
     // Group controls (all lights / switches / covers of this room)
     this.groups = GROUPS
-      .map((g) => ({ ...g, ids: spec.tiles.filter((t) => domainOf(t.entity_id) === g.domain).map((t) => t.entity_id) }))
+      .map((g) => ({
+        ...g,
+        ids: spec.tiles.filter((t) => domainOf(t.entity_id) === g.domain).map((t) => t.entity_id),
+      }))
       .filter((g) => g.ids.length > 0)
       .map((g) => {
         const countEl = h('span', { class: 'count', hidden: true });
         const btn = h('button', {
           class: 'ctrl-btn', 'aria-label': g.label,
+          style: { '--group-color': g.color },
           onClick: (e) => { e.stopPropagation(); this._toggleGroup(g); },
         }, icon(g.icon), countEl);
         return { ...g, btn, countEl };
       });
 
+    // Room detail view button
+    this.detailBtn = h('button', {
+      class: 'ctrl-btn', 'aria-label': `${spec.name} Details`, title: `${spec.name} öffnen`,
+      onClick: (e) => { e.stopPropagation(); this.ctx.onOpenRoom?.(this.spec.area_id); },
+    }, icon('mdi:tune-vertical'));
+
     this.metaEl = h('div', { class: 'room-meta', hidden: true });
-    this.controlsEl = h('div', { class: 'room-controls' }, this.groups.map((g) => g.btn));
+    this.controlsEl = h('div', { class: 'room-controls' }, ...this.groups.map((g) => g.btn), this.detailBtn);
 
     this.head = h('div', {
       class: 'room-head', role: 'button', tabindex: '0', 'aria-expanded': String(this.open),
@@ -69,6 +206,7 @@ export class Room {
       this.head,
       h('div', { class: 'room-body' }, h('div', { class: 'room-body-inner' }, this.grid)));
     this._applyOpen();
+    applySmartTileLayout(this.tiles);
   }
 
   _applyOpen() {
@@ -97,6 +235,7 @@ export class Room {
   update(hass) {
     this.hass = hass;
     this.tiles.forEach((t) => t.update(hass));
+    applySmartTileLayout(this.tiles);
 
     // Group controls
     for (const g of this.groups) {

@@ -4,6 +4,7 @@
 import { STYLES } from './lib/styles.js';
 import { h, icon, debounce } from './lib/util.js';
 import { Room } from './components/room.js';
+import { RoomDetailView } from './components/room_detail.js';
 import {
   Badges, SmokeAlerts, WarningCard, TrashCard, PersonCards, AnnounceCard, NavBar,
 } from './components/specials.js';
@@ -18,6 +19,7 @@ class CompanionDashboardPanel extends HTMLElement {
     this._components = [];
     this._data = null;
     this._raf = 0;
+    this._activeRoomId = null;
     this._reload = debounce(() => this._load(), 800);
   }
 
@@ -110,7 +112,27 @@ class CompanionDashboardPanel extends HTMLElement {
   // ── rendering ──
   _render() {
     const { config, layout, user } = this._data;
-    const ctx = { presets: config.color_presets || [], openState: this._openState };
+    const ctx = {
+      presets: config.color_presets || [],
+      openState: this._openState,
+      onOpenRoom: (areaId) => this._openRoom(areaId),
+    };
+
+    // Subview: single room detailed view
+    if (this._activeRoomId) {
+      const roomSpec = layout.rooms.find((r) => r.area_id === this._activeRoomId);
+      if (roomSpec) {
+        this._ro?.disconnect();
+        this._roomDetail = new RoomDetailView(roomSpec, ctx, () => this._closeRoom());
+        this._nav = new NavBar(config.nav);
+        this._components = [this._roomDetail];
+        this._content.replaceChildren(this._roomDetail.el, this._nav.el);
+        this._push();
+        return;
+      }
+      this._activeRoomId = null;
+    }
+
     const scroll = this.scrollTop;
 
     // Greeting + badges
@@ -209,7 +231,9 @@ class CompanionDashboardPanel extends HTMLElement {
     const hass = this._hass;
     if (!hass || !this._data) return;
     this._components.forEach((c) => c.update(hass));
-    this._greeting.textContent = this._greetingText(hass);
+    if (this._greeting) {
+      this._greeting.textContent = this._greetingText(hass);
+    }
   }
 
   _greetingText(hass) {
@@ -222,6 +246,18 @@ class CompanionDashboardPanel extends HTMLElement {
       hello = hour < 5 ? 'Gute Nacht' : hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend';
     }
     return name ? `${hello}, ${name}` : hello;
+  }
+
+  // ── room subview ──
+  _openRoom(areaId) {
+    this._activeRoomId = areaId;
+    this._render();
+    this.scrollTop = 0;
+  }
+
+  _closeRoom() {
+    this._activeRoomId = null;
+    this._render();
   }
 
   // ── device wizard ──

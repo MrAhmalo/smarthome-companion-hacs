@@ -1,7 +1,7 @@
 // Tile component: one entity as a HA-tile-like card (lights, switches, covers, climate, media, sensors).
 import {
   h, icon, domainOf, entityIcon, isActive, isUnavailable, stateLabel, numeric, moreInfo, toggleEntity,
-  isToggleable, resolveColor,
+  isToggleable, resolveColor, getEntityColor,
 } from '../lib/util.js';
 
 const COLOR_MODES = ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'];
@@ -77,8 +77,27 @@ export class Tile {
     this.el.classList.add('media');
   }
 
+  get isWide() {
+    const active = this._active(this._st);
+    const { brightness } = lightSupport(this._st);
+    return ['cover', 'media_player', 'climate'].includes(this.kind)
+      || (this.domain === 'light' && active && brightness)
+      || this.spec.wide === true;
+  }
+
+  setWide(wide) {
+    this.el.classList.toggle('wide', !!wide);
+  }
+
   _buildLightFeature() {
-    this.slider = h('input', { type: 'range', class: 'slider', min: '1', max: '100', step: '1', 'aria-label': 'Helligkeit' });
+    this.slider = h('input', {
+      type: 'range', class: 'slider', min: '1', max: '100', step: '1', 'aria-label': 'Helligkeit',
+      style: { touchAction: 'none' },
+    });
+    // Prevent vertical page scroll during slider touch interaction
+    this.slider.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.slider.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+    this.slider.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
     this.slider.addEventListener('input', () => {
       this._dragging = true;
       this.slider.style.setProperty('--val', `${this.slider.value}%`);
@@ -149,11 +168,7 @@ export class Tile {
     this.iconEl.setAttribute('icon', entityIcon(this.entityId, st, this.spec.icon));
     let color = '';
     if (active) {
-      if (this.domain === 'light' && Array.isArray(attrs.rgb_color)) color = `rgb(${attrs.rgb_color.join(',')})`;
-      else if (this.domain === 'climate') color = attrs.hvac_action === 'cooling' ? '#2b9af9' : '#ff8c00';
-      else if (this.domain === 'cover') color = '#3b82f6';
-      else if (this.domain === 'media_player') color = '#03a9f4';
-      else if (this.spec.color && this.kind === 'toggle') color = resolveColor(this.spec.color);
+      color = getEntityColor(this.entityId, st, this.spec.category, this.spec.color);
     }
     if (color) this.el.style.setProperty('--tile-color', color); else this.el.style.removeProperty('--tile-color');
 

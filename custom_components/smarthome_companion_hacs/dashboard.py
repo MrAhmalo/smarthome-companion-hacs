@@ -369,44 +369,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
         )
         add_tile(extra.get("area_id") or area_id, tile)
 
-    # ── Auto-discover controllable entities in HA areas so no room is missing ──
-    configured_device_ids = set(store.get_devices().keys())
-    _CONTROLLABLE = {"light", "switch", "cover", "media_player", "climate", "fan", "valve"}
-    _DOM_CAT = {
-        "light": "leuchte",
-        "switch": "schalter",
-        "cover": "jalousie",
-        "media_player": "fernseher",
-        "climate": "klima",
-        "fan": "schalter",
-        "valve": "wasserventil",
-    }
-    for entry in ent_reg.entities.values():
-        if entry.disabled_by or entry.hidden_by:
-            continue
-        if entry.entity_category is not None:
-            continue
-        if entry.platform == DOMAIN:
-            continue
-        if entry.domain not in _CONTROLLABLE:
-            continue
-        if entry.entity_id in seen_entities:
-            continue
-        if entry.device_id and entry.device_id in configured_device_ids:
-            continue
-        area_id = entry.area_id
-        dev = dev_reg.async_get(entry.device_id) if entry.device_id else None
-        if not area_id and dev:
-            area_id = dev.area_id
-        if not area_id:
-            continue
-        name = entry.name or entry.original_name or (dev.name_by_user if dev else None) or (dev.name if dev else None) or entry.entity_id
-        dc = _device_class(entry)
-        cat = "steckdose" if (entry.domain == "switch" and dc == "outlet") else _DOM_CAT.get(entry.domain, "schalter")
-        area_id, tile = make_tile(
-            f"auto:{entry.entity_id}", entry, entry.entity_id, name, cat, entry.icon, dev,
-        )
-        add_tile(area_id, tile)
+# Only configured devices and extra_tiles are included on the dashboard
 
     # ── Area sensors / alerts straight from the registries ──
     sensors: dict[str, dict[str, list[str]]] = {}
@@ -430,7 +393,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
 
     # ── Assemble rooms ──
     order = [a for a in config.get("room_order", []) if isinstance(a, str)]
-    all_ids = set(tiles_by_area) | {a for a in areas if a in sensors}
+    all_ids = set(tiles_by_area)
     if edit:
         all_ids |= set(areas.keys())
     ordered = [a for a in order if a in all_ids]

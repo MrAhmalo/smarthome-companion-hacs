@@ -70,6 +70,7 @@
     'light.wz_decke': st('on', { friendly_name: 'Decke', brightness: 180, supported_color_modes: ['rgb'], rgb_color: [255, 180, 80] }),
     'light.wz_stehlampe': st('off', { friendly_name: 'Stehlampe', supported_color_modes: ['brightness'] }),
     'cover.wz_jalousie': st('open', { friendly_name: 'Jalousie', current_position: 80, supported_features: 15 }),
+    'cover.wz_rollo_ost': st('closed', { friendly_name: 'Rollladen Ostseite', current_position: 0, supported_features: 15 }),
     'switch.wz_steckdose': st('on', { friendly_name: 'Steckdose' }),
     'sensor.wz_steckdose_power': st('42', { unit_of_measurement: 'W' }),
     'media_player.wohnzimmer': st('playing', { friendly_name: 'Apple TV', media_title: 'Tatort', supported_features: 152461 }),
@@ -94,6 +95,7 @@
         sensors: { temperature: ['sensor.wz_temp'], humidity: ['sensor.wz_hum'], motion: ['binary_sensor.wz_motion'] },
         tiles: [
           tile('a', 'cover.wz_jalousie', 'Jalousie', 'jalousie'),
+          tile('a2', 'cover.wz_rollo_ost', 'Rollladen Ostseite', 'jalousie'),
           tile('b', 'light.wz_decke', 'Decke', 'leuchte', { color: 'amber' }),
           tile('c', 'light.wz_stehlampe', 'Stehlampe', 'leuchte'),
           tile('d', 'switch.wz_steckdose', 'Steckdose', 'steckdose', { power: 'sensor.wz_steckdose_power' }),
