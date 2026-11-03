@@ -1,6 +1,6 @@
 // Room detail subview: dedicated granular control page for a single room.
 import {
-  h, icon, domainOf, numeric, isActive, isUnavailable, getEntityColor,
+  h, icon, domainOf, numeric, isActive, isUnavailable,
 } from '../lib/util.js';
 import { Tile } from './tile.js';
 

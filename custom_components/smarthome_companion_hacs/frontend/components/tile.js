@@ -1,8 +1,51 @@
 // Tile component: one entity as a HA-tile-like card (lights, switches, covers, climate, media, sensors).
 import {
   h, icon, domainOf, entityIcon, isActive, isUnavailable, stateLabel, numeric, moreInfo, toggleEntity,
-  isToggleable, resolveColor, getEntityColor,
+  isToggleable, resolveColor,
 } from '../lib/util.js';
+
+const DOMAIN_COLORS = {
+  cover: '#9c27b0', // Lila (Home Assistant / Mushroom standard)
+  jalousie: '#9c27b0',
+  light: '#ffc107', // Amber
+  leuchte: '#ffc107',
+  switch: '#2196f3', // Blau
+  schalter: '#2196f3',
+  steckdose: '#009688', // Türkis
+  outlet: '#009688',
+  climate: '#ff9800', // Orange (heat)
+  klima: '#ff9800',
+  media_player: '#03a9f4', // Hellblau
+  fernseher: '#03a9f4',
+  fan: '#00bcd4', // Cyan
+  luefter: '#00bcd4',
+  valve: '#00bcd4',
+  wasserventil: '#00bcd4',
+  lock: '#4caf50',
+  sensor: '#2196f3',
+};
+
+function getEntityColor(entityId, st, category, specColor) {
+  if (specColor) return resolveColor(specColor) || specColor;
+  const domain = domainOf(entityId);
+  const dc = st?.attributes?.device_class;
+  if (domain === 'cover' || category === 'jalousie') return DOMAIN_COLORS.cover;
+  if (domain === 'light' || category === 'leuchte') {
+    if (Array.isArray(st?.attributes?.rgb_color)) return `rgb(${st.attributes.rgb_color.join(',')})`;
+    return DOMAIN_COLORS.light;
+  }
+  if (domain === 'switch' || category === 'schalter' || category === 'steckdose') {
+    if (dc === 'outlet' || category === 'steckdose') return DOMAIN_COLORS.steckdose;
+    return DOMAIN_COLORS.switch;
+  }
+  if (domain === 'climate' || category === 'klima') {
+    return st?.attributes?.hvac_action === 'cooling' ? '#00bcd4' : '#ff9800';
+  }
+  if (domain === 'media_player' || category === 'fernseher') return DOMAIN_COLORS.media_player;
+  if (domain === 'fan') return DOMAIN_COLORS.fan;
+  if (domain === 'valve') return DOMAIN_COLORS.valve;
+  return DOMAIN_COLORS[domain] || '#2196f3';
+}
 
 const COLOR_MODES = ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'];
 
