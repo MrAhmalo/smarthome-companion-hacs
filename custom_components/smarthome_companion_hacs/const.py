@@ -1,7 +1,7 @@
 DOMAIN = "smarthome_companion_hacs"
 STORAGE_KEY = "smarthome_companion_hacs.configuration"
 STORAGE_VERSION = 1
-VERSION = "2.8.7"
+VERSION = "2.8.8"
 
 DEFAULT_CATEGORIES = {
     "leuchte": {
@@ -16,17 +16,17 @@ DEFAULT_CATEGORIES = {
     },
     "jalousie": {
         "icon": "mdi:window-shutter",
-        "color": "#6366F1",
+        "color": "#9C27B0",
         "display_name": "Jalousien",
     },
     "klima": {
         "icon": "mdi:thermometer",
-        "color": "#EF4444",
+        "color": "#FF9800",
         "display_name": "Klima",
     },
     "medien": {
         "icon": "mdi:speaker",
-        "color": "#8B5CF6",
+        "color": "#03A9F4",
         "display_name": "Medien",
     },
 }

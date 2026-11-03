@@ -195,7 +195,7 @@ export class DeviceWizard {
   _renderStep0() {
     const areaMap = new Map(this.areas.map((a) => [a.area_id, a.name]));
 
-    const hero = h('div', { class: 'win11-hero-badge' }, icon('mdi:devices'));
+    const hero = h('div', { class: 'win11-hero-badge', style: { '--hero-color': '#2196F3' } }, icon('mdi:devices'));
 
     const searchInput = h('input', {
       type: 'text', placeholder: 'Gerät suchen (Name, Hersteller, Modell, Raum)...', value: this.searchQuery,
@@ -322,8 +322,22 @@ export class DeviceWizard {
     if (!d) return;
     const existing = this.configuredDevices[d.id];
 
-    this.customName = existing?.custom_name || d.name_by_user || d.name || '';
     this.selectedAreaId = d.area_id || '';
+    const area = this.areas.find((a) => a.area_id === this.selectedAreaId);
+
+    let rawName = existing?.custom_name || d.name_by_user || d.name || '';
+    if (area?.name && !existing?.custom_name) {
+      const aName = area.name.trim();
+      const prefixRegex = new RegExp(`^${aName}\\s*[-_–—:]*\\s*`, 'i');
+      if (prefixRegex.test(rawName)) {
+        rawName = rawName.replace(prefixRegex, '');
+      } else if (rawName.toLowerCase().startsWith(aName.toLowerCase())) {
+        rawName = rawName.slice(aName.length).replace(/^[-_–—:\s]+/, '');
+      }
+    }
+    rawName = rawName.trim();
+    if (rawName) rawName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+    this.customName = rawName;
 
     // Related entities
     const devEntities = this.entities.filter((e) => e.device_id === d.id && !e.disabled_by);
@@ -349,7 +363,18 @@ export class DeviceWizard {
     const existingSubs = existing?.entities?.sub_entities || {};
     this.channels = controllable.map((e, idx) => {
       const sub = existingSubs[e.entity_id] || {};
-      const channelName = sub.custom_name || sub.name || e.name || e.original_name || (controllable.length > 1 ? `Kanal ${idx + 1}` : this.customName);
+      let channelName = sub.custom_name || sub.name || e.name || e.original_name || (controllable.length > 1 ? `Kanal ${idx + 1}` : this.customName);
+      if (area?.name && !sub.custom_name && !sub.name) {
+        const aName = area.name.trim();
+        const pRegex = new RegExp(`^${aName}\\s*[-_–—:]*\\s*`, 'i');
+        if (pRegex.test(channelName)) {
+          channelName = channelName.replace(pRegex, '');
+        } else if (channelName.toLowerCase().startsWith(aName.toLowerCase())) {
+          channelName = channelName.slice(aName.length).replace(/^[-_–—:\s]+/, '');
+        }
+        channelName = channelName.trim();
+        if (channelName) channelName = channelName.charAt(0).toUpperCase() + channelName.slice(1);
+      }
       return {
         entity_id: e.entity_id,
         unique_id: e.unique_id || '',
@@ -404,7 +429,7 @@ export class DeviceWizard {
       }));
 
     const curCat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
-    const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color } }, icon(curCat.icon));
+    const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color, '--hero-color': curCat.color } }, icon(curCat.icon));
 
     this.body.replaceChildren(
       hero,
@@ -430,7 +455,7 @@ export class DeviceWizard {
     }
 
     const curCat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
-    const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color || 'var(--cd-accent)' } }, icon('mdi:tune-vertical'));
+    const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color || 'var(--cd-accent)', '--hero-color': curCat.color || 'var(--cd-accent)' } }, icon(curCat.icon || 'mdi:tune-vertical'));
 
     const header = h('div', { style: { textAlign: 'center', marginBottom: '14px' } },
       h('h3', { style: { margin: '0 0 4px', fontSize: '18px', fontWeight: '700' } }, isMulti ? 'Kanäle & Messung' : 'Messung & Simulation'),
@@ -455,7 +480,7 @@ export class DeviceWizard {
 
       const isAutoPower = ch.power && ch.power === this.powerEntityId;
       const powerBadge = isAutoPower
-        ? h('span', { class: 'badge-tag ok', style: { marginLeft: '8px' } }, icon('mdi:check-circle'), 'Automatisch erkannt')
+        ? h('span', { class: 'badge-tag ok auto-badge', style: { marginLeft: '8px' } }, icon('mdi:check-circle'), 'Automatisch erkannt')
         : null;
 
       const powerCard = h('div', { class: 'row-card', style: { padding: '16px 20px', gap: '12px' } },
@@ -470,6 +495,7 @@ export class DeviceWizard {
       const simCard = h('div', {
         class: `feature-card${ch.presence_simulation ? ' active' : ''}`,
         style: { '--feat-color': '#ba68c8', cursor: 'pointer' },
+        ...(ch.presence_simulation ? { 'data-active': '' } : {}),
         onClick: () => {
           ch.presence_simulation = !ch.presence_simulation;
           simCard.toggleAttribute('data-active', ch.presence_simulation);
@@ -516,6 +542,7 @@ export class DeviceWizard {
       const simCard = h('div', {
         class: `feature-card${ch.presence_simulation && ch.enabled ? ' active' : ''}`,
         style: { '--feat-color': '#ba68c8', cursor: ch.enabled ? 'pointer' : 'default' },
+        ...(ch.presence_simulation && ch.enabled ? { 'data-active': '' } : {}),
         onClick: () => {
           if (!ch.enabled) return;
           ch.presence_simulation = !ch.presence_simulation;
@@ -531,7 +558,7 @@ export class DeviceWizard {
 
       const isAutoPower = ch.power && ch.power === this.powerEntityId;
       const powerBadge = isAutoPower
-        ? h('span', { class: 'badge-tag ok', style: { marginLeft: '8px' } }, icon('mdi:check-circle'), 'Automatisch erkannt')
+        ? h('span', { class: 'badge-tag ok auto-badge' }, icon('mdi:check-circle'), 'Automatisch erkannt')
         : null;
 
       const enabledToggle = h('div', {
@@ -558,10 +585,16 @@ export class DeviceWizard {
       return h('div', { class: 'channel-card', style: ch.enabled ? {} : { opacity: '0.5' } },
         headCard,
         h('div', { class: 'fields' },
-          h('div', { class: 'field' }, 'Kanal-Name', nameInput),
-          h('div', { class: 'field' }, 'Kategorie', catDropdown.el),
           h('div', { class: 'field' },
-            h('div', { style: { display: 'flex', alignItems: 'center' } }, 'Leistungssensor (Watt)', powerBadge),
+            h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Kanal-Name')),
+            nameInput),
+          h('div', { class: 'field' },
+            h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Kategorie')),
+            catDropdown.el),
+          h('div', { class: 'field' },
+            h('div', { class: 'field-head' },
+              h('span', { class: 'field-label' }, 'Leistungssensor (Watt)'),
+              powerBadge),
             powerPicker.el)),
         simCard);
     });
@@ -577,7 +610,7 @@ export class DeviceWizard {
     const activeChannels = this.channels.filter((c) => c.enabled);
 
     // Reliable Hero Badge with Category Icon and glowing ring
-    const hero = h('div', { class: 'win11-hero-badge', style: { color: cat.color } }, icon(cat.icon || 'mdi:check-circle'));
+    const hero = h('div', { class: 'win11-hero-badge', style: { color: cat.color, '--hero-color': cat.color } }, icon(cat.icon || 'mdi:check-circle'));
 
     const header = h('div', { style: { textAlign: 'center', marginBottom: '14px' } },
       h('h3', { style: { margin: '0 0 4px', fontSize: '18px', fontWeight: '700' } }, 'Fast fertig!'),
@@ -604,6 +637,7 @@ export class DeviceWizard {
     const syncCard = h('div', {
       class: `feature-card${this.renameInHA ? ' active' : ''}`,
       style: { '--feat-color': '#2196f3', cursor: 'pointer' },
+      ...(this.renameInHA ? { 'data-active': '' } : {}),
       onClick: () => {
         this.renameInHA = !this.renameInHA;
         syncCard.toggleAttribute('data-active', this.renameInHA);
@@ -654,7 +688,7 @@ export class DeviceWizard {
       h('div', { class: 'win11-success-badge' }, icon('mdi:check')),
       h('h2', { style: { margin: '8px 0 2px', fontSize: '22px', fontWeight: '700', color: 'var(--primary-text-color, #fff)' } }, 'Alles bereit!'),
       h('div', { class: 'hint', style: { fontSize: '15px', maxWidth: '440px', lineHeight: '1.5', color: 'rgba(255,255,255,0.85)' } },
-        `„${this.customName}“ wurde erfolgreich im Raum „${areaName}“ eingerichtet.`),
+        `Gerät „${this.customName}“ wurde erfolgreich im Raum „${areaName}“ eingerichtet.`),
       h('div', { style: { display: 'flex', gap: '12px', marginTop: '18px' } },
         h('button', {
           class: 'btn secondary',

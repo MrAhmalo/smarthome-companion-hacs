@@ -26,22 +26,20 @@ const DOMAIN_COLORS = {
 };
 
 function getEntityColor(entityId, st, category, specColor) {
-  if (specColor) return resolveColor(specColor) || specColor;
   const domain = domainOf(entityId);
   const dc = st?.attributes?.device_class;
-  if (domain === 'cover' || category === 'jalousie') return DOMAIN_COLORS.cover;
-  if (domain === 'light' || category === 'leuchte') {
+  if (category === 'jalousie' || domain === 'cover') return DOMAIN_COLORS.cover;
+  if (category === 'leuchte' || domain === 'light') {
     if (Array.isArray(st?.attributes?.rgb_color)) return `rgb(${st.attributes.rgb_color.join(',')})`;
     return DOMAIN_COLORS.light;
   }
-  if (domain === 'switch' || category === 'schalter' || category === 'steckdose') {
-    if (dc === 'outlet' || category === 'steckdose') return DOMAIN_COLORS.steckdose;
-    return DOMAIN_COLORS.switch;
-  }
-  if (domain === 'climate' || category === 'klima') {
+  if (category === 'steckdose' || dc === 'outlet') return DOMAIN_COLORS.steckdose;
+  if (category === 'schalter' || domain === 'switch') return DOMAIN_COLORS.switch;
+  if (category === 'klima' || domain === 'climate') {
     return st?.attributes?.hvac_action === 'cooling' ? '#00bcd4' : '#ff9800';
   }
-  if (domain === 'media_player' || category === 'fernseher') return DOMAIN_COLORS.media_player;
+  if (category === 'fernseher' || category === 'medien' || domain === 'media_player') return DOMAIN_COLORS.media_player;
+  if (specColor && specColor !== '#6366F1') return resolveColor(specColor) || specColor;
   if (domain === 'fan') return DOMAIN_COLORS.fan;
   if (domain === 'valve') return DOMAIN_COLORS.valve;
   return DOMAIN_COLORS[domain] || '#2196f3';
@@ -180,11 +178,13 @@ export class Tile {
 
   // ── state ──
   _active(st) {
+    if (this.spec.category === 'jalousie' || this.domain === 'cover') {
+      return !!st && st.state !== 'closed' && !isUnavailable(st);
+    }
     switch (this.domain) {
       case 'climate': return !!st && st.state !== 'off' && !isUnavailable(st);
       case 'media_player': return !!st && !['off', 'standby', 'idle', 'unavailable', 'unknown'].includes(st.state);
       case 'sensor': return false;
-      case 'cover': return !!st && st.state !== 'closed' && !isUnavailable(st);
       default: return isActive(st);
     }
   }
@@ -208,7 +208,7 @@ export class Tile {
     this.nameEl.textContent = this.spec.name || attrs.friendly_name || this.entityId;
 
     // Icon + colour
-    this.iconEl.setAttribute('icon', entityIcon(this.entityId, st, this.spec.icon));
+    this.iconEl.setAttribute('icon', entityIcon(this.entityId, st, this.spec.icon, this.spec.category));
     let color = '';
     if (active) {
       color = getEntityColor(this.entityId, st, this.spec.category, this.spec.color);
@@ -241,7 +241,7 @@ export class Tile {
       text = [attrs.media_title, attrs.media_artist].filter(Boolean).join(' – ');
     }
     const watts = numeric(pw);
-    if (watts !== null && active) text += ` · ${watts % 1 ? watts.toFixed(1) : watts} W`;
+    if (watts !== null && watts > 0 && active) text += ` · ${watts % 1 ? watts.toFixed(1) : watts} W`;
     return text;
   }
 

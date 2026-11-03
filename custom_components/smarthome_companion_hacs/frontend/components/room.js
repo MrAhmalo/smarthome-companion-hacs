@@ -4,10 +4,25 @@ import {
 } from '../lib/util.js';
 import { Tile } from './tile.js';
 
+export function effectiveCategory(t) {
+  const cat = t.category || t.spec?.category;
+  if (cat === 'leuchte' || cat === 'light') return 'light';
+  if (cat === 'jalousie' || cat === 'cover') return 'cover';
+  if (cat === 'steckdose' || cat === 'outlet') return 'outlet';
+  if (cat === 'schalter' || cat === 'switch') return 'switch';
+  if (cat === 'fernseher' || cat === 'medien' || cat === 'media_player') return 'media_player';
+  const d = domainOf(t.entity_id || t.entityId);
+  if (d === 'light') return 'light';
+  if (d === 'cover') return 'cover';
+  if (d === 'switch') return 'switch';
+  if (d === 'media_player') return 'media_player';
+  return d;
+}
+
 const GROUPS = [
-  { domain: 'light', icon: 'mdi:lightbulb', label: 'Alle Lichter', color: '#ffc107' },
-  { domain: 'switch', icon: 'mdi:toggle-switch', label: 'Alle Schalter', color: '#2196f3' },
-  { domain: 'cover', icon: 'mdi:window-shutter', label: 'Alle Jalousien', color: '#9c27b0' },
+  { key: 'light', icon: 'mdi:lightbulb', label: 'Alle Lichter', color: '#ffc107' },
+  { key: 'switch', icon: 'mdi:power-plug', label: 'Alle Geräte & Steckdosen', color: '#2196f3' },
+  { key: 'cover', icon: 'mdi:window-shutter', label: 'Alle Jalousien', color: '#9c27b0' },
 ];
 
 function average(hass, ids) {
@@ -155,11 +170,13 @@ export class Room {
 
     // Strict priority in room: 1. Jalousien (Rollläden), 2. Medien / TV, 3. Der Rest
     const tileWeight = (t) => {
-      if (t instanceof GroupedCoverTile || t.domain === 'cover' || t.spec?.category === 'jalousie') return 0;
-      if (t.domain === 'media_player' || t.spec?.category === 'fernseher' || t.spec?.category === 'medien') return 1;
-      if (t.domain === 'light' || t.spec?.category === 'leuchte') return 2;
-      if (t.spec?.category === 'steckdose') return 3;
-      if (t.domain === 'switch' || t.spec?.category === 'schalter') return 4;
+      if (t instanceof GroupedCoverTile) return 0;
+      const cat = effectiveCategory(t);
+      if (cat === 'cover') return 0;
+      if (cat === 'media_player') return 1;
+      if (cat === 'light') return 2;
+      if (cat === 'outlet') return 3;
+      if (cat === 'switch') return 4;
       return 5;
     };
     this.tiles.sort((a, b) => tileWeight(a) - tileWeight(b));
@@ -176,12 +193,22 @@ export class Room {
   _build() {
     const { spec } = this;
 
-    // Group controls (all lights / switches / covers of this room)
+    // Group controls (all lights / switches / covers of this room based on effective category)
     this.groups = GROUPS
-      .map((g) => ({
-        ...g,
-        ids: spec.tiles.filter((t) => domainOf(t.entity_id) === g.domain).map((t) => t.entity_id),
-      }))
+      .map((g) => {
+        let matchingTiles = [];
+        if (g.key === 'light') {
+          matchingTiles = spec.tiles.filter((t) => effectiveCategory(t) === 'light');
+        } else if (g.key === 'switch') {
+          matchingTiles = spec.tiles.filter((t) => ['switch', 'outlet'].includes(effectiveCategory(t)));
+        } else if (g.key === 'cover') {
+          matchingTiles = spec.tiles.filter((t) => effectiveCategory(t) === 'cover');
+        }
+        return {
+          ...g,
+          ids: matchingTiles.map((t) => t.entity_id),
+        };
+      })
       .filter((g) => g.ids.length > 0)
       .map((g) => {
         const countEl = h('span', { class: 'count', hidden: true });
@@ -234,12 +261,24 @@ export class Room {
 
   _toggleGroup(group) {
     const states = group.ids.map((id) => this.hass.states[id]).filter(Boolean);
-    if (group.domain === 'cover') {
+    if (group.key === 'cover') {
       const anyOpen = states.some((s) => s.state !== 'closed');
       this.hass.callService('cover', anyOpen ? 'close_cover' : 'open_cover', { entity_id: group.ids });
     } else {
       const anyOn = states.some((s) => isActive(s));
-      this.hass.callService(group.domain, anyOn ? 'turn_off' : 'turn_on', { entity_id: group.ids });
+      const targetService = anyOn ? 'turn_off' : 'turn_on';
+      const byDomain = {};
+      for (const id of group.ids) {
+        const dom = domainOf(id);
+        (byDomain[dom] ||= []).push(id);
+      }
+      for (const [dom, ids] of Object.entries(byDomain)) {
+        if (['light', 'switch', 'input_boolean'].includes(dom)) {
+          this.hass.callService(dom, targetService, { entity_id: ids });
+        } else {
+          this.hass.callService('homeassistant', targetService, { entity_id: ids });
+        }
+      }
     }
   }
 
@@ -251,7 +290,7 @@ export class Room {
     // Group controls
     for (const g of this.groups) {
       const states = g.ids.map((id) => hass.states[id]).filter(Boolean);
-      const count = g.domain === 'cover'
+      const count = g.key === 'cover'
         ? states.filter((s) => s.state !== 'closed').length
         : states.filter((s) => isActive(s)).length;
       g.btn.toggleAttribute('data-on', count > 0);

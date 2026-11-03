@@ -245,13 +245,28 @@ const COVER_ICON = {
   awning: ['mdi:awning-outline', 'mdi:awning-outline'],
 };
 
-/** Best-effort icon for an entity (custom icon > entity icon > domain default). */
-export function entityIcon(entityId, st, custom) {
+/** Best-effort icon for an entity (custom icon > category > entity icon > domain default). */
+export function entityIcon(entityId, st, custom, category) {
   if (custom) return custom;
-  if (st?.attributes?.icon) return st.attributes.icon;
-  const domain = domainOf(entityId);
   const on = isActive(st);
   const dc = st?.attributes?.device_class;
+  if (category === 'leuchte') return on ? 'mdi:lightbulb' : 'mdi:lightbulb-outline';
+  if (category === 'steckdose') return on ? 'mdi:power-socket-eu' : 'mdi:power-socket-eu';
+  if (category === 'jalousie') {
+    const pair = COVER_ICON[dc] || COVER_ICON.shutter;
+    return st?.state === 'closed' ? pair[0] : pair[1];
+  }
+  if (category === 'fernseher' || category === 'medien') return 'mdi:television';
+  if (category === 'schalter') return on ? 'mdi:power-plug' : 'mdi:power-plug-off';
+  if (category === 'klima') return 'mdi:thermostat';
+  if (category === 'pumpe') return 'mdi:pump';
+  if (category === 'wasserventil') return on ? 'mdi:valve-open' : 'mdi:valve-closed';
+  if (category === 'bewegungsmelder') return 'mdi:motion-sensor';
+  if (category === 'bodenmessgeraet') return 'mdi:sprout';
+  if (category === 'raummessgeraet') return 'mdi:thermometer-lines';
+
+  if (st?.attributes?.icon) return st.attributes.icon;
+  const domain = domainOf(entityId);
   switch (domain) {
     case 'light': return on ? 'mdi:lightbulb' : 'mdi:lightbulb-outline';
     case 'switch': return dc === 'outlet' ? (on ? 'mdi:power-plug' : 'mdi:power-plug-off') : (on ? 'mdi:toggle-switch' : 'mdi:toggle-switch-off');

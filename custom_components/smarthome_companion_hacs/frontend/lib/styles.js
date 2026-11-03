@@ -137,6 +137,9 @@ input[type=range].slider {
   -webkit-appearance: none; appearance: none; flex: 1; min-width: 60px; height: 28px; border-radius: 14px; outline: none; cursor: pointer;
   background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
   touch-action: none;
+  padding: 0 6px;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 input[type=range].slider::-webkit-slider-thumb { -webkit-appearance: none; width: 6px; height: 18px; border-radius: 3px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
 input[type=range].slider::-moz-range-thumb { width: 6px; height: 18px; border: 0; border-radius: 3px; background: #fff; }
@@ -234,9 +237,10 @@ input[type=range].slider::-moz-range-thumb { width: 6px; height: 18px; border: 0
   overflow-y: auto;
 }
 .dialog {
-  width: min(1140px, 95vw);
-  min-height: min(680px, 88vh);
-  max-height: min(92vh, 920px);
+  width: min(1200px, 96vw);
+  min-height: min(740px, 88vh);
+  max-height: min(94vh, 940px);
+  height: min(820px, 90vh);
   margin: auto;
   display: flex; flex-direction: column;
   border-radius: var(--cd-radius);
@@ -260,10 +264,11 @@ input[type=range].slider::-moz-range-thumb { width: 6px; height: 18px; border: 0
 .row-card { border-radius: var(--cd-tile-radius, 12px); background: var(--cd-tile-bg); padding: 10px 12px; display: grid; gap: 10px; }
 .row-head { display: flex; align-items: center; gap: 6px; }
 .row-head .row-title { flex: 1; font-weight: 600; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fields { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
-.field { display: grid; gap: 4px; font-size: 12px; color: var(--cd-secondary); min-width: 0; position: relative; }
+.fields { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.field { display: grid; gap: 6px; font-size: 12px; color: var(--cd-secondary); min-width: 0; position: relative; }
 .field:has([data-open]), .row-card:has([data-open]), .channel-card:has([data-open]) { position: relative; z-index: 100; }
-.field-label { font-size: 12px; font-weight: 500; color: var(--cd-secondary); }
+.field-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 22px; }
+.field-label { font-size: 12px; font-weight: 600; color: var(--cd-secondary); white-space: nowrap; }
 .field > input[type=text], .field > input[type=number], .field > select, .field > input:not([type]) {
   height: 40px; border-radius: 12px; border: 1px solid rgba(128,128,128,.3); padding: 0 10px; font: inherit; font-size: 13px;
   background: var(--cd-card); color: var(--primary-text-color, #fff); min-width: 0; width: 100%; outline: none; transition: border-color .2s;
@@ -490,10 +495,10 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 }
 .room-detail-head {
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
-  padding: 12px 16px; border-radius: var(--cd-radius); background: var(--cd-card);
+  padding: 12px 18px; border-radius: var(--cd-radius); background: var(--cd-card);
   box-shadow: 0 4px 20px rgba(0,0,0,.25);
 }
-.room-detail-left { display: flex; align-items: center; gap: 12px; }
+.room-detail-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .room-detail-back {
   display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px 0 10px;
   border-radius: 19px; border: 0; cursor: pointer; background: var(--cd-tile-bg);
@@ -515,22 +520,13 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 }
 .room-detail-chip ha-icon { --mdc-icon-size: 16px; }
 
-.room-detail-section {
-  display: flex; flex-direction: column; gap: 10px;
-  padding: 14px 16px 16px; border-radius: var(--cd-radius); background: var(--cd-card);
-  box-shadow: 0 2px 12px rgba(0,0,0,.2);
+.room-detail-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.room-detail-body {
+  display: grid; gap: 14px; padding: 18px;
+  border-radius: var(--cd-radius); background: var(--cd-card);
+  box-shadow: 0 2px 14px rgba(0,0,0,.25);
 }
-.room-detail-section-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding-bottom: 6px; border-bottom: 1px solid rgba(128,128,128,.15);
-}
-.room-detail-section-title {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
-  color: var(--cd-secondary);
-}
-.room-detail-section-title ha-icon { --mdc-icon-size: 18px; }
-.room-detail-section-actions { display: flex; align-items: center; gap: 6px; }
+.cover-detail-list { display: grid; gap: 10px; }
 
 .cover-detail-row {
   display: flex; flex-direction: column; gap: 10px;
@@ -555,6 +551,10 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .cover-slider-wrap input[type=range].slider {
   --tile-color: #9c27b0;
   height: 24px;
+  border-radius: 12px;
+  padding: 0 6px;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 /* ── Custom Dropdown (No native browser <select>) ── */
@@ -605,9 +605,9 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .win11-hero-badge {
   width: 60px; height: 60px; border-radius: 50%; margin: 4px auto 14px;
   display: grid; place-items: center;
-  background: radial-gradient(circle, rgba(3,169,244,0.28) 0%, rgba(3,169,244,0.06) 70%);
-  box-shadow: 0 0 24px rgba(3, 169, 244, 0.4);
-  color: var(--cd-accent);
+  background: radial-gradient(circle, color-mix(in srgb, var(--hero-color, var(--cd-accent)) 28%, transparent) 0%, color-mix(in srgb, var(--hero-color, var(--cd-accent)) 6%, transparent) 70%);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--hero-color, var(--cd-accent)) 40%, transparent);
+  color: var(--hero-color, var(--cd-accent));
   animation: win11GlowPulse 3.5s infinite ease-in-out;
 }
 .win11-hero-badge ha-icon {
@@ -616,8 +616,12 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   color: inherit; fill: currentColor;
 }
 @keyframes win11GlowPulse {
-  0%, 100% { box-shadow: 0 0 18px rgba(3,169,244,0.3); transform: scale(1); }
-  50% { box-shadow: 0 0 32px rgba(3,169,244,0.65); transform: scale(1.03); }
+  0%, 100% { box-shadow: 0 0 16px color-mix(in srgb, var(--hero-color, var(--cd-accent)) 25%, transparent); }
+  50% { box-shadow: 0 0 34px color-mix(in srgb, var(--hero-color, var(--cd-accent)) 65%, transparent); }
+}
+@keyframes win11SuccessGlow {
+  0%, 100% { box-shadow: 0 0 18px rgba(16,185,129,0.3); }
+  50% { box-shadow: 0 0 36px rgba(16,185,129,0.65); }
 }
 @keyframes win11Pop {
   from { opacity: 0; transform: scale(0.9); }
@@ -677,17 +681,17 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .win11-preview-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 
 .win11-celebration {
-  text-align: center; padding: 36px 24px 28px; display: flex; flex-direction: column; align-items: center; gap: 14px;
+  text-align: center; padding: 40px 24px 32px; display: flex; flex-direction: column; align-items: center; gap: 14px;
   animation: win11Pop .35s cubic-bezier(.2, .9, .3, 1);
-  background: radial-gradient(circle at center, rgba(76, 175, 80, 0.22) 0%, rgba(76, 175, 80, 0.05) 60%, transparent 100%);
-  border-radius: 16px; border: 1px solid rgba(76, 175, 80, 0.3);
+  background: radial-gradient(circle at center, rgba(16, 185, 129, 0.22) 0%, rgba(16, 185, 129, 0.05) 60%, transparent 100%);
+  border-radius: 16px; border: 1px solid rgba(16, 185, 129, 0.3);
   margin: 12px auto; max-width: 600px;
 }
 .win11-success-badge {
   width: 68px; height: 68px; border-radius: 50%; display: grid; place-items: center;
-  background: radial-gradient(circle, rgba(76,175,80,0.35) 0%, rgba(76,175,80,0.12) 70%);
-  color: #4caf50; box-shadow: 0 0 32px rgba(76,175,80,0.6);
-  animation: win11GlowPulse 3s infinite ease-in-out;
+  background: radial-gradient(circle, rgba(16,185,129,0.35) 0%, rgba(16,185,129,0.12) 70%);
+  color: #10b981; box-shadow: 0 0 32px rgba(16,185,129,0.55);
+  animation: win11SuccessGlow 3s infinite ease-in-out;
 }
 .win11-success-badge ha-icon { --mdc-icon-size: 38px; }
 

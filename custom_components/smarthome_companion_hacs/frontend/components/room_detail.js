@@ -3,6 +3,7 @@ import {
   h, icon, domainOf, numeric, isActive, isUnavailable,
 } from '../lib/util.js';
 import { Tile } from './tile.js';
+import { effectiveCategory, applySmartTileLayout } from './room.js';
 
 function average(hass, ids) {
   const values = ids.map((id) => numeric(hass.states[id])).filter((v) => v !== null);
@@ -19,20 +20,23 @@ export class RoomDetailView {
     this.onBack = onBack;
     this.hass = null;
 
-    // Partition tiles by category/domain
     const tiles = roomSpec.tiles || [];
-    this.coverSpecs = tiles.filter((t) => domainOf(t.entity_id) === 'cover');
-    this.lightSpecs = tiles.filter((t) => domainOf(t.entity_id) === 'light');
-    this.switchSpecs = tiles.filter((t) => ['switch', 'input_boolean'].includes(domainOf(t.entity_id)));
-    this.climateSpecs = tiles.filter((t) => ['climate', 'media_player'].includes(domainOf(t.entity_id)));
+    // Partition by effective category (custom category takes priority!)
+    this.coverSpecs = tiles.filter((t) => effectiveCategory(t) === 'cover');
+    this.lightSpecs = tiles.filter((t) => effectiveCategory(t) === 'light');
+    this.switchSpecs = tiles.filter((t) => ['switch', 'outlet'].includes(effectiveCategory(t)));
+    this.mediaSpecs = tiles.filter((t) => effectiveCategory(t) === 'media_player');
     this.otherSpecs = tiles.filter((t) =>
-      !['cover', 'light', 'switch', 'input_boolean', 'climate', 'media_player'].includes(domainOf(t.entity_id)));
+      !['cover', 'light', 'switch', 'outlet', 'media_player'].includes(effectiveCategory(t)));
 
-    // Create Tile instances for child components
-    this.lightTiles = this.lightSpecs.map((t) => new Tile({ ...t, wide: true }, ctx));
-    this.switchTiles = this.switchSpecs.map((t) => new Tile(t, ctx));
-    this.climateTiles = this.climateSpecs.map((t) => new Tile({ ...t, wide: true }, ctx));
-    this.otherTiles = this.otherSpecs.map((t) => new Tile(t, ctx));
+    // Strict priority for non-cover devices: 1. Media, 2. Light, 3. Switches, 4. Other
+    const otherDeviceSpecs = [
+      ...this.mediaSpecs,
+      ...this.lightSpecs,
+      ...this.switchSpecs,
+      ...this.otherSpecs,
+    ];
+    this.childTiles = otherDeviceSpecs.map((t) => new Tile(t, ctx));
 
     this._build();
   }
@@ -40,7 +44,7 @@ export class RoomDetailView {
   _build() {
     const { spec } = this;
 
-    // ── Header ──
+    // ── Header Left ──
     const backBtn = h('button', {
       class: 'room-detail-back', 'aria-label': 'Zurück',
       onClick: () => this.onBack?.(),
@@ -52,192 +56,192 @@ export class RoomDetailView {
 
     this.metaEl = h('div', { class: 'room-detail-meta' });
 
-    const head = h('div', { class: 'room-detail-head' },
-      h('div', { class: 'room-detail-left' }, backBtn, titleWrap),
-      this.metaEl);
+    // ── Header Right: Quick Action Controls ──
+    const actions = [];
 
-    // ── Sections ──
-    const sections = [];
-
-    // 1. Cover Section (with individual position sliders)
-    if (this.coverSpecs.length > 0) {
-      this._buildCoversSection(sections);
-    }
-
-    // 2. Lights Section
+    // Light quick controls
     if (this.lightSpecs.length > 0) {
-      this._buildLightsSection(sections);
+      const lightIds = this.lightSpecs.map((l) => l.entity_id);
+      const btnAllOn = h('button', {
+        class: 'btn secondary small',
+        title: 'Alle Lichter anschalten',
+        onClick: () => this._toggleLights(lightIds, true),
+      }, icon('mdi:lightbulb-on'), 'Alle An');
+
+      const btnAllOff = h('button', {
+        class: 'btn secondary small',
+        title: 'Alle Lichter ausschalten',
+        onClick: () => this._toggleLights(lightIds, false),
+      }, icon('mdi:lightbulb-off'), 'Alle Aus');
+
+      actions.push(btnAllOn, btnAllOff);
     }
 
-    // 3. Switches Section
+    // Switch & Socket quick controls
     if (this.switchSpecs.length > 0) {
-      this._buildSwitchesSection(sections);
+      const switchIds = this.switchSpecs.map((s) => s.entity_id);
+      const btnAllOn = h('button', {
+        class: 'btn secondary small',
+        title: 'Alle Geräte und Steckdosen anschalten',
+        onClick: () => this._toggleSwitches(switchIds, true),
+      }, icon('mdi:power-plug'), 'Geräte An');
+
+      const btnAllOff = h('button', {
+        class: 'btn secondary small',
+        title: 'Alle Geräte und Steckdosen ausschalten',
+        onClick: () => this._toggleSwitches(switchIds, false),
+      }, icon('mdi:power-plug-off'), 'Geräte Aus');
+
+      actions.push(btnAllOn, btnAllOff);
     }
 
-    // 4. Climate & Media Section
-    if (this.climateSpecs.length > 0) {
-      this._buildClimateSection(sections);
+    // Cover quick controls
+    if (this.coverSpecs.length > 0) {
+      const coverIds = this.coverSpecs.map((c) => c.entity_id);
+      const btnAllOpen = h('button', {
+        class: 'btn secondary small',
+        title: 'Alle Jalousien öffnen',
+        onClick: () => this.hass?.callService('cover', 'open_cover', { entity_id: coverIds }),
+      }, icon('mdi:arrow-up'), 'Alle Auf');
+
+      const btnAllStop = h('button', {
+        class: 'btn secondary small',
+        title: 'Jalousien anhalten',
+        onClick: () => this.hass?.callService('cover', 'stop_cover', { entity_id: coverIds }),
+      }, icon('mdi:stop'), 'Stopp');
+
+      const btnAllClose = h('button', {
+        class: 'btn secondary small',
+        title: 'Alle Jalousien schließen',
+        onClick: () => this.hass?.callService('cover', 'close_cover', { entity_id: coverIds }),
+      }, icon('mdi:arrow-down'), 'Alle Zu');
+
+      actions.push(btnAllOpen, btnAllStop, btnAllClose);
     }
 
-    // 5. Other Section
-    if (this.otherSpecs.length > 0) {
-      this._buildOtherSection(sections);
+    this.actionsEl = h('div', { class: 'room-detail-actions' }, ...actions);
+
+    const head = h('div', { class: 'room-detail-head' },
+      h('div', { class: 'room-detail-left' }, backBtn, titleWrap, this.metaEl),
+      this.actionsEl);
+
+    // ── Body: Unified Device Container ──
+    const bodyChildren = [];
+
+    // 1. Cover rows (granular position sliders & controls)
+    if (this.coverSpecs.length > 0) {
+      this.coverRows = this.coverSpecs.map((cSpec) => this._buildCoverRow(cSpec));
+      const coverList = h('div', { class: 'cover-detail-list' }, ...this.coverRows.map((cr) => cr.row));
+      bodyChildren.push(coverList);
     }
 
-    this.el = h('div', { class: 'room-detail-page' }, head, ...sections);
+    // 2. All other tiles in responsive smart grid (Media, Lights, Switches, Others)
+    if (this.childTiles.length > 0) {
+      this.gridEl = h('div', { class: 'tile-grid' }, this.childTiles.map((t) => t.el));
+      bodyChildren.push(this.gridEl);
+      applySmartTileLayout(this.childTiles);
+    }
+
+    const bodyCard = h('div', { class: 'card room-detail-body' }, ...bodyChildren);
+
+    this.el = h('div', { class: 'room-detail-page' }, head, bodyCard);
   }
 
-  _buildCoversSection(sections) {
-    const coverIds = this.coverSpecs.map((c) => c.entity_id);
+  _toggleLights(ids, turnOn) {
+    const byDomain = {};
+    for (const id of ids) {
+      const dom = domainOf(id);
+      (byDomain[dom] ||= []).push(id);
+    }
+    const targetService = turnOn ? 'turn_on' : 'turn_off';
+    for (const [dom, subIds] of Object.entries(byDomain)) {
+      if (['light', 'switch', 'input_boolean'].includes(dom)) {
+        this.hass?.callService(dom, targetService, { entity_id: subIds });
+      } else {
+        this.hass?.callService('homeassistant', targetService, { entity_id: subIds });
+      }
+    }
+  }
 
-    const btnAllOpen = h('button', {
-      class: 'btn secondary small',
-      onClick: () => this.hass?.callService('cover', 'open_cover', { entity_id: coverIds }),
-    }, icon('mdi:arrow-up'), 'Alle Auf');
+  _toggleSwitches(ids, turnOn) {
+    const byDomain = {};
+    for (const id of ids) {
+      const dom = domainOf(id);
+      (byDomain[dom] ||= []).push(id);
+    }
+    const targetService = turnOn ? 'turn_on' : 'turn_off';
+    for (const [dom, subIds] of Object.entries(byDomain)) {
+      if (['switch', 'light', 'input_boolean'].includes(dom)) {
+        this.hass?.callService(dom, targetService, { entity_id: subIds });
+      } else {
+        this.hass?.callService('homeassistant', targetService, { entity_id: subIds });
+      }
+    }
+  }
 
-    const btnAllStop = h('button', {
-      class: 'btn secondary small',
-      onClick: () => this.hass?.callService('cover', 'stop_cover', { entity_id: coverIds }),
-    }, icon('mdi:stop'), 'Stopp');
+  _buildCoverRow(spec) {
+    const iconEl = icon('mdi:window-shutter');
+    const nameEl = h('div', { class: 'cover-detail-name' }, spec.name);
+    const stateEl = h('div', { class: 'cover-detail-state' }, 'Laden...');
 
-    const btnAllClose = h('button', {
-      class: 'btn secondary small',
-      onClick: () => this.hass?.callService('cover', 'close_cover', { entity_id: coverIds }),
-    }, icon('mdi:arrow-down'), 'Alle Zu');
+    const mkBtn = (ic, lbl, fn) => h('button', {
+      class: 'mini-btn', 'aria-label': lbl,
+      onClick: (e) => { e.stopPropagation(); fn(); },
+    }, icon(ic));
 
-    const head = h('div', { class: 'room-detail-section-head' },
-      h('div', { class: 'room-detail-section-title', style: { color: '#ba68c8' } },
-        icon('mdi:window-shutter'), `Rollläden (${this.coverSpecs.length})`),
-      h('div', { class: 'room-detail-section-actions' }, btnAllOpen, btnAllStop, btnAllClose));
+    const btnUp = mkBtn('mdi:arrow-up', 'Öffnen', () => this.hass?.callService('cover', 'open_cover', { entity_id: spec.entity_id }));
+    const btnStop = mkBtn('mdi:stop', 'Stopp', () => this.hass?.callService('cover', 'stop_cover', { entity_id: spec.entity_id }));
+    const btnDown = mkBtn('mdi:arrow-down', 'Schließen', () => this.hass?.callService('cover', 'close_cover', { entity_id: spec.entity_id }));
 
-    this.coverRows = this.coverSpecs.map((spec) => {
-      const iconEl = icon('mdi:window-shutter');
-      const nameEl = h('div', { class: 'cover-detail-name' }, spec.name);
-      const stateEl = h('div', { class: 'cover-detail-state' }, 'Laden...');
+    const slider = h('input', {
+      type: 'range', class: 'slider', min: '0', max: '100', step: '1', 'aria-label': `${spec.name} Position`,
+      style: { touchAction: 'none', '--tile-color': '#9c27b0' },
+    });
+    slider.addEventListener('pointerdown', (e) => e.stopPropagation());
+    slider.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+    slider.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
 
-      const mkBtn = (ic, lbl, fn) => h('button', {
-        class: 'mini-btn', 'aria-label': lbl,
-        onClick: (e) => { e.stopPropagation(); fn(); },
-      }, icon(ic));
-
-      const btnUp = mkBtn('mdi:arrow-up', 'Öffnen', () => this.hass?.callService('cover', 'open_cover', { entity_id: spec.entity_id }));
-      const btnStop = mkBtn('mdi:stop', 'Stopp', () => this.hass?.callService('cover', 'stop_cover', { entity_id: spec.entity_id }));
-      const btnDown = mkBtn('mdi:arrow-down', 'Schließen', () => this.hass?.callService('cover', 'close_cover', { entity_id: spec.entity_id }));
-
-      const slider = h('input', {
-        type: 'range', class: 'slider', min: '0', max: '100', step: '1', 'aria-label': `${spec.name} Position`,
-        style: { touchAction: 'none', '--tile-color': '#9c27b0' },
+    let dragging = false;
+    slider.addEventListener('input', () => {
+      dragging = true;
+      slider.style.setProperty('--val', `${slider.value}%`);
+      stateEl.textContent = `Position: ${slider.value}%`;
+    });
+    slider.addEventListener('change', () => {
+      dragging = false;
+      this.hass?.callService('cover', 'set_cover_position', {
+        entity_id: spec.entity_id,
+        position: Number(slider.value),
       });
-      slider.addEventListener('pointerdown', (e) => e.stopPropagation());
-      slider.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
-      slider.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
-
-      let dragging = false;
-      slider.addEventListener('input', () => {
-        dragging = true;
-        slider.style.setProperty('--val', `${slider.value}%`);
-        stateEl.textContent = `Position: ${slider.value}%`;
-      });
-      slider.addEventListener('change', () => {
-        dragging = false;
-        this.hass?.callService('cover', 'set_cover_position', {
-          entity_id: spec.entity_id,
-          position: Number(slider.value),
-        });
-      });
-
-      const sliderWrap = h('div', { class: 'cover-slider-wrap' },
-        h('span', { class: 'cover-slider-label' }, '0%'),
-        slider,
-        h('span', { class: 'cover-slider-label' }, '100%'));
-
-      const row = h('div', { class: 'cover-detail-row' },
-        h('div', { class: 'cover-detail-top' },
-          h('div', { class: 'cover-detail-info' },
-            h('div', { class: 'cover-detail-icon' }, iconEl),
-            h('div', { class: 'cover-detail-texts' }, nameEl, stateEl)),
-          h('div', { class: 'tile-btns' }, btnUp, btnStop, btnDown)),
-        sliderWrap);
-
-      return {
-        spec, row, iconEl, stateEl, slider, btnUp, btnStop, btnDown,
-        get dragging() { return dragging; },
-      };
     });
 
-    sections.push(h('div', { class: 'room-detail-section' }, head, ...this.coverRows.map((cr) => cr.row)));
-  }
+    const sliderWrap = h('div', { class: 'cover-slider-wrap' },
+      h('span', { class: 'cover-slider-label' }, '0%'),
+      slider,
+      h('span', { class: 'cover-slider-label' }, '100%'));
 
-  _buildLightsSection(sections) {
-    const lightIds = this.lightSpecs.map((l) => l.entity_id);
+    const row = h('div', { class: 'cover-detail-row' },
+      h('div', { class: 'cover-detail-top' },
+        h('div', { class: 'cover-detail-info' },
+          h('div', { class: 'cover-detail-icon' }, iconEl),
+          h('div', { class: 'cover-detail-texts' }, nameEl, stateEl)),
+        h('div', { class: 'tile-btns' }, btnUp, btnStop, btnDown)),
+      sliderWrap);
 
-    const btnAllOn = h('button', {
-      class: 'btn secondary small',
-      onClick: () => this.hass?.callService('light', 'turn_on', { entity_id: lightIds }),
-    }, icon('mdi:lightbulb-on'), 'Alle An');
-
-    const btnAllOff = h('button', {
-      class: 'btn secondary small',
-      onClick: () => this.hass?.callService('light', 'turn_off', { entity_id: lightIds }),
-    }, icon('mdi:lightbulb-off'), 'Alle Aus');
-
-    const head = h('div', { class: 'room-detail-section-head' },
-      h('div', { class: 'room-detail-section-title', style: { color: '#ffd54f' } },
-        icon('mdi:lightbulb'), `Beleuchtung (${this.lightSpecs.length})`),
-      h('div', { class: 'room-detail-section-actions' }, btnAllOn, btnAllOff));
-
-    const grid = h('div', { class: 'tile-grid' }, this.lightTiles.map((t) => t.el));
-    sections.push(h('div', { class: 'room-detail-section' }, head, grid));
-  }
-
-  _buildSwitchesSection(sections) {
-    const switchIds = this.switchSpecs.map((s) => s.entity_id);
-
-    const btnAllOn = h('button', {
-      class: 'btn secondary small',
-      onClick: () => this.hass?.callService('homeassistant', 'turn_on', { entity_id: switchIds }),
-    }, 'Alle An');
-
-    const btnAllOff = h('button', {
-      class: 'btn secondary small',
-      onClick: () => this.hass?.callService('homeassistant', 'turn_off', { entity_id: switchIds }),
-    }, 'Alle Aus');
-
-    const head = h('div', { class: 'room-detail-section-head' },
-      h('div', { class: 'room-detail-section-title', style: { color: '#64b5f6' } },
-        icon('mdi:toggle-switch'), `Geräte & Steckdosen (${this.switchSpecs.length})`),
-      h('div', { class: 'room-detail-section-actions' }, btnAllOn, btnAllOff));
-
-    const grid = h('div', { class: 'tile-grid' }, this.switchTiles.map((t) => t.el));
-    sections.push(h('div', { class: 'room-detail-section' }, head, grid));
-  }
-
-  _buildClimateSection(sections) {
-    const head = h('div', { class: 'room-detail-section-head' },
-      h('div', { class: 'room-detail-section-title', style: { color: '#4dd0e1' } },
-        icon('mdi:thermostat'), 'Klima & Medien'));
-
-    const grid = h('div', { class: 'tile-grid' }, this.climateTiles.map((t) => t.el));
-    sections.push(h('div', { class: 'room-detail-section' }, head, grid));
-  }
-
-  _buildOtherSection(sections) {
-    const head = h('div', { class: 'room-detail-section-head' },
-      h('div', { class: 'room-detail-section-title' },
-        icon('mdi:widgets'), 'Weitere Sensoren & Kacheln'));
-
-    const grid = h('div', { class: 'tile-grid' }, this.otherTiles.map((t) => t.el));
-    sections.push(h('div', { class: 'room-detail-section' }, head, grid));
+    return {
+      spec, row, iconEl, stateEl, slider, btnUp, btnStop, btnDown,
+      get dragging() { return dragging; },
+    };
   }
 
   update(hass) {
     this.hass = hass;
 
     // Update child tiles
-    this.lightTiles.forEach((t) => t.update(hass));
-    this.switchTiles.forEach((t) => t.update(hass));
-    this.climateTiles.forEach((t) => t.update(hass));
-    this.otherTiles.forEach((t) => t.update(hass));
+    this.childTiles.forEach((t) => t.update(hass));
+    if (this.childTiles.length > 0) {
+      applySmartTileLayout(this.childTiles);
+    }
 
     // Update covers with granular positions
     if (this.coverRows) {
@@ -290,4 +294,3 @@ export class RoomDetailView {
     this.metaEl.replaceChildren(...chips);
   }
 }
-
