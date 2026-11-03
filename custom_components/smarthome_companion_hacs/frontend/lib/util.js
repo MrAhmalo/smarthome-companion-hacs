@@ -6,7 +6,16 @@ export function h(tag, props, ...children) {
   for (const [key, value] of Object.entries(props || {})) {
     if (value === undefined || value === null || value === false) continue;
     if (key === 'class') el.className = value;
-    else if (key === 'style' && typeof value === 'object') Object.assign(el.style, value);
+    else if (key === 'style') {
+      if (typeof value === 'object') {
+        for (const [sKey, sVal] of Object.entries(value)) {
+          if (sKey.startsWith('--')) el.style.setProperty(sKey, sVal);
+          else el.style[sKey] = sVal;
+        }
+      } else if (typeof value === 'string') {
+        el.style.cssText = value;
+      }
+    }
     else if (key.startsWith('on') && typeof value === 'function') el.addEventListener(key.slice(2).toLowerCase(), value);
     else if (['value', 'checked', 'disabled', 'selected', 'hidden'].includes(key)) el[key] = value;
     else if (key === 'text') el.textContent = value;

@@ -3,6 +3,7 @@ import { EntityPicker } from './entity_picker.js';
 import { IconPicker } from './icon_picker.js';
 import { ColorPicker } from './color_picker.js';
 import { CustomDropdown } from './custom_dropdown.js';
+import { DEVICE_CATEGORIES } from './device_wizard.js';
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 
@@ -17,14 +18,15 @@ const EXPAND_OPTIONS = [['collapsed', 'Eingeklappt'], ['expanded', 'Ausgeklappt'
 
 export class Settings {
   /**
-   * @param {{hass:object, config:object, layout:object, users:Array, onClose:Function, onSaved:Function}} opts
+   * @param {{hass:object, config:object, layout:object, users:Array, onClose:Function, onSaved:Function, onOpenDevice?:Function}} opts
    */
-  constructor({ hass, config, layout, users, onClose, onSaved }) {
+  constructor({ hass, config, layout, users, onClose, onSaved, onOpenDevice }) {
     this.hass = hass;
     this.users = users;
     this.areas = layout.areas;
     this.onClose = onClose;
     this.onSaved = onSaved;
+    this.onOpenDevice = onOpenDevice;
     this.draft = clone(config);
     this.draft.rooms ||= {};
 
@@ -35,8 +37,9 @@ export class Settings {
       tiles: r.tiles.map((t) => ({ key: t.key, name: t.name, entity_id: t.entity_id, hidden: !!t.hidden, users: [...(t.users || [])] })),
     }));
 
-    this.tab = 'header';
+    this.tab = 'devices';
     this.tabs = [
+      ['devices', 'Geräte', () => this._tabDevices()],
       ['header', 'Kopfzeile', () => this._tabHeader()],
       ['info', 'Infos & Alarme', () => this._tabInfo()],
       ['trash', 'Müll', () => this._tabTrash()],
@@ -412,6 +415,131 @@ export class Settings {
       this._hint('• Erscheinen bei farbfähigen Lichtern\n• Tipp = Farbe setzen'),
       wrap,
     ];
+  }
+
+  // ═══════════ Geräteverwaltung Tab ═══════════
+  _tabDevices() {
+    const wrap = h('div', { class: 'settings-devices-tab' });
+    this._renderDevicesTab(wrap);
+    return [
+      this._title('Geräteverwaltung'),
+      this._hint('• Alle für das Companion Dashboard eingerichteten Geräte im Überblick\n• Gerätename, Raum und Kategorie bearbeiten\n• Einrichtung aufheben oder neue Geräte hinzufügen'),
+      wrap,
+    ];
+  }
+
+  async _renderDevicesTab(wrap) {
+    wrap.replaceChildren(h('div', { class: 'empty' }, icon('mdi:loading'), h('div', { style: { marginTop: '8px' } }, 'Lade Geräte...')));
+    try {
+      const [setup, devs, areas] = await Promise.all([
+        this.hass.callWS({ type: 'smarthome_companion/devices/get' }),
+        this.hass.callWS({ type: 'config/device_registry/list' }),
+        this.hass.callWS({ type: 'config/area_registry/list' }),
+      ]);
+      const configuredMap = setup?.devices || {};
+      const devList = devs || [];
+      const areaMap = new Map((areas || []).map((a) => [a.area_id, a.name]));
+
+      const configuredIds = Object.keys(configuredMap);
+      if (!configuredIds.length) {
+        wrap.replaceChildren(
+          h('div', { class: 'empty' },
+            icon('mdi:devices'),
+            h('div', { style: { fontWeight: '600', margin: '8px 0 4px' } }, 'Noch keine Geräte eingerichtet'),
+            h('div', { class: 'hint' }, 'Richte dein erstes Gerät über den Einrichtungsassistenten ein.'),
+            h('div', { style: { marginTop: '14px' } },
+              h('button', {
+                class: 'btn primary',
+                type: 'button',
+                onClick: () => this.onOpenDevice?.(null),
+              }, icon('mdi:plus-circle-outline'), 'Neues Gerät einrichten')))
+        );
+        return;
+      }
+
+      let searchQ = '';
+      const listEl = h('div', { class: 'device-list', style: { marginTop: '12px' } });
+
+      const updateList = () => {
+        const filtered = configuredIds.filter((id) => {
+          const cfg = configuredMap[id];
+          const dev = devList.find((d) => d.id === id);
+          const name = (cfg.custom_name || dev?.name_by_user || dev?.name || '').toLowerCase();
+          const area = (areaMap.get(cfg.area_id || dev?.area_id) || '').toLowerCase();
+          const mfg = (dev?.manufacturer || '').toLowerCase();
+          const model = (dev?.model || '').toLowerCase();
+          return !searchQ || name.includes(searchQ) || area.includes(searchQ) || mfg.includes(searchQ) || model.includes(searchQ);
+        });
+
+        if (!filtered.length) {
+          listEl.replaceChildren(h('div', { class: 'empty' }, icon('mdi:magnify'), h('div', {}, 'Keine passenden Geräte gefunden')));
+          return;
+        }
+
+        listEl.replaceChildren(...filtered.map((id) => {
+          const cfg = configuredMap[id];
+          const dev = devList.find((d) => d.id === id);
+          const name = cfg.custom_name || dev?.name_by_user || dev?.name || 'Unbenanntes Gerät';
+          const area = areaMap.get(cfg.area_id || dev?.area_id);
+          const mfg = [dev?.manufacturer, dev?.model].filter(Boolean).join(' · ');
+
+          const cat = DEVICE_CATEGORIES.find((c) => c.id === cfg.category);
+          const catName = cat?.name || cfg.category;
+          const catIcon = cat?.icon || 'mdi:devices';
+          const catColor = cat?.color || 'var(--cd-accent)';
+
+          const badges = [];
+          if (area) badges.push(h('span', { class: 'badge-tag area' }, icon('mdi:map-marker'), area));
+          badges.push(h('span', { class: 'badge-tag ok', style: { color: catColor } }, icon(catIcon), catName));
+
+          return h('div', { class: 'device-card' },
+            h('div', { class: 'd-icon', style: { color: catColor } }, icon(catIcon)),
+            h('div', { class: 'd-info' },
+              h('div', { class: 'd-name' }, name),
+              h('div', { class: 'd-meta' }, mfg ? h('span', {}, mfg) : null, ...badges)),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+              h('button', {
+                class: 'btn secondary small',
+                type: 'button',
+                title: 'Gerät bearbeiten',
+                onClick: () => this.onOpenDevice?.(id),
+              }, icon('mdi:pencil'), 'Bearbeiten'),
+              h('button', {
+                class: 'icon-btn danger',
+                type: 'button',
+                title: 'Companion-Einrichtung aufheben',
+                onClick: async () => {
+                  const conf = window.confirm(`Companion-Einrichtung für „${name}“ aufheben?\n\nDas Gerät bleibt in Home Assistant erhalten.`);
+                  if (!conf) return;
+                  try {
+                    await this.hass.callWS({ type: 'smarthome_companion/devices/remove', device_id: id });
+                    delete configuredMap[id];
+                    this._renderDevicesTab(wrap);
+                  } catch (err) {
+                    alert(`Fehler beim Aufheben: ${err.message || err}`);
+                  }
+                },
+              }, icon('mdi:delete-outline'))));
+        }));
+      };
+
+      const searchInput = h('input', {
+        type: 'text', placeholder: 'Gerätename, Raum, Modell oder Kategorie suchen...',
+        onInput: (e) => { searchQ = e.target.value.toLowerCase().trim(); updateList(); },
+      });
+      const topRow = h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' } },
+        h('div', { class: 'search-bar', style: { flex: 1 } }, icon('mdi:magnify'), searchInput),
+        h('button', {
+          class: 'btn primary',
+          type: 'button',
+          onClick: () => this.onOpenDevice?.(null),
+        }, icon('mdi:plus-circle-outline'), 'Gerät einrichten'));
+
+      updateList();
+      wrap.replaceChildren(topRow, listEl);
+    } catch (err) {
+      wrap.replaceChildren(h('div', { class: 'empty' }, icon('mdi:alert'), h('div', {}, `Fehler beim Laden: ${err.message || err}`)));
+    }
   }
 }
 

@@ -261,10 +261,11 @@ class CompanionDashboardPanel extends HTMLElement {
   }
 
   // ── device wizard ──
-  _openWizard() {
+  _openWizard(deviceId = null) {
     this._wizard?.el.remove();
     this._wizard = new DeviceWizard({
       hass: this._hass,
+      initialDeviceId: deviceId,
       onClose: () => { this._wizard?.el.remove(); this._wizard = null; },
       onSaved: (err) => {
         if (err) { this._toast(`Fehler: ${err.message || err}`); return; }
@@ -292,6 +293,11 @@ class CompanionDashboardPanel extends HTMLElement {
         layout: edit.layout,
         users: users.users,
         onClose: () => { this._settings?.el.remove(); this._settings = null; },
+        onOpenDevice: (devId) => {
+          this._settings?.el.remove();
+          this._settings = null;
+          this._openWizard(devId);
+        },
         onSaved: (err) => {
           if (err) { this._toast(`Fehler: ${err.message || err}`); return; }
           this._settings?.el.remove();

@@ -20,10 +20,11 @@ const CONTROLLABLE_DOMAINS = new Set(['light', 'switch', 'cover', 'valve', 'clim
 
 export class DeviceWizard {
   /**
-   * @param {{hass:object, onClose:Function, onSaved:Function}} opts
+   * @param {{hass:object, initialDeviceId?:string, onClose:Function, onSaved:Function}} opts
    */
-  constructor({ hass, onClose, onSaved }) {
+  constructor({ hass, initialDeviceId, onClose, onSaved }) {
     this.hass = hass;
+    this.initialDeviceId = initialDeviceId || null;
     this.onClose = onClose;
     this.onSaved = onSaved;
 
@@ -63,15 +64,16 @@ export class DeviceWizard {
     this.stepBar = h('div', { class: 'wizard-steps' });
     this.foot = h('div', { class: 'dialog-foot' });
 
-    this.el = h('div', { class: 'overlay', onClick: (e) => { if (e.target === this.el) this.onClose(); } },
-      h('div', { class: 'dialog', role: 'dialog', 'aria-label': 'Gerät einrichten' },
-        h('div', { class: 'dialog-head' },
-          icon('mdi:plus-circle-outline'),
-          h('h2', {}, 'Gerät einrichten'),
-          h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: () => this.onClose() }, icon('mdi:close'))),
-        this.stepBar,
-        this.body,
-        this.foot));
+    this.dialog = h('div', { class: 'dialog', role: 'dialog', 'aria-label': 'Gerät einrichten' },
+      h('div', { class: 'dialog-head' },
+        icon('mdi:plus-circle-outline'),
+        h('h2', {}, 'Gerät einrichten'),
+        h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: () => this.onClose() }, icon('mdi:close'))),
+      this.stepBar,
+      this.body,
+      this.foot);
+
+    this.el = h('div', { class: 'overlay', onClick: (e) => { if (e.target === this.el) this.onClose(); } }, this.dialog);
   }
 
   async _load() {
@@ -88,6 +90,16 @@ export class DeviceWizard {
       this.areas = areas || [];
       this.configuredDevices = setup.devices || {};
       this.categories = setup.categories || {};
+
+      if (this.initialDeviceId) {
+        const target = this.devices.find((d) => d.id === this.initialDeviceId);
+        if (target) {
+          this.selectedDevice = target;
+          this._initDevice();
+          this.step = 1;
+        }
+      }
+
       this._render();
     } catch (err) {
       this.body.replaceChildren(h('div', { class: 'empty' }, icon('mdi:alert'), h('div', {}, `Fehler beim Laden: ${err.message || err}`)));
@@ -100,6 +112,10 @@ export class DeviceWizard {
       this._renderCelebration();
       return;
     }
+    const curCat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
+    const catColor = (this.step > 0 && curCat?.color) ? curCat.color : '#2196F3';
+    this.dialog.style.setProperty('--hero-color', catColor);
+
     this._renderSteps();
     this._renderBody();
     this._renderFoot();
@@ -193,7 +209,30 @@ export class DeviceWizard {
 
   // ═══════════════ STEP 0: Gerät auswählen ═══════════════
   _renderStep0() {
-    const areaMap = new Map(this.areas.map((a) => [a.area_id, a.name]));
+    const isCandidate = (d) => {
+      if (d.disabled_by || d.entry_type === 'service') return false;
+      const devEntities = this.entities.filter((e) => e.device_id === d.id && !e.disabled_by);
+      const controllable = devEntities.filter((e) => CONTROLLABLE_DOMAINS.has(domainOf(e.entity_id)));
+      const sensors = devEntities.filter((e) => ['sensor', 'binary_sensor'].includes(domainOf(e.entity_id)));
+      if (!controllable.length && !sensors.length) return false;
+      const name = (d.name_by_user || d.name || '').toLowerCase();
+      const mfg = (d.manufacturer || '').toLowerCase();
+      const model = (d.model || '').toLowerCase();
+      const isSystem = (
+        name.includes('hacs') || mfg.includes('hacs') ||
+        name.includes('forecast') || mfg.includes('met.no') ||
+        name.includes('bluetooth') || mfg.includes('bluetooth') || name.startsWith('hci') ||
+        name.includes('plugin') || model.includes('plugin') ||
+        mfg.includes('integration') || model.includes('integration') ||
+        name === 'sun'
+      );
+      if (isSystem && !controllable.length) return false;
+      return true;
+    };
+    const candidates = this.devices.filter(isCandidate);
+    const configuredCount = candidates.filter((d) => !!this.configuredDevices[d.id]).length;
+    const unconfiguredCount = candidates.length - configuredCount;
+    const allCount = candidates.length;
 
     const hero = h('div', { class: 'win11-hero-badge', style: { '--hero-color': '#2196F3' } }, icon('mdi:devices'));
 
@@ -205,9 +244,9 @@ export class DeviceWizard {
 
     const filterChips = h('div', { class: 'filter-chips' },
       ...[
-        ['unconfigured', 'Nicht eingerichtet'],
-        ['all', 'Alle Geräte'],
-        ['configured', 'Bereits eingerichtet'],
+        ['unconfigured', `Nicht eingerichtet (${unconfiguredCount})`],
+        ['configured', `Bereits eingerichtet (${configuredCount})`],
+        ['all', `Alle Geräte (${allCount})`],
       ].map(([id, label]) => h('button', {
         class: 'filter-chip', ...(id === this.statusFilter ? { 'data-active': '' } : {}),
         onClick: () => { this.statusFilter = id; this._renderStep0(); },
@@ -286,17 +325,45 @@ export class DeviceWizard {
 
       const actions = [];
       if (isConfigured) {
-        actions.push(h('button', {
-          class: 'icon-btn danger',
-          title: 'Einrichtung aufheben',
-          'aria-label': 'Einrichtung aufheben',
-          onClick: (e) => {
-            e.stopPropagation();
-            this._removeDevice(d.id, name);
-          },
-        }, icon('mdi:delete-outline')));
+        actions.push(
+          h('button', {
+            class: 'btn secondary small',
+            title: 'Gerät bearbeiten',
+            'aria-label': 'Bearbeiten',
+            onClick: (e) => {
+              e.stopPropagation();
+              this.selectedDevice = d;
+              this._initDevice();
+              this.step = 1;
+              this._render();
+            },
+          }, icon('mdi:pencil'), 'Bearbeiten'),
+          h('button', {
+            class: 'icon-btn danger',
+            title: 'Companion-Einrichtung aufheben',
+            'aria-label': 'Einrichtung aufheben',
+            onClick: (e) => {
+              e.stopPropagation();
+              this._removeDevice(d.id, name);
+            },
+          }, icon('mdi:delete-outline'))
+        );
+      } else {
+        actions.push(
+          h('button', {
+            class: 'btn primary small',
+            title: 'Gerät einrichten',
+            'aria-label': 'Einrichten',
+            onClick: (e) => {
+              e.stopPropagation();
+              this.selectedDevice = d;
+              this._initDevice();
+              this.step = 1;
+              this._render();
+            },
+          }, icon('mdi:plus'), 'Einrichten')
+        );
       }
-      actions.push(icon('mdi:chevron-right', 'chevron'));
 
       const card = h('div', {
         class: 'device-card', ...(this.selectedDevice?.id === d.id ? { 'data-selected': '' } : {}),
@@ -316,6 +383,59 @@ export class DeviceWizard {
     }));
   }
 
+  // ═══════════════ Strip Room Name Helper ═══════════════
+  _stripRoomName(rawName, preferredAreaId) {
+    if (!rawName) return '';
+    let name = rawName;
+
+    const candidateAreas = [];
+    if (preferredAreaId) {
+      const a = this.areas.find((ar) => ar.area_id === preferredAreaId);
+      if (a) candidateAreas.push(a);
+    }
+    for (const a of this.areas) {
+      if (!candidateAreas.includes(a)) candidateAreas.push(a);
+    }
+
+    for (const a of candidateAreas) {
+      if (!a?.name) continue;
+      const aName = a.name.trim();
+      if (!aName || aName.length < 2) continue;
+
+      const escaped = aName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const prefixRegex = new RegExp(`^${escaped}\\s*[-_–—:]*\\s*`, 'i');
+      const compoundPrefixRegex = new RegExp(`^${escaped}(?=[A-ZÄÖÜa-zäöü])`, 'i');
+      const suffixRegex = new RegExp(`\\s*[-_–—:]*\\s*${escaped}$`, 'i');
+      const midRegex = new RegExp(`\\s+[-_–—:]*\\s*${escaped}\\s*[-_–—:]*\\s+`, 'i');
+      const wordRegex = new RegExp(`\\b${escaped}\\b`, 'i');
+
+      let stripped = name;
+      if (prefixRegex.test(stripped)) {
+        stripped = stripped.replace(prefixRegex, '');
+      } else if (compoundPrefixRegex.test(stripped)) {
+        stripped = stripped.replace(compoundPrefixRegex, '');
+      } else if (suffixRegex.test(stripped)) {
+        stripped = stripped.replace(suffixRegex, '');
+      } else if (midRegex.test(stripped)) {
+        stripped = stripped.replace(midRegex, ' ');
+      } else if (wordRegex.test(stripped)) {
+        stripped = stripped.replace(wordRegex, '');
+      }
+
+      stripped = stripped.trim().replace(/\s{2,}/g, ' ').replace(/^[-_–—:\s]+|[-_–—:\s]+$/g, '');
+      if (stripped.length > 0 && stripped.length < name.length) {
+        name = stripped;
+        if (!this.selectedAreaId) {
+          this.selectedAreaId = a.area_id;
+        }
+        break;
+      }
+    }
+
+    if (name) name = name.charAt(0).toUpperCase() + name.slice(1);
+    return name;
+  }
+
   // ═══════════════ Initialize selected device ═══════════════
   _initDevice() {
     const d = this.selectedDevice;
@@ -323,20 +443,10 @@ export class DeviceWizard {
     const existing = this.configuredDevices[d.id];
 
     this.selectedAreaId = d.area_id || '';
-    const area = this.areas.find((a) => a.area_id === this.selectedAreaId);
-
     let rawName = existing?.custom_name || d.name_by_user || d.name || '';
-    if (area?.name && !existing?.custom_name) {
-      const aName = area.name.trim();
-      const prefixRegex = new RegExp(`^${aName}\\s*[-_–—:]*\\s*`, 'i');
-      if (prefixRegex.test(rawName)) {
-        rawName = rawName.replace(prefixRegex, '');
-      } else if (rawName.toLowerCase().startsWith(aName.toLowerCase())) {
-        rawName = rawName.slice(aName.length).replace(/^[-_–—:\s]+/, '');
-      }
+    if (!existing?.custom_name) {
+      rawName = this._stripRoomName(rawName, this.selectedAreaId);
     }
-    rawName = rawName.trim();
-    if (rawName) rawName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
     this.customName = rawName;
 
     // Related entities
@@ -364,16 +474,8 @@ export class DeviceWizard {
     this.channels = controllable.map((e, idx) => {
       const sub = existingSubs[e.entity_id] || {};
       let channelName = sub.custom_name || sub.name || e.name || e.original_name || (controllable.length > 1 ? `Kanal ${idx + 1}` : this.customName);
-      if (area?.name && !sub.custom_name && !sub.name) {
-        const aName = area.name.trim();
-        const pRegex = new RegExp(`^${aName}\\s*[-_–—:]*\\s*`, 'i');
-        if (pRegex.test(channelName)) {
-          channelName = channelName.replace(pRegex, '');
-        } else if (channelName.toLowerCase().startsWith(aName.toLowerCase())) {
-          channelName = channelName.slice(aName.length).replace(/^[-_–—:\s]+/, '');
-        }
-        channelName = channelName.trim();
-        if (channelName) channelName = channelName.charAt(0).toUpperCase() + channelName.slice(1);
+      if (!sub.custom_name && !sub.name) {
+        channelName = this._stripRoomName(channelName, this.selectedAreaId);
       }
       return {
         entity_id: e.entity_id,
@@ -403,7 +505,16 @@ export class DeviceWizard {
       options: areaOptions,
       value: this.selectedAreaId,
       placeholder: 'Raum auswählen...',
-      onChange: (val) => { this.selectedAreaId = val; },
+      onChange: (val) => {
+        this.selectedAreaId = val;
+        if (this.customName) {
+          const stripped = this._stripRoomName(this.customName, val);
+          if (stripped && stripped !== this.customName) {
+            this.customName = stripped;
+            nameInput.value = stripped;
+          }
+        }
+      },
     });
     this._dropdowns.push(areaDropdown);
 
@@ -420,7 +531,7 @@ export class DeviceWizard {
           onClick: () => {
             this.selectedCategory = c.id;
             this.channels.forEach((ch) => { ch.category = c.id; });
-            this._renderStep1();
+            this._render();
           },
         },
         icon(c.icon),
@@ -679,6 +790,7 @@ export class DeviceWizard {
   _renderCelebration() {
     this.stepBar.hidden = true;
     this.foot.hidden = true;
+    this.dialog.style.setProperty('--hero-color', '#10b981');
 
     const cat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
     const area = this.areas.find((a) => a.area_id === this.selectedAreaId);

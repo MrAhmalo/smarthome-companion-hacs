@@ -137,12 +137,35 @@ input[type=range].slider {
   -webkit-appearance: none; appearance: none; flex: 1; min-width: 60px; height: 28px; border-radius: 14px; outline: none; cursor: pointer;
   background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
   touch-action: none;
-  padding: 0 6px;
-  overflow: hidden;
   box-sizing: border-box;
 }
-input[type=range].slider::-webkit-slider-thumb { -webkit-appearance: none; width: 6px; height: 18px; border-radius: 3px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
-input[type=range].slider::-moz-range-thumb { width: 6px; height: 18px; border: 0; border-radius: 3px; background: #fff; }
+input[type=range].slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  box-sizing: content-box;
+  width: 6px;
+  height: 18px;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  background-clip: padding-box;
+  background-color: #fff;
+  border-radius: 8px;
+  filter: drop-shadow(0 0 1px rgba(0,0,0,.45));
+}
+input[type=range].slider::-moz-range-thumb {
+  box-sizing: content-box;
+  width: 6px;
+  height: 18px;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  background-clip: padding-box;
+  background-color: #fff;
+  border-radius: 8px;
+  filter: drop-shadow(0 0 1px rgba(0,0,0,.45));
+}
 
 /* media + climate cards */
 .tile.media { background-size: cover; background-position: center; position: relative; overflow: hidden; }
@@ -552,9 +575,23 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   --tile-color: #9c27b0;
   height: 24px;
   border-radius: 12px;
-  padding: 0 6px;
-  overflow: hidden;
   box-sizing: border-box;
+}
+.cover-slider-wrap input[type=range].slider::-webkit-slider-thumb {
+  height: 16px;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-radius: 7px;
+}
+.cover-slider-wrap input[type=range].slider::-moz-range-thumb {
+  height: 16px;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-radius: 7px;
 }
 
 /* ── Custom Dropdown (No native browser <select>) ── */
