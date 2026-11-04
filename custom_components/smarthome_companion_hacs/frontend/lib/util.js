@@ -83,10 +83,15 @@ export const DOMAIN_COLORS = {
   klima: '#ff9800',
   media_player: '#03a9f4', // Hellblau
   fernseher: '#03a9f4',
+  medien: '#03a9f4',
   fan: '#00bcd4', // Cyan
   luefter: '#00bcd4',
   valve: '#00bcd4',
-  wasserventil: '#00bcd4',
+  wasserventil: '#00bcd4', // Cyan
+  pumpe: '#03a9f4', // Hellblau / Wasser
+  bewegungsmelder: '#e91e63', // Pink
+  bodenmessgeraet: '#4caf50', // Grün
+  raummessgeraet: '#ff5722', // Deep Orange
   lock: '#4caf50',
   sensor: '#2196f3',
 };
@@ -99,14 +104,20 @@ export function effectiveCategory(t) {
   if (cat === 'steckdose' || cat === 'outlet') return 'outlet';
   if (cat === 'fernseher' || cat === 'medien' || cat === 'media_player') return 'media_player';
   if (cat === 'klima' || cat === 'climate') return 'climate';
+  if (cat === 'wasserventil' || cat === 'valve') return 'valve';
+  if (cat === 'pumpe') return 'pumpe';
+  if (cat === 'bewegungsmelder') return 'motion';
+  if (cat === 'bodenmessgeraet' || cat === 'raummessgeraet') return 'sensor';
   if (cat === 'schalter' || cat === 'switch') return 'switch';
-  if (cat === 'pumpe' || cat === 'wasserventil' || cat === 'valve') return 'switch';
   const d = domainOf(t.entity_id || t.entityId);
   if (d === 'light') return 'light';
   if (d === 'cover') return 'cover';
   if (d === 'switch') return 'switch';
   if (d === 'media_player') return 'media_player';
   if (d === 'climate') return 'climate';
+  if (d === 'valve') return 'valve';
+  if (d === 'binary_sensor') return 'motion';
+  if (d === 'sensor') return 'sensor';
   return d;
 }
 
@@ -122,6 +133,11 @@ export function getEntityColor(entityId, st, category, specColor) {
   if (cat === 'klima' || cat === 'climate') {
     return st?.attributes?.hvac_action === 'cooling' ? '#00bcd4' : '#ff9800';
   }
+  if (cat === 'wasserventil' || cat === 'valve') return DOMAIN_COLORS.wasserventil;
+  if (cat === 'pumpe') return DOMAIN_COLORS.pumpe;
+  if (cat === 'bewegungsmelder') return DOMAIN_COLORS.bewegungsmelder;
+  if (cat === 'bodenmessgeraet') return DOMAIN_COLORS.bodenmessgeraet;
+  if (cat === 'raummessgeraet') return DOMAIN_COLORS.raummessgeraet;
   if (cat === 'schalter' || cat === 'switch') return DOMAIN_COLORS.switch;
   if (specColor) return resolveColor(specColor) || specColor;
   const domain = domainOf(entityId);
@@ -255,8 +271,17 @@ const STATE_DE = {
   locked: 'Verriegelt', unlocked: 'Entriegelt', heating: 'Heizt', cooling: 'Kühlt',
 };
 
-export function stateLabel(hass, st) {
+export function stateLabel(hass, st, category) {
   if (!st) return '';
+  if (category === 'wasserventil') {
+    return (st.state === 'on' || st.state === 'open') ? 'Geöffnet' : 'Geschlossen';
+  }
+  if (category === 'pumpe') {
+    return (st.state === 'on') ? 'Läuft' : 'Aus';
+  }
+  if (category === 'bewegungsmelder') {
+    return (st.state === 'on') ? 'Bewegung' : 'Keine Bewegung';
+  }
   try {
     if (typeof hass.formatEntityState === 'function') return hass.formatEntityState(st);
   } catch (_) { /* fall through */ }
@@ -285,13 +310,12 @@ const COVER_ICON = {
   awning: ['mdi:awning-outline', 'mdi:awning-outline'],
 };
 
-/** Best-effort icon for an entity (custom icon > category > entity icon > domain default). */
+/** Best-effort icon for an entity (category > custom icon > entity icon > domain default). */
 export function entityIcon(entityId, st, custom, category) {
-  if (custom) return custom;
   const on = isActive(st);
   const dc = st?.attributes?.device_class;
   if (category === 'leuchte') return on ? 'mdi:lightbulb' : 'mdi:lightbulb-outline';
-  if (category === 'steckdose') return on ? 'mdi:power-socket-eu' : 'mdi:power-socket-eu';
+  if (category === 'steckdose') return 'mdi:power-socket-eu';
   if (category === 'jalousie') {
     const pair = COVER_ICON[dc] || COVER_ICON.shutter;
     return st?.state === 'closed' ? pair[0] : pair[1];
@@ -304,6 +328,8 @@ export function entityIcon(entityId, st, custom, category) {
   if (category === 'bewegungsmelder') return 'mdi:motion-sensor';
   if (category === 'bodenmessgeraet') return 'mdi:sprout';
   if (category === 'raummessgeraet') return 'mdi:thermometer-lines';
+
+  if (custom) return custom;
 
   if (st?.attributes?.icon) return st.attributes.icon;
   const domain = domainOf(entityId);

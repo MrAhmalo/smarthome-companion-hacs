@@ -1,49 +1,8 @@
 // Tile component: one entity as a HA-tile-like card (lights, switches, covers, climate, media, sensors).
 import {
   h, icon, domainOf, entityIcon, isActive, isUnavailable, stateLabel, numeric, moreInfo, toggleEntity,
-  isToggleable, resolveColor, effectiveCategory,
+  isToggleable, resolveColor, effectiveCategory, getEntityColor,
 } from '../lib/util.js';
-
-const DOMAIN_COLORS = {
-  cover: '#9c27b0', // Lila (Home Assistant / Mushroom standard)
-  jalousie: '#9c27b0',
-  light: '#ffc107', // Amber
-  leuchte: '#ffc107',
-  switch: '#2196f3', // Blau
-  schalter: '#2196f3',
-  steckdose: '#009688', // Türkis
-  outlet: '#009688',
-  climate: '#ff9800', // Orange (heat)
-  klima: '#ff9800',
-  media_player: '#03a9f4', // Hellblau
-  fernseher: '#03a9f4',
-  fan: '#00bcd4', // Cyan
-  luefter: '#00bcd4',
-  valve: '#00bcd4',
-  wasserventil: '#00bcd4',
-  lock: '#4caf50',
-  sensor: '#2196f3',
-};
-
-function getEntityColor(entityId, st, category, specColor) {
-  const domain = domainOf(entityId);
-  const dc = st?.attributes?.device_class;
-  if (category === 'jalousie' || domain === 'cover') return DOMAIN_COLORS.cover;
-  if (category === 'leuchte' || domain === 'light') {
-    if (Array.isArray(st?.attributes?.rgb_color)) return `rgb(${st.attributes.rgb_color.join(',')})`;
-    return DOMAIN_COLORS.light;
-  }
-  if (category === 'steckdose' || dc === 'outlet') return DOMAIN_COLORS.steckdose;
-  if (category === 'schalter' || domain === 'switch') return DOMAIN_COLORS.switch;
-  if (category === 'klima' || domain === 'climate') {
-    return st?.attributes?.hvac_action === 'cooling' ? '#00bcd4' : '#ff9800';
-  }
-  if (category === 'fernseher' || category === 'medien' || domain === 'media_player') return DOMAIN_COLORS.media_player;
-  if (specColor && specColor !== '#6366F1') return resolveColor(specColor) || specColor;
-  if (domain === 'fan') return DOMAIN_COLORS.fan;
-  if (domain === 'valve') return DOMAIN_COLORS.valve;
-  return DOMAIN_COLORS[domain] || '#2196f3';
-}
 
 const COLOR_MODES = ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'];
 
@@ -67,10 +26,10 @@ export class Tile {
     this.rawDomain = domainOf(spec.entity_id);
     const cat = effectiveCategory(spec);
     // Effective domain overrides raw domain for UI purposes
-    this.domain = (cat === 'light' || cat === 'cover' || cat === 'media_player' || cat === 'climate')
+    this.domain = (cat === 'light' || cat === 'cover' || cat === 'media_player' || cat === 'climate' || cat === 'valve' || cat === 'pumpe' || cat === 'motion' || cat === 'sensor' || cat === 'outlet' || cat === 'switch')
       ? cat : this.rawDomain;
-    this.kind = ['cover', 'media_player', 'climate', 'sensor', 'binary_sensor'].includes(this.domain)
-      ? this.domain : 'toggle';
+    this.kind = ['cover', 'media_player', 'climate', 'sensor', 'binary_sensor', 'motion'].includes(this.domain)
+      ? (this.domain === 'motion' ? 'sensor' : this.domain) : 'toggle';
     this.hass = null;
     this._st = undefined;
     this._pw = undefined;
@@ -178,7 +137,7 @@ export class Tile {
 
   _onIcon() {
     if (!this.hass) return;
-    if (this.kind === 'sensor' || this.kind === 'binary_sensor' || !isToggleable(this.entityId)) {
+    if (this.kind === 'sensor' || this.kind === 'binary_sensor' || this.domain === 'sensor' || this.domain === 'motion' || !isToggleable(this.entityId)) {
       moreInfo(this.el, this.entityId);
     } else {
       toggleEntity(this.hass, this.entityId);
@@ -194,6 +153,9 @@ export class Tile {
       case 'climate': return !!st && st.state !== 'off' && !isUnavailable(st);
       case 'media_player': return !!st && !['off', 'standby', 'idle', 'unavailable', 'unknown'].includes(st.state);
       case 'sensor': return false;
+      case 'motion': return !!st && (st.state === 'on' || st.state === 'detected' || st.state === 'motion');
+      case 'valve': return !!st && (st.state === 'on' || st.state === 'open');
+      case 'pumpe': return !!st && st.state === 'on';
       default: return isActive(st);
     }
   }
@@ -236,7 +198,7 @@ export class Tile {
   _stateText(hass, st, pw, active) {
     if (!st) return 'Nicht gefunden';
     const attrs = st.attributes || {};
-    let text = stateLabel(hass, st);
+    let text = stateLabel(hass, st, this.spec.category);
     if (this.domain === 'cover' && typeof attrs.current_position === 'number' && st.state !== 'closed' && st.state !== 'open') {
       text += ` · ${attrs.current_position} %`;
     } else if (this.domain === 'light' && active && typeof attrs.brightness === 'number') {

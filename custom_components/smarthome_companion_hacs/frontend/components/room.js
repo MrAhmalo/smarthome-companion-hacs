@@ -204,7 +204,7 @@ export class Room {
         if (g.key === 'light') {
           matchingTiles = spec.tiles.filter((t) => effectiveCategory(t) === 'light');
         } else if (g.key === 'switch') {
-          matchingTiles = spec.tiles.filter((t) => ['switch', 'outlet'].includes(effectiveCategory(t)));
+          matchingTiles = spec.tiles.filter((t) => ['switch', 'outlet', 'valve', 'pumpe'].includes(effectiveCategory(t)));
         } else if (g.key === 'cover') {
           matchingTiles = spec.tiles.filter((t) => effectiveCategory(t) === 'cover');
         }
@@ -267,7 +267,15 @@ export class Room {
     const states = group.ids.map((id) => this.hass.states[id]).filter(Boolean);
     if (group.key === 'cover') {
       const anyOpen = states.some((s) => s.state !== 'closed');
-      this.hass.callService('cover', anyOpen ? 'close_cover' : 'open_cover', { entity_id: group.ids });
+      const targetService = anyOpen ? 'close_cover' : 'open_cover';
+      for (const id of group.ids) {
+        const dom = domainOf(id);
+        if (dom === 'cover') {
+          this.hass.callService('cover', targetService, { entity_id: id });
+        } else {
+          this.hass.callService(dom, targetService === 'close_cover' ? 'turn_off' : 'turn_on', { entity_id: id });
+        }
+      }
     } else {
       const anyOn = states.some((s) => isActive(s));
       const targetService = anyOn ? 'turn_off' : 'turn_on';
@@ -279,6 +287,8 @@ export class Room {
       for (const [dom, ids] of Object.entries(byDomain)) {
         if (['light', 'switch', 'input_boolean'].includes(dom)) {
           this.hass.callService(dom, targetService, { entity_id: ids });
+        } else if (dom === 'valve') {
+          this.hass.callService('valve', targetService === 'turn_on' ? 'open_valve' : 'close_valve', { entity_id: ids });
         } else {
           this.hass.callService('homeassistant', targetService, { entity_id: ids });
         }

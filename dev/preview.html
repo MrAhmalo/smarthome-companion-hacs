@@ -79,7 +79,11 @@
     'binary_sensor.wz_motion': st('on', { device_class: 'motion' }),
     'climate.meacocool': st('cool', { friendly_name: 'Klima', current_temperature: 24, temperature: 22, hvac_modes: ['off', 'cool'] }),
     'input_boolean.disco': st('off', { friendly_name: 'Disco' }),
-    'switch.garten_pumpe': st('unavailable', { friendly_name: 'Pumpe' }),
+    'switch.garten_pumpe': st('on', { friendly_name: 'Brunnenpumpe' }),
+    'switch.garten_ventil': st('on', { friendly_name: 'Rasenventil' }),
+    'binary_sensor.garten_bewegung': st('on', { friendly_name: 'Bewegungsmelder' }),
+    'sensor.garten_boden': st('34', { friendly_name: 'Bodenfeuchte', unit_of_measurement: '%' }),
+    'sensor.garten_luft': st('450', { friendly_name: 'Luftqualität', unit_of_measurement: 'ppm' }),
     'binary_sensor.rauchmelder_flur': st('off', { device_class: 'smoke', friendly_name: 'Rauchmelder Flur' }),
   };
 
@@ -109,7 +113,13 @@
         ] },
       { area_id: 'garten', name: 'Garten', icon: 'mdi:flower', expanded: true, always_open: true, mode: 'always',
         visible_users: [], expanded_users: [], sensors: {},
-        tiles: [ tile('h', 'switch.garten_pumpe', 'Pumpe', 'pumpe') ] },
+        tiles: [
+          tile('h', 'switch.garten_pumpe', 'Brunnenpumpe', 'pumpe'),
+          tile('i', 'switch.garten_ventil', 'Rasenventil', 'wasserventil'),
+          tile('j', 'binary_sensor.garten_bewegung', 'Bewegungsmelder', 'bewegungsmelder'),
+          tile('k', 'sensor.garten_boden', 'Bodenfeuchte', 'bodenmessgeraet'),
+          tile('l', 'sensor.garten_luft', 'Luftqualität', 'raummessgeraet'),
+        ] },
     ],
     areas: [{ area_id: 'wohnzimmer', name: 'Wohnzimmer' }, { area_id: 'garten', name: 'Garten' }],
   };
@@ -188,6 +198,7 @@
   el.hass = hass;
   window.panel = el;
   window.hass = hass;
+  setTimeout(() => { const d = document.createElement("pre"); d.id = "dbg"; d.textContent = "ERRORS:" + JSON.stringify(window.__errors); document.body.append(d); }, 500);
 </script>
 </body>
 </html>

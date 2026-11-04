@@ -1,6 +1,6 @@
 // Room detail subview: dedicated granular control page for a single room.
 import {
-  h, icon, domainOf, numeric, isActive, isUnavailable,
+  h, icon, domainOf, numeric, isActive, isUnavailable, entityIcon,
 } from '../lib/util.js';
 import { Tile } from './tile.js';
 import { effectiveCategory, applySmartTileLayout } from './room.js';
@@ -30,10 +30,10 @@ export class RoomDetailView {
     // Partition by effective category (custom category takes priority!)
     this.coverSpecs = tiles.filter((t) => effectiveCategory(t) === 'cover');
     this.lightSpecs = tiles.filter((t) => effectiveCategory(t) === 'light');
-    this.switchSpecs = tiles.filter((t) => ['switch', 'outlet'].includes(effectiveCategory(t)));
+    this.switchSpecs = tiles.filter((t) => ['switch', 'outlet', 'valve', 'pumpe'].includes(effectiveCategory(t)));
     this.mediaSpecs = tiles.filter((t) => effectiveCategory(t) === 'media_player');
     this.otherSpecs = tiles.filter((t) =>
-      !['cover', 'light', 'switch', 'outlet', 'media_player'].includes(effectiveCategory(t)));
+      !['cover', 'light', 'switch', 'outlet', 'valve', 'pumpe', 'media_player'].includes(effectiveCategory(t)));
 
     // Strict priority for non-cover devices: 1. Media, 2. Light, 3. Switches, 4. Other
     const otherDeviceSpecs = [
@@ -108,12 +108,30 @@ export class RoomDetailView {
     this.el = h('div', { class: 'room-detail-page' }, head, bodyCard);
   }
 
+  _coverService(spec, action, data = {}) {
+    const rawDom = domainOf(spec.entity_id);
+    if (rawDom !== 'cover') {
+      if (action === 'open_cover') return this.hass?.callService(rawDom, 'turn_on', { entity_id: spec.entity_id });
+      if (action === 'close_cover') return this.hass?.callService(rawDom, 'turn_off', { entity_id: spec.entity_id });
+      if (action === 'stop_cover') return this.hass?.callService(rawDom, 'turn_off', { entity_id: spec.entity_id });
+    }
+    return this.hass?.callService('cover', action, { entity_id: spec.entity_id, ...data });
+  }
+
   _toggleGroup(group) {
     if (!this.hass) return;
     const states = group.ids.map((id) => this.hass.states[id]).filter(Boolean);
     if (group.key === 'cover') {
       const anyOpen = states.some((s) => s.state !== 'closed');
-      this.hass.callService('cover', anyOpen ? 'close_cover' : 'open_cover', { entity_id: group.ids });
+      const targetService = anyOpen ? 'close_cover' : 'open_cover';
+      for (const id of group.ids) {
+        const dom = domainOf(id);
+        if (dom === 'cover') {
+          this.hass.callService('cover', targetService, { entity_id: id });
+        } else {
+          this.hass.callService(dom, targetService === 'close_cover' ? 'turn_off' : 'turn_on', { entity_id: id });
+        }
+      }
     } else {
       const anyOn = states.some((s) => isActive(s));
       const targetService = anyOn ? 'turn_off' : 'turn_on';
@@ -125,6 +143,8 @@ export class RoomDetailView {
       for (const [dom, ids] of Object.entries(byDomain)) {
         if (['light', 'switch', 'input_boolean'].includes(dom)) {
           this.hass.callService(dom, targetService, { entity_id: ids });
+        } else if (dom === 'valve') {
+          this.hass.callService('valve', targetService === 'turn_on' ? 'open_valve' : 'close_valve', { entity_id: ids });
         } else {
           this.hass.callService('homeassistant', targetService, { entity_id: ids });
         }
@@ -142,9 +162,9 @@ export class RoomDetailView {
       onClick: (e) => { e.stopPropagation(); fn(); },
     }, icon(ic));
 
-    const btnUp = mkBtn('mdi:arrow-up', 'Öffnen', () => this.hass?.callService('cover', 'open_cover', { entity_id: spec.entity_id }));
-    const btnStop = mkBtn('mdi:stop', 'Stopp', () => this.hass?.callService('cover', 'stop_cover', { entity_id: spec.entity_id }));
-    const btnDown = mkBtn('mdi:arrow-down', 'Schließen', () => this.hass?.callService('cover', 'close_cover', { entity_id: spec.entity_id }));
+    const btnUp = mkBtn('mdi:arrow-up', 'Öffnen', () => this._coverService(spec, 'open_cover'));
+    const btnStop = mkBtn('mdi:stop', 'Stopp', () => this._coverService(spec, 'stop_cover'));
+    const btnDown = mkBtn('mdi:arrow-down', 'Schließen', () => this._coverService(spec, 'close_cover'));
 
     const slider = h('input', {
       type: 'range', class: 'slider', min: '0', max: '100', step: '1', 'aria-label': `${spec.name} Position`,
@@ -162,10 +182,17 @@ export class RoomDetailView {
     });
     slider.addEventListener('change', () => {
       dragging = false;
-      this.hass?.callService('cover', 'set_cover_position', {
-        entity_id: spec.entity_id,
-        position: Number(slider.value),
-      });
+      const rawDom = domainOf(spec.entity_id);
+      if (rawDom === 'cover') {
+        this.hass?.callService('cover', 'set_cover_position', {
+          entity_id: spec.entity_id,
+          position: Number(slider.value),
+        });
+      } else {
+        this.hass?.callService(rawDom, Number(slider.value) > 0 ? 'turn_on' : 'turn_off', {
+          entity_id: spec.entity_id,
+        });
+      }
     });
 
     const sliderWrap = h('div', { class: 'cover-slider-wrap' },
@@ -214,6 +241,7 @@ export class RoomDetailView {
       for (const cr of this.coverRows) {
         const st = hass.states[cr.spec.entity_id];
         const unav = isUnavailable(st);
+        cr.iconEl.setAttribute('icon', entityIcon(cr.spec.entity_id, st, cr.spec.icon, cr.spec.category));
         cr.btnUp.disabled = unav;
         cr.btnStop.disabled = unav;
         cr.btnDown.disabled = unav;
