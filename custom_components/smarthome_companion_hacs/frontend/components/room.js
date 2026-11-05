@@ -1,8 +1,8 @@
 // Room component: collapsible "expander" card with area header (sensors, alerts, group controls) and tiles.
 import {
   h, icon, domainOf, isActive, numeric, effectiveCategory,
-} from '../lib/util.js';
-import { Tile } from './tile.js';
+} from '../lib/util.js?v=2.8.16';
+import { Tile } from './tile.js?v=2.8.16';
 
 export { effectiveCategory };
 
@@ -120,6 +120,12 @@ export class GroupedCoverTile {
       'data-active': 'true',
     }, h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns));
 
+    this.el.addEventListener('pointerdown', (e) => {
+      if (this.ctx?.isEditMode?.()) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }, true);
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
         e.stopPropagation();

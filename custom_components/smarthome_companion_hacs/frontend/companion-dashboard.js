@@ -1,15 +1,15 @@
 // SmartHome Companion dashboard panel (sidebar entry "Übersicht").
 // Self-contained: no HACS cards required. The layout is resolved by the backend on every load,
 // so renamed entities / re-configured devices never leave dead tiles behind.
-import { STYLES } from './lib/styles.js';
-import { h, icon, debounce } from './lib/util.js';
-import { Room } from './components/room.js';
-import { RoomDetailView } from './components/room_detail.js';
+import { STYLES } from './lib/styles.js?v=2.8.16';
+import { h, icon, debounce } from './lib/util.js?v=2.8.16';
+import { Room } from './components/room.js?v=2.8.16';
+import { RoomDetailView } from './components/room_detail.js?v=2.8.16';
 import {
   Badges, SmokeAlerts, WarningCard, TrashCard, PersonCards, AnnounceCard, NavBar,
-} from './components/specials.js';
-import { Settings } from './components/settings.js';
-import { DeviceWizard } from './components/device_wizard.js';
+} from './components/specials.js?v=2.8.16';
+import { Settings } from './components/settings.js?v=2.8.16';
+import { DeviceWizard } from './components/device_wizard.js?v=2.8.16';
 
 class CompanionDashboardPanel extends HTMLElement {
   constructor() {
@@ -282,9 +282,23 @@ class CompanionDashboardPanel extends HTMLElement {
   _toggleEditMode() {
     this._editMode = !this._editMode;
     this._editBtn?.toggleAttribute('data-active', this._editMode);
+    this._editBtn?.classList.toggle('edit-btn-active', this._editMode);
     this._page?.toggleAttribute('data-edit-mode', this._editMode);
     if (this._editMode) {
-      this._toast('Bearbeitungsmodus aktiv: Klicke ein Gerät an zum Einrichten');
+      if (!this._editBanner) {
+        this._editBanner = h('div', { class: 'edit-mode-banner' },
+          h('div', { class: 'edit-mode-banner-info' },
+            icon('mdi:pencil'),
+            h('span', {}, 'Bearbeitungsmodus aktiv: Klicke ein Gerät an zum Konfigurieren')),
+          h('button', {
+            class: 'edit-mode-banner-btn',
+            type: 'button',
+            onClick: () => this._toggleEditMode(),
+          }, 'Fertig'));
+      }
+      this._content?.prepend(this._editBanner);
+    } else {
+      this._editBanner?.remove();
     }
   }
 
@@ -293,7 +307,9 @@ class CompanionDashboardPanel extends HTMLElement {
     if (this._editMode) {
       this._editMode = false;
       this._editBtn?.removeAttribute('data-active');
+      this._editBtn?.classList.remove('edit-btn-active');
       this._page?.removeAttribute('data-edit-mode');
+      this._editBanner?.remove();
     }
     this._wizard?.el.remove();
     this._wizard = new DeviceWizard({

@@ -1,9 +1,9 @@
-import { h, icon, COLOR_NAMES, resolveColor, renderTrashBin } from '../lib/util.js';
-import { EntityPicker } from './entity_picker.js';
-import { IconPicker } from './icon_picker.js';
-import { ColorPicker } from './color_picker.js';
-import { CustomDropdown } from './custom_dropdown.js';
-import { DEVICE_CATEGORIES } from './device_wizard.js';
+import { h, icon, COLOR_NAMES, resolveColor, renderTrashBin } from '../lib/util.js?v=2.8.16';
+import { EntityPicker } from './entity_picker.js?v=2.8.16';
+import { IconPicker } from './icon_picker.js?v=2.8.16';
+import { ColorPicker } from './color_picker.js?v=2.8.16';
+import { CustomDropdown } from './custom_dropdown.js?v=2.8.16';
+import { DEVICE_CATEGORIES } from './device_wizard.js?v=2.8.16';
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 
@@ -471,75 +471,90 @@ export class Settings {
           return !searchQ || name.includes(searchQ) || area.includes(searchQ) || mfg.includes(searchQ) || model.includes(searchQ);
         });
 
-        filtered.sort((aId, bId) => {
-          const cfgA = configuredMap[aId];
-          const devA = devList.find((d) => d.id === aId);
-          const areaA = (areaMap.get(cfgA?.area_id || devA?.area_id) || 'zz').toLowerCase();
-          const nameA = (cfgA?.custom_name || devA?.name_by_user || devA?.name || '').toLowerCase();
-
-          const cfgB = configuredMap[bId];
-          const devB = devList.find((d) => d.id === bId);
-          const areaB = (areaMap.get(cfgB?.area_id || devB?.area_id) || 'zz').toLowerCase();
-          const nameB = (cfgB?.custom_name || devB?.name_by_user || devB?.name || '').toLowerCase();
-
-          const areaCmp = areaA.localeCompare(areaB);
-          if (areaCmp !== 0) return areaCmp;
-          return nameA.localeCompare(nameB);
-        });
-
         if (!filtered.length) {
           listEl.replaceChildren(h('div', { class: 'empty' }, icon('mdi:magnify'), h('div', {}, 'Keine passenden Geräte gefunden')));
           return;
         }
 
-        listEl.replaceChildren(...filtered.map((id) => {
+        const groups = new Map();
+        for (const id of filtered) {
           const cfg = configuredMap[id];
           const dev = devList.find((d) => d.id === id);
-          const name = cfg.custom_name || dev?.name_by_user || dev?.name || 'Unbenanntes Gerät';
-          const area = areaMap.get(cfg.area_id || dev?.area_id);
-          const mfg = [dev?.manufacturer, dev?.model].filter(Boolean).join(' · ');
+          const areaName = areaMap.get(cfg?.area_id || dev?.area_id) || 'Ohne Raum';
+          if (!groups.has(areaName)) groups.set(areaName, []);
+          groups.get(areaName).push(id);
+        }
 
-          const cat = DEVICE_CATEGORIES.find((c) => c.id === cfg.category);
-          const catName = cat?.name || cfg.category;
-          const catIcon = cat?.icon || 'mdi:devices';
-          const catColor = cat?.color || 'var(--cd-accent)';
+        const sortedGroupNames = Array.from(groups.keys()).sort((a, b) => {
+          if (a === 'Ohne Raum') return 1;
+          if (b === 'Ohne Raum') return -1;
+          return a.localeCompare(b);
+        });
 
-          const badges = [];
-          if (area) badges.push(h('span', { class: 'badge-tag area' }, icon('mdi:map-marker'), area));
-          badges.push(h('span', {
-            class: 'badge-tag category',
-            style: { '--badge-cat-color': catColor },
-          }, icon(catIcon), catName));
+        const sections = sortedGroupNames.map((areaName) => {
+          const ids = groups.get(areaName);
+          ids.sort((aId, bId) => {
+            const nameA = (configuredMap[aId]?.custom_name || devList.find((d) => d.id === aId)?.name_by_user || devList.find((d) => d.id === aId)?.name || '').toLowerCase();
+            const nameB = (configuredMap[bId]?.custom_name || devList.find((d) => d.id === bId)?.name_by_user || devList.find((d) => d.id === bId)?.name || '').toLowerCase();
+            return nameA.localeCompare(nameB);
+          });
 
-          return h('div', { class: 'device-card' },
-            h('div', { class: 'd-icon', style: { color: catColor } }, icon(catIcon)),
-            h('div', { class: 'd-info' },
-              h('div', { class: 'd-name' }, name),
-              h('div', { class: 'd-meta' }, mfg ? h('span', {}, mfg) : null, ...badges)),
-            h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-              h('button', {
-                class: 'btn secondary small',
-                type: 'button',
-                title: 'Gerät bearbeiten',
-                onClick: () => this.onOpenDevice?.(id),
-              }, icon('mdi:pencil'), 'Bearbeiten'),
-              h('button', {
-                class: 'icon-btn danger',
-                type: 'button',
-                title: 'Companion-Einrichtung aufheben',
-                onClick: async () => {
-                  const conf = window.confirm(`Companion-Einrichtung für „${name}“ aufheben?\n\nDas Gerät bleibt in Home Assistant erhalten.`);
-                  if (!conf) return;
-                  try {
-                    await this.hass.callWS({ type: 'smarthome_companion/devices/remove', device_id: id });
-                    delete configuredMap[id];
-                    this._renderDevicesTab(wrap);
-                  } catch (err) {
-                    alert(`Fehler beim Aufheben: ${err.message || err}`);
-                  }
-                },
-              }, icon('mdi:delete-outline'))));
-        }));
+          const cards = ids.map((id) => {
+            const cfg = configuredMap[id];
+            const dev = devList.find((d) => d.id === id);
+            const name = cfg.custom_name || dev?.name_by_user || dev?.name || 'Unbenanntes Gerät';
+            const mfg = [dev?.manufacturer, dev?.model].filter(Boolean).join(' · ');
+
+            const cat = DEVICE_CATEGORIES.find((c) => c.id === cfg.category);
+            const catName = cat?.name || cfg.category;
+            const catIcon = cat?.icon || 'mdi:devices';
+            const catColor = cat?.color || 'var(--cd-accent)';
+
+            const badges = [];
+            badges.push(h('span', {
+              class: 'badge-tag category',
+              style: { '--badge-cat-color': catColor },
+            }, icon(catIcon), catName));
+
+            return h('div', { class: 'device-card' },
+              h('div', { class: 'd-icon', style: { color: catColor } }, icon(catIcon)),
+              h('div', { class: 'd-info' },
+                h('div', { class: 'd-name' }, name),
+                h('div', { class: 'd-meta' }, mfg ? h('span', {}, mfg) : null, ...badges)),
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+                h('button', {
+                  class: 'btn secondary small',
+                  type: 'button',
+                  title: 'Gerät bearbeiten',
+                  onClick: () => this.onOpenDevice?.(id),
+                }, icon('mdi:pencil'), 'Bearbeiten'),
+                h('button', {
+                  class: 'icon-btn danger',
+                  type: 'button',
+                  title: 'Companion-Einrichtung aufheben',
+                  onClick: async () => {
+                    const conf = window.confirm(`Companion-Einrichtung für „${name}“ aufheben?\n\nDas Gerät bleibt in Home Assistant erhalten.`);
+                    if (!conf) return;
+                    try {
+                      await this.hass.callWS({ type: 'smarthome_companion/devices/remove', device_id: id });
+                      delete configuredMap[id];
+                      this._renderDevicesTab(wrap);
+                    } catch (err) {
+                      alert(`Fehler beim Aufheben: ${err.message || err}`);
+                    }
+                  },
+                }, icon('mdi:delete-outline'))));
+          });
+
+          return h('div', { class: 'device-room-section' },
+            h('div', { class: 'device-room-header' },
+              icon(areaName === 'Ohne Raum' ? 'mdi:help-circle-outline' : 'mdi:home-outline'),
+              h('span', {}, areaName),
+              h('span', { class: 'room-count' }, `(${ids.length})`)),
+            h('div', { class: 'device-list' }, ...cards));
+        });
+
+        listEl.replaceChildren(...sections);
       };
 
       const searchInput = h('input', {

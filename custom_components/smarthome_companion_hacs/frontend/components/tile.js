@@ -2,7 +2,7 @@
 import {
   h, icon, domainOf, entityIcon, isActive, isUnavailable, stateLabel, numeric, moreInfo, toggleEntity,
   isToggleable, resolveColor, effectiveCategory, getEntityColor, setSliderVal,
-} from '../lib/util.js';
+} from '../lib/util.js?v=2.8.16';
 
 const COLOR_MODES = ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'];
 
@@ -49,8 +49,9 @@ export class Tile {
     this.info = h('div', {
       class: 'tile-info',
       onClick: () => {
-        if (this.ctx?.isEditMode?.() && this.deviceId) {
-          this.ctx.onOpenDevice?.(this.deviceId);
+        if (this.ctx?.isEditMode?.()) {
+          const targetId = this.deviceId || this.spec?.device_id || this.entityId;
+          this.ctx.onOpenDevice?.(targetId);
           return;
         }
         moreInfo(this.el, this.entityId);
@@ -65,16 +66,17 @@ export class Tile {
       this.feature);
 
     this.el.addEventListener('pointerdown', (e) => {
-      if (this.ctx?.isEditMode?.() && this.deviceId) {
+      if (this.ctx?.isEditMode?.()) {
         e.stopPropagation();
         e.preventDefault();
       }
     }, true);
     this.el.addEventListener('click', (e) => {
-      if (this.ctx?.isEditMode?.() && this.deviceId) {
+      if (this.ctx?.isEditMode?.()) {
         e.stopPropagation();
         e.preventDefault();
-        this.ctx.onOpenDevice?.(this.deviceId);
+        const targetId = this.deviceId || this.spec?.device_id || this.entityId;
+        this.ctx.onOpenDevice?.(targetId);
       }
     }, true);
 
@@ -160,8 +162,9 @@ export class Tile {
   }
 
   _onIcon() {
-    if (this.ctx?.isEditMode?.() && this.deviceId) {
-      this.ctx.onOpenDevice?.(this.deviceId);
+    if (this.ctx?.isEditMode?.()) {
+      const targetId = this.deviceId || this.spec?.device_id || this.entityId;
+      this.ctx.onOpenDevice?.(targetId);
       return;
     }
     if (!this.hass) return;

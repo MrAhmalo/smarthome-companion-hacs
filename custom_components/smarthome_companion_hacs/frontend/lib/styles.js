@@ -29,21 +29,74 @@ button { font: inherit; color: inherit; }
   display: grid; place-items: center; color: var(--primary-text-color, #fff);
 }
 .icon-btn:hover { background: var(--cd-tile-bg); }
+.icon-btn.edit-btn-active,
 .icon-btn[data-active] {
-  background: color-mix(in srgb, var(--cd-accent) 22%, transparent);
-  color: var(--cd-accent);
+  background: var(--cd-accent, #0284c7) !important;
+  color: #fff !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--cd-accent, #0284c7) 80%, transparent) !important;
 }
+.edit-mode-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 16px; margin: 4px 0 14px; border-radius: 12px;
+  background: color-mix(in srgb, var(--cd-accent, #0284c7) 22%, var(--cd-card, #1a1a1a));
+  border: 1.5px solid var(--cd-accent, #0284c7);
+  color: var(--primary-text-color, #fff);
+  box-shadow: 0 4px 18px rgba(0,0,0,.35);
+  animation: cdFadeIn 0.2s ease-out;
+}
+.edit-mode-banner-info {
+  display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; min-width: 0;
+}
+.edit-mode-banner-info ha-icon {
+  color: var(--cd-accent, #0284c7); --mdc-icon-size: 20px; flex: none;
+}
+.edit-mode-banner-info span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.edit-mode-banner-btn {
+  padding: 6px 14px; border-radius: 18px; border: 0;
+  background: var(--cd-accent, #0284c7); color: #fff;
+  font-size: 12px; font-weight: 700; cursor: pointer; flex: none;
+  transition: transform .1s, opacity .15s;
+}
+.edit-mode-banner-btn:active { transform: scale(0.95); }
 .page[data-edit-mode] .tile,
 .page[data-edit-mode] .cover-detail-row {
-  cursor: pointer;
-  outline: 1.5px dashed color-mix(in srgb, var(--cd-accent) 60%, transparent);
-  outline-offset: -1px;
+  cursor: pointer !important;
+  position: relative !important;
+  outline: 2px dashed var(--cd-accent) !important;
+  outline-offset: -2px;
 }
 .page[data-edit-mode] .tile:hover,
 .page[data-edit-mode] .cover-detail-row:hover {
-  outline-color: var(--cd-accent);
-  box-shadow: 0 0 14px color-mix(in srgb, var(--cd-accent) 35%, transparent);
+  outline-color: #fff !important;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--cd-accent) 45%, transparent) !important;
 }
+.page[data-edit-mode] .tile::after,
+.page[data-edit-mode] .cover-detail-row::after {
+  content: '✏️';
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 12px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid var(--cd-accent);
+  pointer-events: none;
+  z-index: 10;
+}
+.device-room-section { margin-top: 16px; }
+.device-room-section:first-child { margin-top: 4px; }
+.device-room-header {
+  display: flex; align-items: center; gap: 8px; padding: 6px 4px 8px;
+  font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--primary-text-color, #fff);
+  border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 8px;
+}
+.device-room-header ha-icon { color: var(--cd-accent); --mdc-icon-size: 18px; flex: none; }
+.device-room-header .room-count { font-size: 12px; font-weight: 500; color: var(--cd-secondary); }
 .greeting { text-align: center; margin: 4px 0 12px; }
 .greeting h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.3px; }
 .badges {
@@ -234,7 +287,9 @@ input[type=range].slider::-moz-range-thumb {
 /* ── Standalone Trash Card (Horizontal Layout) ── */
 .trash-card {
   padding: 0;
-  background: transparent !important;
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
   border-radius: 0;
 }
 .trash-card .bins {

@@ -1,7 +1,7 @@
 // Special cards: header badges, smoke alerts, weather warning, trash, persons, announcement, bottom navigation.
 import {
   h, icon, domainOf, entityIcon, isUnavailable, stateLabel, numeric, moreInfo, navigate, resolveColor, renderTrashBin,
-} from '../lib/util.js';
+} from '../lib/util.js?v=2.8.16';
 
 const allowed = (users, userId) => !users || users.length === 0 || users.includes(userId);
 
@@ -131,7 +131,7 @@ export class TrashCard {
   constructor(cfg) {
     this.cfg = cfg || {};
     this.bins = h('div', { class: 'bins' });
-    this.el = h('div', { class: 'card trash-card', hidden: true }, this.bins);
+    this.el = h('div', { class: 'trash-card', hidden: true }, this.bins);
     this._day = '';
     this._lastLoad = 0;
   }
