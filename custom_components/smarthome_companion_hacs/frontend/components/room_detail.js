@@ -1,6 +1,6 @@
 // Room detail subview: dedicated granular control page for a single room.
 import {
-  h, icon, domainOf, numeric, isActive, isUnavailable, entityIcon,
+  h, icon, domainOf, numeric, isActive, isUnavailable, entityIcon, setSliderVal,
 } from '../lib/util.js';
 import { Tile } from './tile.js';
 import { effectiveCategory, applySmartTileLayout } from './room.js';
@@ -177,7 +177,7 @@ export class RoomDetailView {
     let dragging = false;
     slider.addEventListener('input', () => {
       dragging = true;
-      slider.style.setProperty('--val', `${slider.value}%`);
+      setSliderVal(slider, slider.value);
       stateEl.textContent = `Position: ${slider.value}%`;
     });
     slider.addEventListener('change', () => {
@@ -206,7 +206,7 @@ export class RoomDetailView {
           class: 'cover-detail-info',
           onClick: () => {
             if (this.ctx?.isEditMode?.()) {
-              const devId = spec.device_id || (spec.key?.includes(':') ? spec.key.split(':')[0] : null);
+              const devId = spec.device_id || (spec.key?.includes(':') ? spec.key.split(':')[0] : null) || spec.entity_id;
               if (devId) { this.ctx.onOpenDevice?.(devId); return; }
             }
           },
@@ -215,6 +215,21 @@ export class RoomDetailView {
           h('div', { class: 'cover-detail-texts' }, nameEl, stateEl)),
         h('div', { class: 'tile-btns' }, btnUp, btnStop, btnDown)),
       sliderWrap);
+
+    row.addEventListener('pointerdown', (e) => {
+      if (this.ctx?.isEditMode?.()) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }, true);
+    row.addEventListener('click', (e) => {
+      if (this.ctx?.isEditMode?.()) {
+        e.stopPropagation();
+        e.preventDefault();
+        const devId = spec.device_id || (spec.key?.includes(':') ? spec.key.split(':')[0] : null) || spec.entity_id;
+        if (devId) this.ctx.onOpenDevice?.(devId);
+      }
+    }, true);
 
     return {
       spec, row, iconEl, stateEl, slider, btnUp, btnStop, btnDown,
@@ -274,8 +289,7 @@ export class RoomDetailView {
         }
 
         if (pos != null && !cr.dragging) {
-          cr.slider.value = String(pos);
-          cr.slider.style.setProperty('--val', `${pos}%`);
+          setSliderVal(cr.slider, pos);
         }
       }
     }

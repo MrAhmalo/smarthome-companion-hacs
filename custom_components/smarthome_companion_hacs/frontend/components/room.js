@@ -119,6 +119,16 @@ export class GroupedCoverTile {
       class: 'tile grouped-cover wide',
       'data-active': 'true',
     }, h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns));
+
+    this.el.addEventListener('click', (e) => {
+      if (this.ctx?.isEditMode?.()) {
+        e.stopPropagation();
+        e.preventDefault();
+        const firstCover = this.coverSpecs[0];
+        const devId = firstCover?.device_id || (firstCover?.key?.includes(':') ? firstCover.key.split(':')[0] : null) || firstCover?.entity_id;
+        if (devId) this.ctx.onOpenDevice?.(devId);
+      }
+    }, true);
   }
 
   _service(cmd) {

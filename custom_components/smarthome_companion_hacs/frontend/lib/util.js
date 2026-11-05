@@ -400,3 +400,24 @@ export function debounce(fn, ms) {
     t = setTimeout(() => fn(...args), ms);
   };
 }
+
+/**
+ * Sets a range slider's value and computes the exact CSS `--val` gradient stop
+ * so the colored fill always extends 7px to the right of the 5px thumb pill
+ * (matching the 7px left/right padding) at every percentage from 1% to 100%.
+ */
+export function setSliderVal(slider, val) {
+  if (!slider) return;
+  const min = Number(slider.min || 0);
+  const max = Number(slider.max || 100);
+  const v = Math.max(min, Math.min(max, Number(val)));
+  slider.value = String(v);
+  if (min === 0 && v <= 0) {
+    slider.style.setProperty('--val', '0%');
+    return;
+  }
+  const p = max > min ? (v - min) / (max - min) : 0;
+  const pct = (p * 100).toFixed(2);
+  const offsetPx = ((1 - p) * 19).toFixed(2);
+  slider.style.setProperty('--val', `calc(${pct}% + ${offsetPx}px)`);
+}

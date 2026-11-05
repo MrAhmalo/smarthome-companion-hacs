@@ -113,7 +113,13 @@ export class DeviceWizard {
       this.categories = setup.categories || {};
 
       if (this.initialDeviceId) {
-        const target = this.devices.find((d) => d.id === this.initialDeviceId);
+        let target = this.devices.find((d) => d.id === this.initialDeviceId);
+        if (!target) {
+          const ent = this.entities.find((e) => e.entity_id === this.initialDeviceId);
+          if (ent?.device_id) {
+            target = this.devices.find((d) => d.id === ent.device_id);
+          }
+        }
         if (target) {
           this.selectedDevice = target;
           this._initDevice();

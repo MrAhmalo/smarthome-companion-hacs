@@ -1,7 +1,7 @@
 // Tile component: one entity as a HA-tile-like card (lights, switches, covers, climate, media, sensors).
 import {
   h, icon, domainOf, entityIcon, isActive, isUnavailable, stateLabel, numeric, moreInfo, toggleEntity,
-  isToggleable, resolveColor, effectiveCategory, getEntityColor,
+  isToggleable, resolveColor, effectiveCategory, getEntityColor, setSliderVal,
 } from '../lib/util.js';
 
 const COLOR_MODES = ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'];
@@ -23,7 +23,7 @@ export class Tile {
     this.spec = spec;
     this.ctx = ctx;
     this.entityId = spec.entity_id;
-    this.deviceId = spec.device_id || (spec.key && spec.key.includes(':') ? spec.key.split(':')[0] : null);
+    this.deviceId = spec.device_id || (spec.key && spec.key.includes(':') && !spec.key.startsWith('e:') && !spec.key.startsWith('l:') ? spec.key.split(':')[0] : null) || spec.entity_id;
     this.rawDomain = domainOf(spec.entity_id);
     const cat = effectiveCategory(spec);
     // Effective domain overrides raw domain for UI purposes
@@ -63,6 +63,20 @@ export class Tile {
     this.el = h('div', { class: `tile ${this.kind}${wide ? ' wide' : ''}`, 'data-key': this.spec.key },
       h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns),
       this.feature);
+
+    this.el.addEventListener('pointerdown', (e) => {
+      if (this.ctx?.isEditMode?.() && this.deviceId) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }, true);
+    this.el.addEventListener('click', (e) => {
+      if (this.ctx?.isEditMode?.() && this.deviceId) {
+        e.stopPropagation();
+        e.preventDefault();
+        this.ctx.onOpenDevice?.(this.deviceId);
+      }
+    }, true);
 
     if (this.kind === 'cover') this._buildCover();
     if (this.kind === 'media_player') this._buildMedia();
@@ -119,7 +133,7 @@ export class Tile {
     this.slider.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
     this.slider.addEventListener('input', () => {
       this._dragging = true;
-      this.slider.style.setProperty('--val', `${this.slider.value}%`);
+      setSliderVal(this.slider, this.slider.value);
     });
     this.slider.addEventListener('change', () => {
       this._dragging = false;
@@ -274,8 +288,7 @@ export class Tile {
     if (showSwatches) this._renderPresets();
     if (showSlider && !this._dragging) {
       const pct = Math.max(1, Math.round(((st.attributes.brightness || 0) / 255) * 100));
-      this.slider.value = String(pct);
-      this.slider.style.setProperty('--val', `${pct}%`);
+      setSliderVal(this.slider, pct);
     }
   }
 }
