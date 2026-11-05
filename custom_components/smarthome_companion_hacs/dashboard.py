@@ -293,6 +293,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
         area_id = (entry.area_id if entry else None) or (device.area_id if device else None)
         return area_id, {
             "key": key,
+            "device_id": device.id if device else (key.split(":")[0] if ":" in key else None),
             "entity_id": entity_id,
             "name": name or "",
             "icon": _clean_icon(icon),
@@ -319,20 +320,32 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
         device_name = cfg.get("custom_name") or device.name_by_user or device.name or ""
 
         if isinstance(subs, dict) and subs:
+            valid_subs = []
             for sub_key, sub in subs.items():
                 if not isinstance(sub, dict):
                     continue
                 entry = _resolve_entry(ent_reg, by_uid, sub_key, sub.get("unique_id"), sub.get("original_id"))
                 if entry is not None:
-                    if entry.disabled_by:
+                    if entry.disabled_by or getattr(entry, "entity_category", None) in ("config", "diagnostic"):
                         continue
                     entity_id = entry.entity_id
                 elif hass.states.get(sub_key):
                     entity_id = sub_key
                 else:
                     continue
+                # Filter out config/diagnostic utility switches
+                eid_lower = entity_id.lower()
+                name_lower = (sub.get("custom_name") or sub.get("name") or (entry.name if entry else "") or "").lower()
+                config_pattern = ("overcharge", "protection", "kindersicherung", "child_lock", "childlock", "led_mode", "ledmode")
+                if any(x in eid_lower or x in name_lower for x in config_pattern):
+                    continue
+                valid_subs.append((sub_key, sub, entry, entity_id))
+
+            for sub_key, sub, entry, entity_id in valid_subs:
                 uid = sub.get("unique_id") or entity_id
                 name = sub.get("custom_name") or sub.get("name") or device_name
+                if len(valid_subs) == 1 and not sub.get("custom_name"):
+                    name = device_name or name
                 area_id, tile = make_tile(
                     f"{device_id}:{uid}", entry, entity_id, name, sub.get("category") or category,
                     sub.get("icon") or cfg.get("icon"), device,

@@ -202,7 +202,15 @@ export class RoomDetailView {
 
     const row = h('div', { class: 'cover-detail-row' },
       h('div', { class: 'cover-detail-top' },
-        h('div', { class: 'cover-detail-info' },
+        h('div', {
+          class: 'cover-detail-info',
+          onClick: () => {
+            if (this.ctx?.isEditMode?.()) {
+              const devId = spec.device_id || (spec.key?.includes(':') ? spec.key.split(':')[0] : null);
+              if (devId) { this.ctx.onOpenDevice?.(devId); return; }
+            }
+          },
+        },
           h('div', { class: 'cover-detail-icon' }, iconEl),
           h('div', { class: 'cover-detail-texts' }, nameEl, stateEl)),
         h('div', { class: 'tile-btns' }, btnUp, btnStop, btnDown)),

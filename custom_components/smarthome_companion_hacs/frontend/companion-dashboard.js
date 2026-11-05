@@ -20,6 +20,7 @@ class CompanionDashboardPanel extends HTMLElement {
     this._data = null;
     this._raf = 0;
     this._activeRoomId = null;
+    this._editMode = false;
     this._reload = debounce(() => this._load(), 800);
   }
 
@@ -72,13 +73,17 @@ class CompanionDashboardPanel extends HTMLElement {
       class: 'icon-btn', 'aria-label': 'Gerät einrichten', title: 'Gerät einrichten', hidden: true,
       onClick: () => this._openWizard(),
     }, icon('mdi:plus-circle-outline'));
+    this._editBtn = h('button', {
+      class: 'icon-btn', 'aria-label': 'Bearbeitungsmodus', title: 'Bearbeitungsmodus (Gerät direkt anklicken)', hidden: true,
+      onClick: () => this._toggleEditMode(),
+    }, icon('mdi:pencil'));
     this._settingsBtn = h('button', {
       class: 'icon-btn', 'aria-label': 'Dashboard einrichten', title: 'Dashboard einrichten', hidden: true,
       onClick: () => this._openSettings(),
     }, icon('mdi:cog-outline'));
     this._content = h('div');
     this._page = h('div', { class: 'page' },
-      h('div', { class: 'toolbar' }, this._menuBtn, this._backBtn, h('div', { class: 'spacer' }), this._wizardBtn, this._settingsBtn),
+      h('div', { class: 'toolbar' }, this._menuBtn, this._backBtn, h('div', { class: 'spacer' }), this._wizardBtn, this._editBtn, this._settingsBtn),
       this._content);
     this.shadowRoot.replaceChildren(style, this._page);
 
@@ -106,6 +111,7 @@ class CompanionDashboardPanel extends HTMLElement {
       this._data = res;
       this._settingsBtn.hidden = !res.user?.is_admin;
       this._wizardBtn.hidden = !res.user?.is_admin;
+      this._editBtn.hidden = !res.user?.is_admin;
       this._render();
     } catch (err) {
       this._error = err;
@@ -120,6 +126,11 @@ class CompanionDashboardPanel extends HTMLElement {
       presets: config.color_presets || [],
       openState: this._openState,
       onOpenRoom: (areaId) => this._openRoom(areaId),
+      onOpenDevice: (deviceId) => {
+        if (this._editMode) this._toggleEditMode();
+        this._openWizard(deviceId);
+      },
+      isEditMode: () => !!this._editMode,
     };
 
     // Subview: single room detailed view
@@ -267,8 +278,23 @@ class CompanionDashboardPanel extends HTMLElement {
     this._render();
   }
 
+  // ── edit mode ──
+  _toggleEditMode() {
+    this._editMode = !this._editMode;
+    this._editBtn?.toggleAttribute('data-active', this._editMode);
+    this._page?.toggleAttribute('data-edit-mode', this._editMode);
+    if (this._editMode) {
+      this._toast('Bearbeitungsmodus aktiv: Klicke ein Gerät an zum Einrichten');
+    }
+  }
+
   // ── device wizard ──
   _openWizard(deviceId = null) {
+    if (this._editMode) {
+      this._editMode = false;
+      this._editBtn?.removeAttribute('data-active');
+      this._page?.removeAttribute('data-edit-mode');
+    }
     this._wizard?.el.remove();
     this._wizard = new DeviceWizard({
       hass: this._hass,

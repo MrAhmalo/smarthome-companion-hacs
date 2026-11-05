@@ -76,6 +76,11 @@ export class GroupedCoverTile {
       style: { color: '#9c27b0', background: 'rgba(156, 39, 176, 0.18)' },
       onClick: (e) => {
         e.stopPropagation();
+        if (this.ctx?.isEditMode?.()) {
+          const firstCover = this.coverSpecs[0];
+          const devId = firstCover?.device_id || (firstCover?.key?.includes(':') ? firstCover.key.split(':')[0] : null);
+          if (devId) { this.ctx.onOpenDevice?.(devId); return; }
+        }
         this.ctx.onOpenRoom?.(this.roomSpec.area_id);
       },
     }, this.iconEl);
@@ -84,7 +89,14 @@ export class GroupedCoverTile {
     this.stateEl = h('div', { class: 'tile-state' }, `${this.coverSpecs.length} Rollläden`);
     this.info = h('div', {
       class: 'tile-info',
-      onClick: () => this.ctx.onOpenRoom?.(this.roomSpec.area_id),
+      onClick: () => {
+        if (this.ctx?.isEditMode?.()) {
+          const firstCover = this.coverSpecs[0];
+          const devId = firstCover?.device_id || (firstCover?.key?.includes(':') ? firstCover.key.split(':')[0] : null);
+          if (devId) { this.ctx.onOpenDevice?.(devId); return; }
+        }
+        this.ctx.onOpenRoom?.(this.roomSpec.area_id);
+      },
     }, this.nameEl, this.stateEl);
 
     const mk = (ic, label, fn) => h('button', {

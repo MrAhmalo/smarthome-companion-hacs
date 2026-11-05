@@ -29,6 +29,21 @@ button { font: inherit; color: inherit; }
   display: grid; place-items: center; color: var(--primary-text-color, #fff);
 }
 .icon-btn:hover { background: var(--cd-tile-bg); }
+.icon-btn[data-active] {
+  background: color-mix(in srgb, var(--cd-accent) 22%, transparent);
+  color: var(--cd-accent);
+}
+.page[data-edit-mode] .tile,
+.page[data-edit-mode] .cover-detail-row {
+  cursor: pointer;
+  outline: 1.5px dashed color-mix(in srgb, var(--cd-accent) 60%, transparent);
+  outline-offset: -1px;
+}
+.page[data-edit-mode] .tile:hover,
+.page[data-edit-mode] .cover-detail-row:hover {
+  outline-color: var(--cd-accent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--cd-accent) 35%, transparent);
+}
 .greeting { text-align: center; margin: 4px 0 12px; }
 .greeting h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.3px; }
 .badges {
@@ -367,6 +382,15 @@ input[type=range].slider::-moz-range-thumb {
 }
 .badge-tag.ok { background: rgba(67, 160, 71, .2); color: #81c784; }
 .badge-tag.area { background: rgba(3, 169, 244, .18); color: #4fc3f7; }
+.badge-tag.category {
+  background: color-mix(in srgb, var(--badge-cat-color, var(--cd-accent)) 16%, transparent);
+  color: var(--badge-cat-color, var(--cd-accent));
+  border: 1px solid color-mix(in srgb, var(--badge-cat-color, var(--cd-accent)) 25%, transparent);
+}
+.badge-tag.category ha-icon {
+  --mdc-icon-size: 14px;
+  color: var(--badge-cat-color, var(--cd-accent));
+}
 .channel-card {
   border-radius: 12px; background: var(--cd-tile-bg); padding: 10px 14px; display: grid; gap: 10px;
 }
@@ -562,12 +586,12 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 
 .room-detail-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .room-detail-body {
-  display: grid; gap: 14px; padding: 16px;
+  display: grid; gap: 8px; padding: 8px;
   border-radius: var(--cd-radius); background: var(--cd-card);
   box-shadow: 0 2px 14px rgba(0,0,0,.25);
 }
-.room-detail-body .tile-grid { padding: 0; }
-.cover-detail-list { display: grid; gap: 10px; }
+.room-detail-body .tile-grid { padding: 0; gap: 8px; }
+.cover-detail-list { display: grid; gap: 8px; }
 
 .cover-detail-row {
   display: flex; flex-direction: column; gap: 10px;

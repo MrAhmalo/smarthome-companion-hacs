@@ -18,6 +18,27 @@ export const DEVICE_CATEGORIES = [
 
 const CONTROLLABLE_DOMAINS = new Set(['light', 'switch', 'cover', 'valve', 'climate', 'media_player', 'fan']);
 
+/**
+ * Filter out configuration, diagnostic, and internal utility switches (e.g. Overcharge protection, Child lock, LED mode).
+ * Only genuine controllable actuators should be treated as device channels.
+ */
+export function isControllableActuator(e) {
+  if (!e || !e.entity_id) return false;
+  if (e.disabled_by) return false;
+  if (e.entity_category === 'config' || e.entity_category === 'diagnostic') return false;
+
+  const domain = domainOf(e.entity_id);
+  if (!CONTROLLABLE_DOMAINS.has(domain)) return false;
+
+  // Pattern filter for configuration and diagnostic switches
+  const id = (e.entity_id || '').toLowerCase();
+  const name = (e.name || e.original_name || '').toLowerCase();
+  const configPattern = /(?:overcharge|protection|kindersicherung|child_?lock|indicator|led_?mode|backlight|status_?led|restart|reboot|update|firmware|start_?zustand|start_?state|auto_?off|inching|pairing|identify|interlock|relay_mode|power_on_state)/;
+  if (configPattern.test(id) || configPattern.test(name)) return false;
+
+  return true;
+}
+
 export class DeviceWizard {
   /**
    * @param {{hass:object, initialDeviceId?:string, onClose:Function, onSaved:Function}} opts
@@ -212,7 +233,7 @@ export class DeviceWizard {
     const isCandidate = (d) => {
       if (d.disabled_by || d.entry_type === 'service') return false;
       const devEntities = this.entities.filter((e) => e.device_id === d.id && !e.disabled_by);
-      const controllable = devEntities.filter((e) => CONTROLLABLE_DOMAINS.has(domainOf(e.entity_id)));
+      const controllable = devEntities.filter(isControllableActuator);
       const sensors = devEntities.filter((e) => ['sensor', 'binary_sensor'].includes(domainOf(e.entity_id)));
       if (!controllable.length && !sensors.length) return false;
       const name = (d.name_by_user || d.name || '').toLowerCase();
@@ -273,7 +294,7 @@ export class DeviceWizard {
       if (d.entry_type === 'service') return false;
 
       const devEntities = this.entities.filter((e) => e.device_id === d.id && !e.disabled_by);
-      const controllable = devEntities.filter((e) => CONTROLLABLE_DOMAINS.has(domainOf(e.entity_id)));
+      const controllable = devEntities.filter(isControllableActuator);
       const sensors = devEntities.filter((e) => ['sensor', 'binary_sensor'].includes(domainOf(e.entity_id)));
       if (!controllable.length && !sensors.length) return false;
 
@@ -299,6 +320,16 @@ export class DeviceWizard {
       return name.includes(q) || mfg.includes(q) || model.includes(q) || area.includes(q);
     });
 
+    filtered.sort((a, b) => {
+      const areaA = (areaMap.get(a.area_id) || 'zz').toLowerCase();
+      const nameA = (a.name_by_user || a.name || '').toLowerCase();
+      const areaB = (areaMap.get(b.area_id) || 'zz').toLowerCase();
+      const nameB = (b.name_by_user || b.name || '').toLowerCase();
+      const areaCmp = areaA.localeCompare(areaB);
+      if (areaCmp !== 0) return areaCmp;
+      return nameA.localeCompare(nameB);
+    });
+
     if (!filtered.length) {
       this.deviceListEl.replaceChildren(h('div', { class: 'empty' }, icon('mdi:devices'), h('div', {}, 'Keine passenden Geräte gefunden')));
       return;
@@ -312,13 +343,17 @@ export class DeviceWizard {
       const cfg = this.configuredDevices[d.id];
 
       const devEntities = this.entities.filter((e) => e.device_id === d.id && !e.disabled_by);
-      const controllable = devEntities.filter((e) => CONTROLLABLE_DOMAINS.has(domainOf(e.entity_id)));
+      const controllable = devEntities.filter(isControllableActuator);
 
       const badges = [];
       if (area) badges.push(h('span', { class: 'badge-tag area' }, icon('mdi:map-marker'), area));
       if (isConfigured) {
         const cat = DEVICE_CATEGORIES.find((c) => c.id === cfg.category);
-        badges.push(h('span', { class: 'badge-tag ok' }, icon('mdi:check-circle'), `Eingerichtet (${cat?.name || cfg.category})`));
+        const catColor = cat?.color || 'var(--cd-accent)';
+        badges.push(h('span', {
+          class: 'badge-tag category',
+          style: { '--badge-cat-color': catColor },
+        }, icon(cat?.icon || 'mdi:check-circle'), cat?.name || cfg.category));
       } else if (controllable.length > 0) {
         badges.push(h('span', { class: 'badge-tag' }, `${controllable.length} steuerbar`));
       }
@@ -451,7 +486,8 @@ export class DeviceWizard {
 
     // Related entities
     const devEntities = this.entities.filter((e) => e.device_id === d.id && !e.disabled_by);
-    const controllable = devEntities.filter((e) => CONTROLLABLE_DOMAINS.has(domainOf(e.entity_id)));
+    const validActuators = devEntities.filter(isControllableActuator);
+    const controllable = validActuators.length ? validActuators : devEntities.filter((e) => CONTROLLABLE_DOMAINS.has(domainOf(e.entity_id)) && e.entity_category !== 'diagnostic');
     const sensors = devEntities.filter((e) => domainOf(e.entity_id) === 'sensor');
 
     // Auto-detect power & energy
@@ -463,6 +499,7 @@ export class DeviceWizard {
     if (controllable.some((e) => domainOf(e.entity_id) === 'cover')) autoCat = 'jalousie';
     else if (controllable.some((e) => domainOf(e.entity_id) === 'light')) autoCat = 'leuchte';
     else if (controllable.some((e) => domainOf(e.entity_id) === 'valve') || (d.name || '').toLowerCase().includes('ventil')) autoCat = 'wasserventil';
+    else if ((d.name || '').toLowerCase().includes('pumpe') || (d.model || '').toLowerCase().includes('pump')) autoCat = 'pumpe';
     else if (controllable.some((e) => domainOf(e.entity_id) === 'climate')) autoCat = 'klima';
     else if (controllable.some((e) => domainOf(e.entity_id) === 'media_player')) autoCat = 'fernseher';
     else if ((d.name || '').toLowerCase().includes('steckdose') || (d.model || '').toLowerCase().includes('plug')) autoCat = 'steckdose';
@@ -739,7 +776,7 @@ export class DeviceWizard {
     h('div', { class: 'win11-preview-info' },
       h('div', { class: 'win11-preview-name' }, this.customName || 'Mein Gerät'),
       h('div', { class: 'win11-preview-meta' },
-        h('span', { class: 'badge-tag ok' }, icon(cat.icon), cat.name),
+        h('span', { class: 'badge-tag category', style: { '--badge-cat-color': cat.color } }, icon(cat.icon), cat.name),
         h('span', { class: 'badge-tag area' }, icon('mdi:map-marker'), areaName),
         hasPower ? h('span', { class: 'badge-tag', style: { color: '#ffb74d' } }, icon('mdi:flash'), 'Leistungsmessung') : null,
         hasSim ? h('span', { class: 'badge-tag', style: { color: '#ce93d8' } }, icon('mdi:home-clock'), 'Simulation') : null)));
@@ -839,8 +876,8 @@ export class DeviceWizard {
     this._renderFoot();
 
     const d = this.selectedDevice;
-    const isMulti = this.channels.length > 1;
     const activeChannels = this.channels.filter((c) => c.enabled);
+    const isMulti = activeChannels.length > 1;
 
     try {
       // 1. Rename in Home Assistant if checked

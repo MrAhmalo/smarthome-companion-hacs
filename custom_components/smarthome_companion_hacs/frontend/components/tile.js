@@ -23,6 +23,7 @@ export class Tile {
     this.spec = spec;
     this.ctx = ctx;
     this.entityId = spec.entity_id;
+    this.deviceId = spec.device_id || (spec.key && spec.key.includes(':') ? spec.key.split(':')[0] : null);
     this.rawDomain = domainOf(spec.entity_id);
     const cat = effectiveCategory(spec);
     // Effective domain overrides raw domain for UI purposes
@@ -45,7 +46,16 @@ export class Tile {
     }, this.iconEl);
     this.nameEl = h('div', { class: 'tile-name' });
     this.stateEl = h('div', { class: 'tile-state' });
-    this.info = h('div', { class: 'tile-info', onClick: () => moreInfo(this.el, this.entityId) }, this.nameEl, this.stateEl);
+    this.info = h('div', {
+      class: 'tile-info',
+      onClick: () => {
+        if (this.ctx?.isEditMode?.() && this.deviceId) {
+          this.ctx.onOpenDevice?.(this.deviceId);
+          return;
+        }
+        moreInfo(this.el, this.entityId);
+      },
+    }, this.nameEl, this.stateEl);
     this.btns = h('div', { class: 'tile-btns' });
     this.feature = h('div', { class: 'tile-feature', hidden: true });
 
@@ -136,6 +146,10 @@ export class Tile {
   }
 
   _onIcon() {
+    if (this.ctx?.isEditMode?.() && this.deviceId) {
+      this.ctx.onOpenDevice?.(this.deviceId);
+      return;
+    }
     if (!this.hass) return;
     if (this.kind === 'sensor' || this.kind === 'binary_sensor' || this.domain === 'sensor' || this.domain === 'motion' || !isToggleable(this.entityId)) {
       moreInfo(this.el, this.entityId);

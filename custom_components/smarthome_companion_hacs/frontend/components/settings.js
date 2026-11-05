@@ -471,6 +471,22 @@ export class Settings {
           return !searchQ || name.includes(searchQ) || area.includes(searchQ) || mfg.includes(searchQ) || model.includes(searchQ);
         });
 
+        filtered.sort((aId, bId) => {
+          const cfgA = configuredMap[aId];
+          const devA = devList.find((d) => d.id === aId);
+          const areaA = (areaMap.get(cfgA?.area_id || devA?.area_id) || 'zz').toLowerCase();
+          const nameA = (cfgA?.custom_name || devA?.name_by_user || devA?.name || '').toLowerCase();
+
+          const cfgB = configuredMap[bId];
+          const devB = devList.find((d) => d.id === bId);
+          const areaB = (areaMap.get(cfgB?.area_id || devB?.area_id) || 'zz').toLowerCase();
+          const nameB = (cfgB?.custom_name || devB?.name_by_user || devB?.name || '').toLowerCase();
+
+          const areaCmp = areaA.localeCompare(areaB);
+          if (areaCmp !== 0) return areaCmp;
+          return nameA.localeCompare(nameB);
+        });
+
         if (!filtered.length) {
           listEl.replaceChildren(h('div', { class: 'empty' }, icon('mdi:magnify'), h('div', {}, 'Keine passenden Geräte gefunden')));
           return;
@@ -490,7 +506,10 @@ export class Settings {
 
           const badges = [];
           if (area) badges.push(h('span', { class: 'badge-tag area' }, icon('mdi:map-marker'), area));
-          badges.push(h('span', { class: 'badge-tag ok', style: { color: catColor } }, icon(catIcon), catName));
+          badges.push(h('span', {
+            class: 'badge-tag category',
+            style: { '--badge-cat-color': catColor },
+          }, icon(catIcon), catName));
 
           return h('div', { class: 'device-card' },
             h('div', { class: 'd-icon', style: { color: catColor } }, icon(catIcon)),
