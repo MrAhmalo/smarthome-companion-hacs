@@ -136,33 +136,24 @@ input[type=range].slider {
   background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
   touch-action: none;
   box-sizing: border-box;
+  padding: 0 6px;
 }
 input[type=range].slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  box-sizing: content-box;
-  width: 5px;
-  height: 16px;
-  border-left: 10px solid transparent;
-  border-right: 10px solid transparent;
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
-  background-clip: padding-box;
+  width: 4px;
+  height: 18px;
   background-color: #fff;
-  border-radius: 3px;
-  filter: drop-shadow(0 0 1px rgba(0,0,0,.45));
+  border-radius: 999px;
+  border: 0;
+  box-shadow: 0 0 2px rgba(0,0,0,.5);
 }
 input[type=range].slider::-moz-range-thumb {
-  box-sizing: content-box;
-  width: 5px;
-  height: 16px;
-  border-left: 10px solid transparent;
-  border-right: 10px solid transparent;
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
-  background-clip: padding-box;
+  width: 4px;
+  height: 18px;
   background-color: #fff;
-  border-radius: 3px;
-  filter: drop-shadow(0 0 1px rgba(0,0,0,.45));
+  border-radius: 999px;
+  border: 0;
+  box-shadow: 0 0 2px rgba(0,0,0,.5);
 }
 
 /* media + climate cards */
@@ -226,13 +217,17 @@ input[type=range].slider::-moz-range-thumb {
 .trash-empty { font-size: 12px; color: var(--cd-secondary); padding: 6px; }
 
 /* ── Standalone Trash Card (Horizontal Layout) ── */
-.trash-card { padding: 10px 14px; }
+.trash-card {
+  padding: 0;
+  background: transparent !important;
+  border-radius: 0;
+}
 .trash-card .bins {
-  display: flex; flex-direction: row; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%; min-width: 0;
+  display: flex; flex-direction: row; align-items: stretch; gap: 10px; flex-wrap: wrap; width: 100%; min-width: 0;
 }
 .trash-card .bin {
-  display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: var(--cd-tile-radius, 12px);
-  background: var(--cd-tile-bg); min-height: 48px; transition: transform .15s, background .15s;
+  display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: var(--cd-radius);
+  background: var(--cd-card); min-height: 52px; transition: transform .15s, background .15s;
   flex: 1 1 140px; min-width: 120px;
 }
 .trash-card .bin:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--primary-text-color, #fff) 10%, transparent); }
@@ -599,33 +594,24 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   height: 24px;
   border-radius: 12px;
   box-sizing: border-box;
+  padding: 0 6px;
 }
 .cover-slider-wrap input[type=range].slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  box-sizing: content-box;
-  width: 5px;
+  width: 4px;
   height: 16px;
-  border-left: 10px solid transparent;
-  border-right: 10px solid transparent;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-  background-clip: padding-box;
   background-color: #fff;
-  border-radius: 3px;
-  filter: drop-shadow(0 0 1px rgba(0,0,0,.45));
+  border-radius: 999px;
+  border: 0;
+  box-shadow: 0 0 2px rgba(0,0,0,.5);
 }
 .cover-slider-wrap input[type=range].slider::-moz-range-thumb {
-  box-sizing: content-box;
-  width: 5px;
+  width: 4px;
   height: 16px;
-  border-left: 10px solid transparent;
-  border-right: 10px solid transparent;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-  background-clip: padding-box;
   background-color: #fff;
-  border-radius: 3px;
-  filter: drop-shadow(0 0 1px rgba(0,0,0,.45));
+  border-radius: 999px;
+  border: 0;
+  box-shadow: 0 0 2px rgba(0,0,0,.5);
 }
 
 /* ── Custom Dropdown (No native browser <select>) ── */
