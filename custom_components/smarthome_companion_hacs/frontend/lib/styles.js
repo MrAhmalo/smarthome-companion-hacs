@@ -176,6 +176,60 @@ button { font: inherit; color: inherit; }
 .tile.wide { grid-column: span 2; }
 .tile[data-active="false"] { --tile-color: var(--cd-secondary); }
 .tile[data-unavailable] { opacity: .5; }
+
+/* ── Hierarchical Group Tile ── */
+.tile.group {
+  position: relative;
+  transition: background .2s, box-shadow .2s;
+}
+.tile.group[data-open] {
+  background: color-mix(in srgb, var(--cd-tile-bg) 85%, var(--cd-accent));
+  box-shadow: 0 4px 18px rgba(0,0,0,.35);
+}
+.group-icon-btn { position: relative; }
+.group-badge {
+  position: absolute; top: -3px; right: -3px; min-width: 16px; height: 16px; border-radius: 8px; padding: 0 4px;
+  background: var(--tile-color, var(--cd-accent)); color: #fff; font-size: 10px; font-weight: 700;
+  display: grid; place-items: center; box-shadow: 0 1px 4px rgba(0,0,0,.5);
+}
+.group-sub-container {
+  width: 100%; padding: 8px 6px 10px; margin-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 0 0 var(--cd-tile-radius, 12px) var(--cd-tile-radius, 12px);
+  animation: cdFadeIn 0.2s ease-out;
+}
+.group-sub-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0;
+}
+.chevron-btn { transition: transform .25s ease; }
+.tile[data-open] .chevron-btn { transform: rotate(180deg); }
+
+/* ── Multi-select & Action Bar ── */
+.sel-checkbox {
+  width: 22px; height: 22px; border-radius: 6px; border: 2px solid rgba(255,255,255,.3);
+  background: transparent; display: grid; place-items: center; cursor: pointer; flex: none;
+  transition: background .15s, border-color .15s; color: transparent;
+}
+.sel-checkbox[data-checked] {
+  background: var(--cd-accent); border-color: var(--cd-accent); color: #fff;
+}
+.sel-checkbox ha-icon { --mdc-icon-size: 16px; }
+.device-card[data-selected] {
+  outline: 2px solid var(--cd-accent);
+  background: color-mix(in srgb, var(--cd-accent) 14%, var(--cd-tile-bg));
+}
+.selection-action-bar {
+  position: sticky; bottom: 0; left: 0; right: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 18px; margin: 12px -16px -16px; border-radius: 0 0 var(--cd-radius) var(--cd-radius);
+  background: var(--cd-card); border-top: 1.5px solid var(--cd-accent);
+  box-shadow: 0 -4px 20px rgba(0,0,0,.4); animation: cdFadeIn 0.2s ease-out;
+}
+.sel-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sel-count { font-size: 13px; font-weight: 700; color: var(--primary-text-color, #fff); }
+.sel-names { font-size: 11px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-buttons { display: flex; align-items: center; gap: 8px; flex: none; }
 .tile-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .tile-icon {
   flex: none; width: 38px; height: 38px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center;

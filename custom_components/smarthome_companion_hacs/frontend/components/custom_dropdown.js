@@ -1,6 +1,6 @@
 // CustomDropdown: beautiful bespoke select component replacing native browser <select>.
 // Features: custom styling, icons, color dots, optional search, keyboard & click-outside handling.
-import { h, icon } from '../lib/util.js?v=2.8.16';
+import { h, icon } from '../lib/util.js?v=2.8.17';
 
 export class CustomDropdown {
   /**

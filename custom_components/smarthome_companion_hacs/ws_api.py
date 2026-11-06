@@ -39,6 +39,10 @@ def async_register_websockets(hass):
     websocket_api.async_register_command(hass, handle_get_categories)
     websocket_api.async_register_command(hass, handle_save_category)
     websocket_api.async_register_command(hass, handle_delete_category)
+    # Groups
+    websocket_api.async_register_command(hass, handle_get_groups)
+    websocket_api.async_register_command(hass, handle_save_group)
+    websocket_api.async_register_command(hass, handle_delete_group)
     # Adaptive Light
     websocket_api.async_register_command(hass, handle_get_adaptive_light_config)
     websocket_api.async_register_command(hass, handle_save_adaptive_light_config)
@@ -100,6 +104,7 @@ async def handle_get_devices(hass, connection, msg):
         "devices": store.get_devices(),
         "categories": store.get_categories(),
         "dismissed": store.get_dismissed_devices(),
+        "groups": store.get_groups(),
     })
 
 @websocket_api.websocket_command({
@@ -254,6 +259,61 @@ async def handle_dismiss_device(hass, connection, msg):
     if not success:
         connection.send_result(msg["id"], {"save_failed": True})
         return
+    connection.send_result(msg["id"], {"success": True})
+
+
+# ═══════════════════════════════════════════════
+# GROUPS (Hierarchical / Multi-device grouping)
+# ═══════════════════════════════════════════════
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smarthome_companion/groups/get",
+})
+@websocket_api.async_response
+async def handle_get_groups(hass, connection, msg):
+    store = hass.data[DOMAIN]["store"]
+    connection.send_result(msg["id"], store.get_groups())
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smarthome_companion/groups/save",
+    vol.Required("group"): dict,
+})
+@websocket_api.async_response
+async def handle_save_group(hass, connection, msg):
+    store = hass.data[DOMAIN]["store"]
+    group = msg["group"]
+    group_id = group.get("id")
+    if not group_id:
+        group_id = f"group_{int(datetime.now().timestamp() * 1000)}"
+        group["id"] = group_id
+
+    groups = store.get_groups()
+    groups[group_id] = group
+    success = await store.save_groups(groups)
+    if not success:
+        connection.send_result(msg["id"], {"save_failed": True})
+        return
+    safe_fire_event(hass, f"{DOMAIN}_dashboard_updated")
+    connection.send_result(msg["id"], {"success": True, "group_id": group_id, "group": group})
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smarthome_companion/groups/delete",
+    vol.Required("group_id"): str,
+})
+@websocket_api.async_response
+async def handle_delete_group(hass, connection, msg):
+    store = hass.data[DOMAIN]["store"]
+    group_id = msg["group_id"]
+    groups = store.get_groups()
+    if group_id in groups:
+        del groups[group_id]
+        # Also clean up any references in parent groups
+        for g in groups.values():
+            children = g.get("children", [])
+            if group_id in children:
+                children.remove(group_id)
+        await store.save_groups(groups)
+    safe_fire_event(hass, f"{DOMAIN}_dashboard_updated")
     connection.send_result(msg["id"], {"success": True})
 
 

@@ -387,7 +387,106 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
         )
         add_tile(extra.get("area_id") or area_id, tile)
 
-# Only configured devices and extra_tiles are included on the dashboard
+    # Only configured devices and extra_tiles are included on the dashboard
+
+    # ── Hierarchical Groups (Multi-device / Nested Groups) ──
+    groups = store.get_groups()
+    if groups:
+        tile_by_dev: dict[str, list[dict]] = {}
+        tile_by_ent: dict[str, dict] = {}
+        for a_id, t_list in list(tiles_by_area.items()):
+            for t in t_list:
+                if t.get("device_id"):
+                    tile_by_dev.setdefault(t["device_id"], []).append(t)
+                if t.get("entity_id"):
+                    tile_by_ent[t["entity_id"]] = t
+
+        subgroup_ids = set()
+        for g in groups.values():
+            for child_ref in g.get("children", []):
+                if child_ref in groups:
+                    subgroup_ids.add(child_ref)
+
+        def resolve_group(gid, visited=None):
+            if visited is None:
+                visited = set()
+            if gid in visited or gid not in groups:
+                return None
+            visited.add(gid)
+            g = groups[gid]
+            g_cat = g.get("category") or "leuchte"
+            cat_info = categories.get(g_cat, {})
+
+            child_specs = []
+            descendant_eids = []
+
+            for ref in g.get("children", []):
+                if ref in groups:
+                    sub_spec = resolve_group(ref, visited.copy())
+                    if sub_spec:
+                        child_specs.append(sub_spec)
+                        descendant_eids.extend(sub_spec.get("entity_ids", []))
+                elif ref in tile_by_dev:
+                    for t in tile_by_dev[ref]:
+                        child_specs.append(t)
+                        if t.get("entity_id"):
+                            descendant_eids.append(t["entity_id"])
+                elif ref in tile_by_ent:
+                    t = tile_by_ent[ref]
+                    child_specs.append(t)
+                    if t.get("entity_id"):
+                        descendant_eids.append(t["entity_id"])
+                elif hass.states.get(ref):
+                    descendant_eids.append(ref)
+                    child_specs.append({
+                        "key": f"e:{ref}",
+                        "entity_id": ref,
+                        "name": hass.states.get(ref).attributes.get("friendly_name") or ref,
+                        "category": g_cat,
+                        "icon": g.get("icon") or cat_info.get("icon"),
+                    })
+
+            unique_eids = list(dict.fromkeys(descendant_eids))
+            area_id = g.get("area_id")
+            if not area_id and child_specs:
+                first = child_specs[0]
+                area_id = first.get("area_id")
+
+            return {
+                "key": f"group:{gid}",
+                "is_group": True,
+                "group_id": gid,
+                "name": g.get("name") or "Gruppe",
+                "category": g_cat,
+                "icon": g.get("icon") or "mdi:lightbulb-group",
+                "color": cat_info.get("color"),
+                "area_id": area_id,
+                "entity_ids": unique_eids,
+                "children": child_specs,
+            }
+
+        claimed_tile_keys = set()
+        root_group_tiles: list[dict] = []
+
+        for gid in groups:
+            if gid not in subgroup_ids:
+                spec = resolve_group(gid)
+                if spec and spec["entity_ids"]:
+                    root_group_tiles.append(spec)
+                    def mark_claimed(s):
+                        for c in s.get("children", []):
+                            if c.get("is_group"):
+                                mark_claimed(c)
+                            elif c.get("key"):
+                                claimed_tile_keys.add(c["key"])
+                    mark_claimed(spec)
+
+        for a_id in list(tiles_by_area):
+            tiles_by_area[a_id] = [t for t in tiles_by_area[a_id] if t["key"] not in claimed_tile_keys]
+
+        for g_tile in root_group_tiles:
+            target_area = g_tile.get("area_id") or NO_AREA_ID
+            tiles_by_area.setdefault(target_area, []).append(g_tile)
 
     # ── Area sensors / alerts straight from the registries ──
     sensors: dict[str, dict[str, list[str]]] = {}

@@ -1,15 +1,15 @@
 // SmartHome Companion dashboard panel (sidebar entry "Übersicht").
 // Self-contained: no HACS cards required. The layout is resolved by the backend on every load,
 // so renamed entities / re-configured devices never leave dead tiles behind.
-import { STYLES } from './lib/styles.js?v=2.8.16';
-import { h, icon, debounce } from './lib/util.js?v=2.8.16';
-import { Room } from './components/room.js?v=2.8.16';
-import { RoomDetailView } from './components/room_detail.js?v=2.8.16';
+import { STYLES } from './lib/styles.js?v=2.8.17';
+import { h, icon, debounce } from './lib/util.js?v=2.8.17';
+import { Room } from './components/room.js?v=2.8.17';
+import { RoomDetailView } from './components/room_detail.js?v=2.8.17';
 import {
   Badges, SmokeAlerts, WarningCard, TrashCard, PersonCards, AnnounceCard, NavBar,
-} from './components/specials.js?v=2.8.16';
-import { Settings } from './components/settings.js?v=2.8.16';
-import { DeviceWizard } from './components/device_wizard.js?v=2.8.16';
+} from './components/specials.js?v=2.8.17';
+import { Settings } from './components/settings.js?v=2.8.17';
+import { DeviceWizard } from './components/device_wizard.js?v=2.8.17';
 
 class CompanionDashboardPanel extends HTMLElement {
   constructor() {
@@ -129,6 +129,10 @@ class CompanionDashboardPanel extends HTMLElement {
       onOpenDevice: (deviceId) => {
         if (this._editMode) this._toggleEditMode();
         this._openWizard(deviceId);
+      },
+      onOpenGroup: (groupId) => {
+        if (this._editMode) this._toggleEditMode();
+        this._openSettings();
       },
       isEditMode: () => !!this._editMode,
     };

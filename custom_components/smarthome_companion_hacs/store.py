@@ -22,6 +22,7 @@ class CompanionStore:
             self.data.setdefault("dismissed_devices", [])
             self.data.setdefault("adaptive_light", {})
             self.data.setdefault("simulation", {})
+            self.data.setdefault("groups", {})
             self.data.setdefault("dashboard", None)
 
             # Migrate / sanitize zone IDs in irrigation store if they contain invalid characters
@@ -89,6 +90,15 @@ class CompanionStore:
 
     async def save_devices(self, devices_data):
         self.data["devices"] = devices_data
+        return await self.async_save()
+
+    # ── Groups ──
+
+    def get_groups(self):
+        return self.data.get("groups", {})
+
+    async def save_groups(self, groups_data):
+        self.data["groups"] = groups_data
         return await self.async_save()
 
     # ── Categories ──

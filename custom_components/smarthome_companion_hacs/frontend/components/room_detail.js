@@ -1,9 +1,9 @@
 // Room detail subview: dedicated granular control page for a single room.
 import {
   h, icon, domainOf, numeric, isActive, isUnavailable, entityIcon, setSliderVal,
-} from '../lib/util.js?v=2.8.16';
-import { Tile } from './tile.js?v=2.8.16';
-import { effectiveCategory, applySmartTileLayout } from './room.js?v=2.8.16';
+} from '../lib/util.js?v=2.8.17';
+import { Tile, GroupTile } from './tile.js?v=2.8.17';
+import { effectiveCategory, applySmartTileLayout } from './room.js?v=2.8.17';
 
 const GROUPS = [
   { key: 'light', icon: 'mdi:lightbulb', label: 'Alle Lichter', color: '#ffc107' },
@@ -35,6 +35,11 @@ export class RoomDetailView {
     this.otherSpecs = tiles.filter((t) =>
       !['cover', 'light', 'switch', 'outlet', 'valve', 'pumpe', 'media_player'].includes(effectiveCategory(t)));
 
+    const makeTileInstance = (t) => {
+      if (t.is_group) return new GroupTile(t, ctx);
+      return new Tile(t, ctx);
+    };
+
     // Strict priority for non-cover devices: 1. Media, 2. Light, 3. Switches, 4. Other
     const otherDeviceSpecs = [
       ...this.mediaSpecs,
@@ -42,7 +47,7 @@ export class RoomDetailView {
       ...this.switchSpecs,
       ...this.otherSpecs,
     ];
-    this.childTiles = otherDeviceSpecs.map((t) => new Tile(t, ctx));
+    this.childTiles = otherDeviceSpecs.map(makeTileInstance);
 
     this._build();
   }

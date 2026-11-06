@@ -1,8 +1,8 @@
 // Room component: collapsible "expander" card with area header (sensors, alerts, group controls) and tiles.
 import {
   h, icon, domainOf, isActive, numeric, effectiveCategory,
-} from '../lib/util.js?v=2.8.16';
-import { Tile } from './tile.js?v=2.8.16';
+} from '../lib/util.js?v=2.8.17';
+import { Tile, GroupTile } from './tile.js?v=2.8.17';
 
 export { effectiveCategory };
 
@@ -189,15 +189,20 @@ export class Room {
     this.ctx = ctx;
     this.hass = null;
 
+    const makeTileInstance = (t) => {
+      if (t.is_group) return new GroupTile(t, ctx);
+      return new Tile(t, ctx);
+    };
+
     // Smart Rollladen Gruppierung:
     // If room has > 1 cover, group them into a single master GroupedCoverTile
     const covers = spec.tiles.filter((t) => effectiveCategory(t) === 'cover');
     if (covers.length > 1) {
       this.groupedCover = new GroupedCoverTile(spec, covers, ctx);
       const nonCovers = spec.tiles.filter((t) => effectiveCategory(t) !== 'cover');
-      this.tiles = [this.groupedCover, ...nonCovers.map((t) => new Tile(t, ctx))];
+      this.tiles = [this.groupedCover, ...nonCovers.map(makeTileInstance)];
     } else {
-      this.tiles = spec.tiles.map((t) => new Tile(t, ctx));
+      this.tiles = spec.tiles.map(makeTileInstance);
     }
 
     // Strict priority in room: 1. Jalousien (Rollläden), 2. Medien / TV, 3. Der Rest

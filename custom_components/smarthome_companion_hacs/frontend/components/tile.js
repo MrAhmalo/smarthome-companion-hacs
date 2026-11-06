@@ -2,7 +2,7 @@
 import {
   h, icon, domainOf, entityIcon, isActive, isUnavailable, stateLabel, numeric, moreInfo, toggleEntity,
   isToggleable, resolveColor, effectiveCategory, getEntityColor, setSliderVal,
-} from '../lib/util.js?v=2.8.16';
+} from '../lib/util.js?v=2.8.17';
 
 const COLOR_MODES = ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'];
 
@@ -113,10 +113,7 @@ export class Tile {
   }
 
   get isWide() {
-    const active = this._active(this._st);
-    const { brightness } = lightSupport(this._st);
     return ['cover', 'media_player', 'climate'].includes(this.kind)
-      || (this.domain === 'light' && active && brightness)
       || this.spec.wide === true;
   }
 
@@ -284,7 +281,6 @@ export class Tile {
     const showSwatches = active && color && presets.length > 0;
     const hasFeature = showSlider || showSwatches;
     this.feature.hidden = !hasFeature;
-    this.el.classList.toggle('wide', hasFeature);
     if (!hasFeature) return;
     this.slider.hidden = !showSlider;
     this.swatches.hidden = !showSwatches;
@@ -293,5 +289,211 @@ export class Tile {
       const pct = Math.max(1, Math.round(((st.attributes.brightness || 0) / 255) * 100));
       setSliderVal(this.slider, pct);
     }
+  }
+}
+
+/**
+ * Hierarchical Group Tile (e.g. Master Light Group with collapsible subgroups / child lamps).
+ */
+export class GroupTile {
+  /**
+   * @param {object} spec  {key, group_id, name, category, icon, color, entity_ids, children}
+   * @param {object} ctx
+   */
+  constructor(spec, ctx) {
+    this.spec = spec;
+    this.ctx = ctx;
+    this.entityIds = spec.entity_ids || [];
+    this.category = spec.category || 'leuchte';
+    this.domain = this.category === 'leuchte' ? 'light' : 'switch';
+    this.hass = null;
+    this._open = false;
+    this._dragging = false;
+
+    // Instantiate child components (either nested GroupTile or Tile)
+    this.children = (spec.children || []).map((childSpec) => {
+      if (childSpec.is_group) {
+        return new GroupTile(childSpec, ctx);
+      }
+      return new Tile(childSpec, ctx);
+    });
+
+    this._build();
+  }
+
+  get isWide() {
+    return true; // Master group is wide so it sits above its collapsible children
+  }
+
+  setWide(wide) {
+    this.el.classList.toggle('wide', !!wide);
+  }
+
+  _build() {
+    this.iconEl = icon(this.spec.icon || (this.category === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug'));
+    this.badgeEl = h('span', { class: 'group-badge', hidden: true }, '0');
+
+    this.iconBtn = h('button', {
+      class: 'tile-icon group-icon-btn',
+      'aria-label': `${this.spec.name} Schalten`,
+      title: 'Alle ein-/ausschalten',
+      onClick: (e) => {
+        e.stopPropagation();
+        this._toggleMaster();
+      },
+    }, this.iconEl, this.badgeEl);
+
+    this.nameEl = h('div', { class: 'tile-name' }, this.spec.name);
+    this.stateEl = h('div', { class: 'tile-state' }, 'Aus');
+    this.chevron = icon('mdi:chevron-down');
+
+    this.info = h('div', {
+      class: 'tile-info',
+      title: 'Ausklappen / Zuklappen',
+      onClick: () => this._toggleOpen(),
+    }, this.nameEl, this.stateEl);
+
+    this.btnChevron = h('button', {
+      class: 'mini-btn chevron-btn',
+      'aria-label': 'Ausklappen',
+      title: 'Unterlampen anzeigen',
+      onClick: (e) => {
+        e.stopPropagation();
+        this._toggleOpen();
+      },
+    }, this.chevron);
+
+    this.btns = h('div', { class: 'tile-btns' }, this.btnChevron);
+
+    // Master brightness slider
+    this.feature = h('div', { class: 'tile-feature', hidden: true });
+    this.slider = h('input', {
+      type: 'range', class: 'slider', min: '1', max: '100', step: '1', 'aria-label': 'Gruppenhelligkeit',
+      style: { touchAction: 'none' },
+    });
+    this.slider.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.slider.addEventListener('input', () => {
+      this._dragging = true;
+      setSliderVal(this.slider, this.slider.value);
+    });
+    this.slider.addEventListener('change', () => {
+      this._dragging = false;
+      this._setMasterBrightness(Number(this.slider.value));
+    });
+    this.feature.append(this.slider);
+
+    // Collapsible Sub-Items Container
+    this.subGrid = h('div', { class: 'group-sub-grid' }, ...this.children.map((c) => c.el));
+
+    this.subContainer = h('div', { class: 'group-sub-container', hidden: true }, this.subGrid);
+
+    this.el = h('div', {
+      class: 'tile group wide',
+      'data-key': this.spec.key,
+      'data-group': 'true',
+      style: { '--tile-color': this.spec.color || '#ffc107' },
+    },
+      h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns),
+      this.feature,
+      this.subContainer
+    );
+
+    // Edit Mode click interception
+    this.el.addEventListener('pointerdown', (e) => {
+      if (this.ctx?.isEditMode?.()) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }, true);
+    this.el.addEventListener('click', (e) => {
+      if (this.ctx?.isEditMode?.()) {
+        e.stopPropagation();
+        e.preventDefault();
+        this.ctx.onOpenGroup?.(this.spec.group_id);
+      }
+    }, true);
+  }
+
+  _toggleOpen() {
+    this._open = !this._open;
+    this.el.toggleAttribute('data-open', this._open);
+    this.subContainer.hidden = !this._open;
+    this.chevron.setAttribute('icon', this._open ? 'mdi:chevron-up' : 'mdi:chevron-down');
+  }
+
+  _toggleMaster() {
+    if (!this.hass) return;
+    const states = this.entityIds.map((id) => this.hass.states[id]).filter(Boolean);
+    const anyOn = states.some((s) => s.state === 'on');
+    const service = anyOn ? 'turn_off' : 'turn_on';
+    const domain = this.domain;
+    for (const eid of this.entityIds) {
+      const d = domainOf(eid);
+      this.hass.callService(d === 'light' || d === 'switch' ? d : domain, service, { entity_id: eid });
+    }
+  }
+
+  _setMasterBrightness(pct) {
+    if (!this.hass) return;
+    for (const eid of this.entityIds) {
+      if (domainOf(eid) === 'light') {
+        this.hass.callService('light', 'turn_on', { entity_id: eid, brightness_pct: pct });
+      }
+    }
+  }
+
+  update(hass) {
+    this.hass = hass;
+    this.children.forEach((c) => c.update(hass));
+
+    const states = this.entityIds.map((id) => hass.states[id]).filter(Boolean);
+    const activeStates = states.filter((s) => s.state === 'on');
+    const activeCount = activeStates.length;
+    const anyOn = activeCount > 0;
+
+    this.el.dataset.active = String(anyOn);
+    this.iconBtn.classList.toggle('active', anyOn);
+
+    if (activeCount > 0) {
+      this.badgeEl.textContent = String(activeCount);
+      this.badgeEl.hidden = false;
+    } else {
+      this.badgeEl.hidden = true;
+    }
+
+    if (!states.length) {
+      this.stateEl.textContent = 'Keine Entitäten';
+    } else if (activeCount === 0) {
+      this.stateEl.textContent = 'Aus';
+    } else if (activeCount === states.length) {
+      const avgBr = this._avgBrightness(activeStates);
+      this.stateEl.textContent = avgBr ? `Alle Ein · ${avgBr} %` : 'Alle Ein';
+    } else {
+      const avgBr = this._avgBrightness(activeStates);
+      this.stateEl.textContent = avgBr ? `${activeCount} von ${states.length} Ein · ${avgBr} %` : `${activeCount} von ${states.length} Ein`;
+    }
+
+    if (this.category === 'leuchte' && anyOn) {
+      const avgBr = this._avgBrightness(activeStates);
+      if (avgBr !== null) {
+        this.feature.hidden = false;
+        if (!this._dragging) {
+          setSliderVal(this.slider, avgBr);
+        }
+      } else {
+        this.feature.hidden = true;
+      }
+    } else {
+      this.feature.hidden = true;
+    }
+  }
+
+  _avgBrightness(activeStates) {
+    const brs = activeStates
+      .map((s) => s.attributes?.brightness)
+      .filter((b) => typeof b === 'number');
+    if (!brs.length) return null;
+    const avg = Math.round(brs.reduce((a, b) => a + b, 0) / brs.length);
+    return Math.max(1, Math.round((avg / 255) * 100));
   }
 }

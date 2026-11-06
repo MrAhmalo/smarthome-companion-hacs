@@ -1,9 +1,9 @@
-import { h, icon, COLOR_NAMES, resolveColor, renderTrashBin } from '../lib/util.js?v=2.8.16';
-import { EntityPicker } from './entity_picker.js?v=2.8.16';
-import { IconPicker } from './icon_picker.js?v=2.8.16';
-import { ColorPicker } from './color_picker.js?v=2.8.16';
-import { CustomDropdown } from './custom_dropdown.js?v=2.8.16';
-import { DEVICE_CATEGORIES } from './device_wizard.js?v=2.8.16';
+import { h, icon, COLOR_NAMES, resolveColor, renderTrashBin } from '../lib/util.js?v=2.8.17';
+import { EntityPicker } from './entity_picker.js?v=2.8.17';
+import { IconPicker } from './icon_picker.js?v=2.8.17';
+import { ColorPicker } from './color_picker.js?v=2.8.17';
+import { CustomDropdown } from './custom_dropdown.js?v=2.8.17';
+import { DEVICE_CATEGORIES } from './device_wizard.js?v=2.8.17';
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 
@@ -437,6 +437,7 @@ export class Settings {
         this.hass.callWS({ type: 'config/area_registry/list' }),
       ]);
       const configuredMap = setup?.devices || {};
+      const groupsMap = setup?.groups || {};
       const devList = devs || [];
       const areaMap = new Map((areas || []).map((a) => [a.area_id, a.name]));
 
@@ -485,6 +486,12 @@ export class Settings {
           groups.get(areaName).push(id);
         }
 
+        // Include rooms from groups
+        for (const g of Object.values(groupsMap)) {
+          const areaName = areaMap.get(g.area_id) || 'Ohne Raum';
+          if (!groups.has(areaName)) groups.set(areaName, []);
+        }
+
         const sortedGroupNames = Array.from(groups.keys()).sort((a, b) => {
           if (a === 'Ohne Raum') return 1;
           if (b === 'Ohne Raum') return -1;
@@ -492,11 +499,46 @@ export class Settings {
         });
 
         const sections = sortedGroupNames.map((areaName) => {
-          const ids = groups.get(areaName);
+          const ids = groups.get(areaName) || [];
           ids.sort((aId, bId) => {
             const nameA = (configuredMap[aId]?.custom_name || devList.find((d) => d.id === aId)?.name_by_user || devList.find((d) => d.id === aId)?.name || '').toLowerCase();
             const nameB = (configuredMap[bId]?.custom_name || devList.find((d) => d.id === bId)?.name_by_user || devList.find((d) => d.id === bId)?.name || '').toLowerCase();
             return nameA.localeCompare(nameB);
+          });
+
+          // Groups in this room
+          const roomGroups = Object.values(groupsMap).filter((g) => {
+            const aName = areaMap.get(g.area_id) || 'Ohne Raum';
+            return aName === areaName;
+          });
+
+          const groupCards = roomGroups.map((g) => {
+            const cat = DEVICE_CATEGORIES.find((c) => c.id === g.category);
+            const catColor = cat?.color || '#ffc107';
+            return h('div', { class: 'device-card group-card' },
+              h('div', { class: 'd-icon', style: { color: catColor } }, icon(g.icon || 'mdi:lightbulb-group')),
+              h('div', { class: 'd-info' },
+                h('div', { class: 'd-name' }, g.name),
+                h('div', { class: 'd-meta' },
+                  h('span', { class: 'badge-tag category', style: { '--badge-cat-color': catColor } },
+                    icon('mdi:lightbulb-group'), `Gruppe (${g.children?.length || 0} Elemente)`))),
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+                h('button', {
+                  class: 'icon-btn danger',
+                  type: 'button',
+                  title: 'Gruppe auflösen',
+                  onClick: async () => {
+                    const conf = window.confirm(`Gruppe „${g.name}“ auflösen?\n\nDie enthaltenen Geräte bleiben erhalten.`);
+                    if (!conf) return;
+                    try {
+                      await this.hass.callWS({ type: 'smarthome_companion/groups/delete', group_id: g.id });
+                      delete groupsMap[g.id];
+                      this._renderDevicesTab(wrap);
+                    } catch (err) {
+                      alert(`Fehler beim Auflösen: ${err.message || err}`);
+                    }
+                  },
+                }, icon('mdi:delete-outline'))));
           });
 
           const cards = ids.map((id) => {
@@ -546,12 +588,13 @@ export class Settings {
                 }, icon('mdi:delete-outline'))));
           });
 
+          const totalCount = groupCards.length + cards.length;
           return h('div', { class: 'device-room-section' },
             h('div', { class: 'device-room-header' },
               icon(areaName === 'Ohne Raum' ? 'mdi:help-circle-outline' : 'mdi:home-outline'),
               h('span', {}, areaName),
-              h('span', { class: 'room-count' }, `(${ids.length})`)),
-            h('div', { class: 'device-list' }, ...cards));
+              h('span', { class: 'room-count' }, `(${totalCount})`)),
+            h('div', { class: 'device-list' }, ...groupCards, ...cards));
         });
 
         listEl.replaceChildren(...sections);
