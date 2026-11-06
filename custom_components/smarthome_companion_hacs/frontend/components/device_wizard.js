@@ -1,6 +1,6 @@
-import { h, icon, domainOf } from '../lib/util.js?v=2.8.18';
-import { EntityPicker } from './entity_picker.js?v=2.8.18';
-import { CustomDropdown } from './custom_dropdown.js?v=2.8.18';
+import { h, icon, domainOf } from '../lib/util.js?v=2.8.19';
+import { EntityPicker } from './entity_picker.js?v=2.8.19';
+import { CustomDropdown } from './custom_dropdown.js?v=2.8.19';
 
 export const DEVICE_CATEGORIES = [
   { id: 'leuchte', name: 'Leuchte', icon: 'mdi:lightbulb', color: '#ffc107', desc: 'Lampen, Spots & LED-Streifen' },

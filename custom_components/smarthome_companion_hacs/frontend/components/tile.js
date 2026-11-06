@@ -2,7 +2,7 @@
 import {
   h, icon, domainOf, entityIcon, isActive, isUnavailable, stateLabel, numeric, moreInfo, toggleEntity,
   isToggleable, resolveColor, effectiveCategory, getEntityColor, setSliderVal,
-} from '../lib/util.js?v=2.8.18';
+} from '../lib/util.js?v=2.8.19';
 
 const COLOR_MODES = ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'];
 
@@ -113,7 +113,11 @@ export class Tile {
   }
 
   get isWide() {
+    const active = this._active(this._st);
+    const { brightness } = lightSupport(this._st);
+    const isDetail = !!this.ctx?.isDetail;
     return ['cover', 'media_player', 'climate'].includes(this.kind)
+      || (this.domain === 'light' && active && brightness && !isDetail)
       || this.spec.wide === true;
   }
 
@@ -281,6 +285,10 @@ export class Tile {
     const showSwatches = active && color && presets.length > 0;
     const hasFeature = showSlider || showSwatches;
     this.feature.hidden = !hasFeature;
+    const isDetail = !!this.ctx?.isDetail;
+    if (!isDetail) {
+      this.el.classList.toggle('wide', hasFeature);
+    }
     if (!hasFeature) return;
     this.slider.hidden = !showSlider;
     this.swatches.hidden = !showSwatches;

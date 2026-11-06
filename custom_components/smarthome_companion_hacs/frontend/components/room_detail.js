@@ -1,9 +1,9 @@
 // Room detail subview: dedicated granular control page for a single room.
 import {
   h, icon, domainOf, numeric, isActive, isUnavailable, entityIcon, setSliderVal,
-} from '../lib/util.js?v=2.8.18';
-import { Tile, GroupTile } from './tile.js?v=2.8.18';
-import { effectiveCategory, applySmartTileLayout } from './room.js?v=2.8.18';
+} from '../lib/util.js?v=2.8.19';
+import { Tile, GroupTile } from './tile.js?v=2.8.19';
+import { effectiveCategory, applySmartTileLayout } from './room.js?v=2.8.19';
 
 const GROUPS = [
   { key: 'light', icon: 'mdi:lightbulb', label: 'Alle Lichter', color: '#ffc107' },
@@ -22,7 +22,7 @@ function average(hass, ids) {
 export class RoomDetailView {
   constructor(roomSpec, ctx, onBack) {
     this.spec = roomSpec;
-    this.ctx = ctx;
+    this.ctx = { ...(ctx || {}), isDetail: true };
     this.onBack = onBack;
     this.hass = null;
 
@@ -36,8 +36,8 @@ export class RoomDetailView {
       !['cover', 'light', 'switch', 'outlet', 'valve', 'pumpe', 'media_player'].includes(effectiveCategory(t)));
 
     const makeTileInstance = (t) => {
-      if (t.is_group) return new GroupTile(t, ctx);
-      return new Tile(t, ctx);
+      if (t.is_group) return new GroupTile(t, this.ctx);
+      return new Tile(t, this.ctx);
     };
 
     // Strict priority for non-cover devices: 1. Media, 2. Light, 3. Switches, 4. Other
@@ -105,7 +105,7 @@ export class RoomDetailView {
     if (this.childTiles.length > 0) {
       this.gridEl = h('div', { class: 'tile-grid' }, this.childTiles.map((t) => t.el));
       bodyChildren.push(this.gridEl);
-      applySmartTileLayout(this.childTiles);
+      this._orderAndLayoutTiles();
     }
 
     const bodyCard = h('div', { class: 'card room-detail-body' }, ...bodyChildren);
@@ -261,7 +261,7 @@ export class RoomDetailView {
     // Update child tiles
     this.childTiles.forEach((t) => t.update(hass));
     if (this.childTiles.length > 0) {
-      applySmartTileLayout(this.childTiles);
+      this._orderAndLayoutTiles();
     }
 
     // Update covers with granular positions
@@ -313,5 +313,38 @@ export class RoomDetailView {
       chips.push(h('div', { class: 'room-detail-chip', style: { color: '#e57373' } }, icon('mdi:water-alert'), 'Feuchtigkeit'));
     }
     this.metaEl.replaceChildren(...chips);
+  }
+
+  _orderAndLayoutTiles() {
+    if (!this.gridEl || !this.childTiles.length) return;
+
+    // Partition tiles into matching height/feature groups so equal tiles sit side-by-side:
+    // 1. Intrinsically wide tiles (media players, explicit wide, groups)
+    // 2. Compact tiles (switches, off lights, tiles without active slider/swatches)
+    // 3. Slider/feature tiles (lights with active brightness slider / color swatches)
+    const wideTiles = [];
+    const sliderTiles = [];
+    const compactTiles = [];
+
+    for (const t of this.childTiles) {
+      if (t.kind === 'media_player' || t.kind === 'cover' || t.spec?.wide === true || t.spec?.is_group) {
+        wideTiles.push(t);
+      } else if (t.feature && !t.feature.hidden) {
+        sliderTiles.push(t);
+      } else {
+        compactTiles.push(t);
+      }
+    }
+
+    // Order: Wide at top, then compact pairs, then slider pairs
+    const sorted = [...wideTiles, ...compactTiles, ...sliderTiles];
+
+    const currentChildren = Array.from(this.gridEl.children);
+    const needsReorder = sorted.some((t, i) => currentChildren[i] !== t.el);
+    if (needsReorder) {
+      this.gridEl.replaceChildren(...sorted.map((t) => t.el));
+    }
+
+    applySmartTileLayout(sorted);
   }
 }
