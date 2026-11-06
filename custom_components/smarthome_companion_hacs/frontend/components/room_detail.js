@@ -1,9 +1,9 @@
 // Room detail subview: dedicated granular control page for a single room.
 import {
   h, icon, domainOf, numeric, isActive, isUnavailable, entityIcon, setSliderVal,
-} from '../lib/util.js?v=2.8.17';
-import { Tile, GroupTile } from './tile.js?v=2.8.17';
-import { effectiveCategory, applySmartTileLayout } from './room.js?v=2.8.17';
+} from '../lib/util.js?v=2.8.18';
+import { Tile, GroupTile } from './tile.js?v=2.8.18';
+import { effectiveCategory, applySmartTileLayout } from './room.js?v=2.8.18';
 
 const GROUPS = [
   { key: 'light', icon: 'mdi:lightbulb', label: 'Alle Lichter', color: '#ffc107' },

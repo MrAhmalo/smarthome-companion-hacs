@@ -1,4 +1,4 @@
-import { h, icon, COLORS, COLOR_NAMES, COLOR_LABELS_DE, resolveColor } from '../lib/util.js?v=2.8.17';
+import { h, icon, COLORS, COLOR_NAMES, COLOR_LABELS_DE, resolveColor } from '../lib/util.js?v=2.8.18';
 
 export class ColorPicker {
   /**

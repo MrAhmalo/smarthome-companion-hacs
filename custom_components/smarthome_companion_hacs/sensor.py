@@ -1015,20 +1015,12 @@ class _IrrigationZoneBaseSensor(SensorEntity):
     def device_info(self) -> DeviceInfo:
         zone = self._get_zone()
         name = zone.get("name", "Unbekannte Zone") if zone else "Bewässerungszone"
-        # pyrefly: ignore [missing-import]
-        from homeassistant.helpers import device_registry as dr
-        dev_reg = dr.async_get(self.hass)
-        if hasattr(dev_reg, "async_get_device_by_identifier"):
-            hub_device = dev_reg.async_get_device_by_identifier((DOMAIN, "irrigation_hub"))
-        else:
-            hub_device = dev_reg.async_get_device(identifiers={(DOMAIN, "irrigation_hub")})
-        hub_device_id = hub_device.id if hub_device else None
         return DeviceInfo(
             identifiers={(DOMAIN, f"irrigation_zone_{self._clean_zone_id}")},
             name=f"Bewässerung {name}",
             manufacturer="SmartHome Companion",
             model="Bewässerungskreis",
-            via_device_id=hub_device_id,
+            via_device=(DOMAIN, "irrigation_hub"),
         )
 
     async def async_added_to_hass(self):
