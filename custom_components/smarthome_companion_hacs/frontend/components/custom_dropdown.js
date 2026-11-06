@@ -1,6 +1,6 @@
 // CustomDropdown: beautiful bespoke select component replacing native browser <select>.
 // Features: custom styling, icons, color dots, optional search, keyboard & click-outside handling.
-import { h, icon } from '../lib/util.js?v=2.8.19';
+import { h, icon } from '../lib/util.js?v=2.8.20';
 
 export class CustomDropdown {
   /**
@@ -13,9 +13,14 @@ export class CustomDropdown {
    *   onChange: (val: string) => void
    * }} opts
    */
-  constructor({ options, value, placeholder = 'Bitte wählen...', disabled = false, searchable, onChange }) {
-    this.options = options || [];
-    this.value = value || '';
+  constructor({ options, items, value, placeholder = 'Bitte wählen...', disabled = false, searchable, onChange }) {
+    const raw = options || items || [];
+    this.options = raw.map((o) => ({
+      ...o,
+      value: String(o.value !== undefined ? o.value : (o.id !== undefined ? o.id : '')),
+      label: String(o.label || o.name || ''),
+    }));
+    this.value = String(value !== undefined && value !== null ? value : '');
     this.placeholder = placeholder;
     this.disabled = disabled;
     this.searchable = searchable !== undefined ? searchable : this.options.length > 5;
@@ -45,12 +50,17 @@ export class CustomDropdown {
   }
 
   setValue(val) {
-    this.value = val;
+    this.value = String(val !== undefined && val !== null ? val : '');
     this._updateSelected();
   }
 
   setOptions(opts) {
-    this.options = opts || [];
+    const raw = opts || [];
+    this.options = raw.map((o) => ({
+      ...o,
+      value: String(o.value !== undefined ? o.value : (o.id !== undefined ? o.id : '')),
+      label: String(o.label || o.name || ''),
+    }));
     this.searchable = this.options.length > 5;
     this._updateSelected();
     if (this.isOpen) this._renderMenu();

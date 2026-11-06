@@ -1,8 +1,8 @@
 // Room component: collapsible "expander" card with area header (sensors, alerts, group controls) and tiles.
 import {
   h, icon, domainOf, isActive, numeric, effectiveCategory,
-} from '../lib/util.js?v=2.8.19';
-import { Tile, GroupTile } from './tile.js?v=2.8.19';
+} from '../lib/util.js?v=2.8.20';
+import { Tile, GroupTile } from './tile.js?v=2.8.20';
 
 export { effectiveCategory };
 

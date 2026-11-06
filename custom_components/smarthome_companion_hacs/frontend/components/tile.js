@@ -2,7 +2,7 @@
 import {
   h, icon, domainOf, entityIcon, isActive, isUnavailable, stateLabel, numeric, moreInfo, toggleEntity,
   isToggleable, resolveColor, effectiveCategory, getEntityColor, setSliderVal,
-} from '../lib/util.js?v=2.8.19';
+} from '../lib/util.js?v=2.8.20';
 
 const COLOR_MODES = ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'];
 

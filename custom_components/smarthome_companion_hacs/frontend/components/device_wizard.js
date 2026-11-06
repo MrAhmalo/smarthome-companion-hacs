@@ -1,6 +1,6 @@
-import { h, icon, domainOf } from '../lib/util.js?v=2.8.19';
-import { EntityPicker } from './entity_picker.js?v=2.8.19';
-import { CustomDropdown } from './custom_dropdown.js?v=2.8.19';
+import { h, icon, domainOf } from '../lib/util.js?v=2.8.20';
+import { EntityPicker } from './entity_picker.js?v=2.8.20';
+import { CustomDropdown } from './custom_dropdown.js?v=2.8.20';
 
 export const DEVICE_CATEGORIES = [
   { id: 'leuchte', name: 'Leuchte', icon: 'mdi:lightbulb', color: '#ffc107', desc: 'Lampen, Spots & LED-Streifen' },
@@ -530,7 +530,6 @@ export class DeviceWizard {
         return d?.name_by_user || d?.name || id;
       }).join(', ');
       const hasSubGroup = selectedList.some((id) => !!this.groups[id]);
-      const btnLabel = hasSubGroup ? 'Als Hauptgruppe zusammenfassen' : 'Als Gruppe zusammenfassen';
 
       const bar = h('div', { class: 'selection-action-bar' },
         h('div', { class: 'sel-info' },
@@ -546,7 +545,9 @@ export class DeviceWizard {
             class: 'btn primary small',
             type: 'button',
             onClick: () => this._openGroupModal(),
-          }, icon('mdi:lightbulb-group'), btnLabel))
+          }, icon('mdi:lightbulb-group'),
+            h('span', { class: 'btn-label-desktop' }, hasSubGroup ? 'Als Hauptgruppe zusammenfassen' : 'Als Gruppe zusammenfassen'),
+            h('span', { class: 'btn-label-mobile' }, hasSubGroup ? 'Hauptgruppe' : 'Gruppieren')))
       );
       children.push(bar);
     }
@@ -561,14 +562,29 @@ export class DeviceWizard {
 
     let groupName = isMultiGroup ? 'Hauptgruppe' : 'Lichtgruppe';
     let defaultArea = '';
+    let detectedCat = 'leuchte';
+
     for (const id of selectedIds) {
-      if (this.groups[id]?.area_id) { defaultArea = this.groups[id].area_id; break; }
-      const dev = this.devices.find((d) => d.id === id);
-      if (dev?.area_id) { defaultArea = dev.area_id; break; }
+      if (this.groups[id]?.area_id) { defaultArea = this.groups[id].area_id; }
+      else {
+        const dev = this.devices.find((d) => d.id === id);
+        if (dev?.area_id) defaultArea = dev.area_id;
+        else {
+          const ent = this.entities.find((e) => (e.device_id === id || e.entity_id === id) && e.area_id);
+          if (ent?.area_id) defaultArea = ent.area_id;
+        }
+      }
+      if (defaultArea) break;
+    }
+
+    for (const id of selectedIds) {
+      if (this.groups[id]?.category) { detectedCat = this.groups[id].category; break; }
+      const cfg = this.configuredDevices[id];
+      if (cfg?.category) { detectedCat = cfg.category; break; }
     }
 
     let selectedArea = defaultArea;
-    let selectedCat = 'leuchte';
+    let selectedCat = detectedCat;
 
     const overlay = h('div', { class: 'overlay', style: { zIndex: '999' } });
     const nameInput = h('input', {
@@ -580,21 +596,21 @@ export class DeviceWizard {
       onInput: (e) => { groupName = e.target.value.trim(); },
     });
 
-    const areaItems = [
-      { id: '', label: 'Ohne Raum', icon: 'mdi:home-outline' },
-      ...this.areas.map((a) => ({ id: a.area_id, label: a.name, icon: 'mdi:map-marker' })),
+    const areaOptions = [
+      { value: '', label: 'Ohne Raum', icon: 'mdi:home-outline' },
+      ...this.areas.map((a) => ({ value: a.area_id, label: a.name, icon: 'mdi:map-marker' })),
     ];
-    const catItems = DEVICE_CATEGORIES.map((c) => ({ id: c.id, label: c.name, icon: c.icon, color: c.color }));
+    const catOptions = DEVICE_CATEGORIES.map((c) => ({ value: c.id, label: c.name, icon: c.icon, color: c.color }));
 
     const areaDd = new CustomDropdown({
-      items: areaItems,
+      options: areaOptions,
       value: selectedArea,
       placeholder: 'Raum auswählen...',
       onChange: (v) => { selectedArea = v; },
     });
 
     const catDd = new CustomDropdown({
-      items: catItems,
+      options: catOptions,
       value: selectedCat,
       placeholder: 'Kategorie auswählen...',
       onChange: (v) => { selectedCat = v; },
@@ -613,7 +629,7 @@ export class DeviceWizard {
       return h('span', { class: 'badge-tag' + (isG ? ' category' : '') }, label);
     });
 
-    const dialog = h('div', { class: 'dialog', style: { maxWidth: '500px' } },
+    const dialog = h('div', { class: 'dialog group-modal-dialog', style: { maxWidth: '520px', width: 'min(520px, 94vw)' } },
       h('div', { class: 'dialog-head' },
         icon('mdi:lightbulb-group'),
         h('h2', {}, isMultiGroup ? 'Hauptgruppe erstellen' : 'Gruppe erstellen'),
@@ -630,7 +646,7 @@ export class DeviceWizard {
           catDd.el),
         h('div', {},
           h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, `Ausgewählte Elemente (${selectedIds.length}):`),
-          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px' } }, ...selectedTags))),
+          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '120px', overflowY: 'auto' } }, ...selectedTags))),
       h('div', { class: 'dialog-foot' },
         h('div', { class: 'dialog-foot-actions' },
           h('button', { class: 'btn', onClick: () => { overlay.remove(); areaDd.destroy(); catDd.destroy(); } }, 'Abbrechen')),

@@ -221,15 +221,18 @@ button { font: inherit; color: inherit; }
 }
 .selection-action-bar {
   position: sticky; bottom: 0; left: 0; right: 0; z-index: 20;
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 12px 18px; margin: 12px -16px -16px; border-radius: 0 0 var(--cd-radius) var(--cd-radius);
-  background: var(--cd-card); border-top: 1.5px solid var(--cd-accent);
-  box-shadow: 0 -4px 20px rgba(0,0,0,.4); animation: cdFadeIn 0.2s ease-out;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; margin: 12px 0 0; border-radius: var(--cd-radius);
+  background: var(--cd-card); border: 1.5px solid var(--cd-accent);
+  box-shadow: 0 -4px 20px rgba(0,0,0,.5); animation: cdFadeIn 0.2s ease-out;
+  box-sizing: border-box; width: 100%;
 }
-.sel-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sel-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 140px; }
 .sel-count { font-size: 13px; font-weight: 700; color: var(--primary-text-color, #fff); }
 .sel-names { font-size: 11px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sel-buttons { display: flex; align-items: center; gap: 8px; flex: none; }
+.sel-buttons { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; justify-content: flex-end; flex-wrap: wrap; }
+.btn-label-mobile { display: none; }
+.btn-label-desktop { display: inline; }
 .tile-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .tile-icon {
   flex: none; width: 38px; height: 38px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center;
@@ -911,6 +914,71 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
 .icon-btn.danger:hover {
   background: rgba(244, 67, 54, 0.22);
 }
+
+/* ── Group Creation Modal Dialog ── */
+.group-modal-dialog {
+  width: min(520px, 94vw) !important;
+  height: auto !important;
+  min-height: auto !important;
+  max-height: 90vh !important;
+  overflow: visible !important;
+}
+.group-modal-dialog .dialog-body {
+  min-height: auto !important;
+  padding: 16px 20px !important;
+  overflow: visible !important;
+}
+
+/* ── Mobile Dialog & Selection Bar Responsive ── */
+@media (max-width: 650px) {
+  .btn-label-desktop { display: none !important; }
+  .btn-label-mobile { display: inline !important; }
+
+  .selection-action-bar {
+    padding: 8px 10px;
+    gap: 8px;
+    margin: 8px 0 0;
+  }
+  .sel-info {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+  .sel-buttons {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+  }
+  .sel-buttons button {
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
+    white-space: nowrap;
+    padding: 8px 10px;
+  }
+
+  .overlay {
+    padding: 0 !important;
+  }
+  .dialog:not(.group-modal-dialog) {
+    width: 100vw !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    border: 0 !important;
+  }
+  .dialog:not(.group-modal-dialog) .dialog-body {
+    padding: 14px 14px 70px !important;
+    min-height: 0 !important;
+  }
+  .dialog:not(.group-modal-dialog) .dialog-foot {
+    padding: 10px 14px !important;
+  }
+  .device-list {
+    max-height: none !important;
+  }
+}
+
 
 
 `;
