@@ -258,24 +258,25 @@ input[type=range].slider {
   background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
   touch-action: none;
   box-sizing: border-box;
-  padding: 0 7px;
+  padding: 0;
+  margin: 0;
 }
 input[type=range].slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 5px;
-  height: 16px;
+  width: 6px;
+  height: 18px;
   background-color: #fff;
   border-radius: 999px;
   border: 0;
-  box-shadow: 0 0 2px rgba(0,0,0,.5);
+  box-shadow: 0 1px 3px rgba(0,0,0,.4);
 }
 input[type=range].slider::-moz-range-thumb {
-  width: 5px;
-  height: 16px;
+  width: 6px;
+  height: 18px;
   background-color: #fff;
   border-radius: 999px;
   border: 0;
-  box-shadow: 0 0 2px rgba(0,0,0,.5);
+  box-shadow: 0 1px 3px rgba(0,0,0,.4);
 }
 
 /* media + climate cards */
@@ -727,24 +728,25 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   height: 24px;
   border-radius: 12px;
   box-sizing: border-box;
-  padding: 0 7px;
+  padding: 0;
+  margin: 0;
 }
 .cover-slider-wrap input[type=range].slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 5px;
-  height: 14px;
+  width: 6px;
+  height: 16px;
   background-color: #fff;
   border-radius: 999px;
   border: 0;
-  box-shadow: 0 0 2px rgba(0,0,0,.5);
+  box-shadow: 0 1px 3px rgba(0,0,0,.4);
 }
 .cover-slider-wrap input[type=range].slider::-moz-range-thumb {
-  width: 5px;
-  height: 14px;
+  width: 6px;
+  height: 16px;
   background-color: #fff;
   border-radius: 999px;
   border: 0;
-  box-shadow: 0 0 2px rgba(0,0,0,.5);
+  box-shadow: 0 1px 3px rgba(0,0,0,.4);
 }
 
 /* ── Custom Dropdown (No native browser <select>) ── */
