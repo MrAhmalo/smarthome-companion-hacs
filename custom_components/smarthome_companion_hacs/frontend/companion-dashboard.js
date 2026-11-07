@@ -1,15 +1,16 @@
 // SmartHome Companion dashboard panel (sidebar entry "Übersicht").
 // Self-contained: no HACS cards required. The layout is resolved by the backend on every load,
 // so renamed entities / re-configured devices never leave dead tiles behind.
-import { STYLES } from './lib/styles.js?v=2.8.21';
-import { h, icon, debounce } from './lib/util.js?v=2.8.21';
-import { Room } from './components/room.js?v=2.8.21';
-import { RoomDetailView } from './components/room_detail.js?v=2.8.21';
+import { STYLES } from './lib/styles.js?v=2.8.22';
+import { h, icon, debounce } from './lib/util.js?v=2.8.22';
+import { Room } from './components/room.js?v=2.8.22';
+import { RoomDetailView } from './components/room_detail.js?v=2.8.22';
+import { WarningDetailView } from './components/warning_detail.js?v=2.8.22';
 import {
   Badges, SmokeAlerts, WarningCard, TrashCard, PersonCards, AnnounceCard, NavBar,
-} from './components/specials.js?v=2.8.21';
-import { Settings } from './components/settings.js?v=2.8.21';
-import { DeviceWizard } from './components/device_wizard.js?v=2.8.21';
+} from './components/specials.js?v=2.8.22';
+import { Settings } from './components/settings.js?v=2.8.22';
+import { DeviceWizard } from './components/device_wizard.js?v=2.8.22';
 
 class CompanionDashboardPanel extends HTMLElement {
   constructor() {
@@ -20,6 +21,7 @@ class CompanionDashboardPanel extends HTMLElement {
     this._data = null;
     this._raf = 0;
     this._activeRoomId = null;
+    this._activeWarningView = false;
     this._editMode = false;
     this._reload = debounce(() => this._load(), 800);
   }
@@ -67,7 +69,10 @@ class CompanionDashboardPanel extends HTMLElement {
     }, icon('mdi:menu'));
     this._backBtn = h('button', {
       class: 'icon-btn back-btn', 'aria-label': 'Zurück zum Dashboard', title: 'Zurück', hidden: true,
-      onClick: () => this._closeRoom(),
+      onClick: () => {
+        if (this._activeWarningView) this._closeWarningDetail();
+        else if (this._activeRoomId) this._closeRoom();
+      },
     }, icon('mdi:arrow-left'));
     this._wizardBtn = h('button', {
       class: 'icon-btn', 'aria-label': 'Gerät einrichten', title: 'Gerät einrichten', hidden: true,
@@ -137,6 +142,19 @@ class CompanionDashboardPanel extends HTMLElement {
       isEditMode: () => !!this._editMode,
     };
 
+    // Subview: weather warning detailed view
+    if (this._activeWarningView) {
+      this._ro?.disconnect();
+      this._backBtn.hidden = false;
+      this._menuBtn.hidden = true;
+      this._warningDetail = new WarningDetailView(config.warning, () => this._closeWarningDetail());
+      this._nav = new NavBar(config.nav);
+      this._components = [this._warningDetail];
+      this._content.replaceChildren(this._warningDetail.el, this._nav.el);
+      this._push();
+      return;
+    }
+
     // Subview: single room detailed view
     if (this._activeRoomId) {
       const roomSpec = layout.rooms.find((r) => r.area_id === this._activeRoomId);
@@ -165,7 +183,7 @@ class CompanionDashboardPanel extends HTMLElement {
 
     // Side column (alerts / trash / persons / announcement)
     this._smoke = new SmokeAlerts();
-    this._warning = new WarningCard(config.warning);
+    this._warning = new WarningCard(config.warning, () => this._openWarningDetail());
     this._trash = new TrashCard(config.trash);
     this._persons = new PersonCards(config.persons, user);
     this._announce = new AnnounceCard(config.announce);
@@ -270,13 +288,30 @@ class CompanionDashboardPanel extends HTMLElement {
 
   // ── room subview ──
   _openRoom(areaId) {
+    this._activeWarningView = false;
     this._activeRoomId = areaId;
     this._render();
     this.scrollTop = 0;
   }
 
   _closeRoom() {
+    this._activeWarningView = false;
     this._activeRoomId = null;
+    this._backBtn.hidden = true;
+    this._menuBtn.hidden = !this._narrow;
+    this._render();
+  }
+
+  // ── warning subview ──
+  _openWarningDetail() {
+    this._activeWarningView = true;
+    this._activeRoomId = null;
+    this._render();
+    this.scrollTop = 0;
+  }
+
+  _closeWarningDetail() {
+    this._activeWarningView = false;
     this._backBtn.hidden = true;
     this._menuBtn.hidden = !this._narrow;
     this._render();

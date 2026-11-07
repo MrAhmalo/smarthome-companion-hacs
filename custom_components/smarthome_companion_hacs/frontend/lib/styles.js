@@ -682,6 +682,80 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Weather Warning Subview ── */
+.warning-detail-page {
+  display: flex; flex-direction: column; gap: 16px;
+  width: 100%; max-width: 860px; margin: 0 auto; padding: 0 4px 40px;
+  animation: cdFadeIn 0.2s ease-out;
+}
+.warning-detail-head {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  padding: 16px; border-radius: var(--cd-radius); background: var(--cd-card);
+  box-shadow: 0 4px 20px rgba(0,0,0,.25);
+}
+.warning-detail-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.warning-detail-back {
+  display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px 0 10px;
+  border-radius: 19px; border: 0; cursor: pointer; background: var(--cd-tile-bg);
+  color: var(--primary-text-color, #fff); font-weight: 600; font-size: 13px;
+  transition: transform .12s, background .15s;
+}
+.warning-detail-back:active { transform: scale(0.96); }
+.warning-detail-title-wrap { display: flex; align-items: center; gap: 10px; }
+.warning-detail-title-wrap .icon {
+  width: 40px; height: 40px; border-radius: 12px; background: rgba(251, 140, 0, 0.15);
+  display: grid; place-items: center; color: #fb8c00; font-size: 20px;
+}
+.warning-detail-title { margin: 0; font-size: 20px; font-weight: 700; color: var(--primary-text-color, #fff); }
+.warning-detail-count {
+  display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px;
+  border-radius: 14px; background: var(--cd-tile-bg); font-size: 12px; font-weight: 600;
+  color: var(--primary-text-color, #fff);
+}
+.warning-list { display: flex; flex-direction: column; gap: 14px; }
+.warning-card {
+  background: var(--cd-card); border-radius: var(--cd-radius); padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 14px; border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 4px 20px rgba(0,0,0,.25);
+}
+.warning-top {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+}
+.warning-level-badge {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+  border-radius: 8px; font-size: 12px; font-weight: 700; color: #fff;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.warning-time {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+  color: var(--cd-secondary); font-weight: 500;
+}
+.warning-time ha-icon { --mdc-icon-size: 16px; }
+.warning-hl { font-size: 18px; font-weight: 700; line-height: 1.3; color: var(--primary-text-color, #fff); }
+.warning-desc { font-size: 14px; line-height: 1.55; color: rgba(255,255,255,.88); white-space: pre-line; }
+.warning-instruction {
+  background: color-mix(in srgb, var(--cd-tile-bg) 80%, rgba(251,140,0,.15));
+  border-radius: var(--cd-tile-radius, 12px); border-left: 3px solid #fb8c00;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;
+}
+.warning-instruction-title {
+  display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .5px; color: #fb8c00;
+}
+.warning-instruction-title ha-icon { --mdc-icon-size: 16px; }
+.warning-instruction-text { font-size: 13px; line-height: 1.5; color: rgba(255,255,255,.9); }
+.warning-empty {
+  background: var(--cd-card); border-radius: var(--cd-radius); padding: 48px 24px;
+  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px;
+  border: 1px solid rgba(255,255,255,.06);
+}
+.warning-empty .icon {
+  width: 56px; height: 56px; border-radius: 50%; background: rgba(76, 175, 80, 0.15);
+  display: grid; place-items: center; color: #4caf50; font-size: 28px;
+}
+.warning-empty .title { font-size: 18px; font-weight: 700; }
+.warning-empty .sub { font-size: 13px; color: var(--cd-secondary); max-width: 420px; line-height: 1.4; }
 .room-detail-head {
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
   padding: 16px; border-radius: var(--cd-radius); background: var(--cd-card);

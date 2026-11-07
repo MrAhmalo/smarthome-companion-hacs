@@ -1,9 +1,9 @@
-import { h, icon, COLOR_NAMES, resolveColor, renderTrashBin } from '../lib/util.js?v=2.8.21';
-import { EntityPicker } from './entity_picker.js?v=2.8.21';
-import { IconPicker } from './icon_picker.js?v=2.8.21';
-import { ColorPicker } from './color_picker.js?v=2.8.21';
-import { CustomDropdown } from './custom_dropdown.js?v=2.8.21';
-import { DEVICE_CATEGORIES } from './device_wizard.js?v=2.8.21';
+import { h, icon, COLOR_NAMES, resolveColor, renderTrashBin } from '../lib/util.js?v=2.8.22';
+import { EntityPicker } from './entity_picker.js?v=2.8.22';
+import { IconPicker } from './icon_picker.js?v=2.8.22';
+import { ColorPicker } from './color_picker.js?v=2.8.22';
+import { CustomDropdown } from './custom_dropdown.js?v=2.8.22';
+import { DEVICE_CATEGORIES } from './device_wizard.js?v=2.8.22';
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 

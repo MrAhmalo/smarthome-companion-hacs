@@ -1,7 +1,7 @@
 // Special cards: header badges, smoke alerts, weather warning, trash, persons, announcement, bottom navigation.
 import {
   h, icon, domainOf, entityIcon, isUnavailable, stateLabel, numeric, moreInfo, navigate, resolveColor, renderTrashBin,
-} from '../lib/util.js?v=2.8.21';
+} from '../lib/util.js?v=2.8.22';
 
 const allowed = (users, userId) => !users || users.length === 0 || users.includes(userId);
 
@@ -100,10 +100,18 @@ export class SmokeAlerts {
 
 // ═══════════════ Weather warning ═══════════════
 export class WarningCard {
-  constructor(cfg) {
+  constructor(cfg, onOpen) {
     this.cfg = cfg || {};
+    this.onOpen = onOpen;
     this.title = h('div', { class: 'a-title' });
-    this.el = h('div', { class: 'alert-card alert-warn', hidden: true, onClick: () => navigate(this.cfg.path) },
+    this.el = h('div', {
+      class: 'alert-card alert-warn',
+      hidden: true,
+      onClick: () => {
+        if (this.onOpen) this.onOpen();
+        else if (this.cfg.path) navigate(this.cfg.path);
+      },
+    },
       h('div', { class: 'a-icon' }, icon('mdi:alert')),
       h('div', {}, this.title, h('div', { class: 'a-sub' }, 'Meldung ansehen')));
   }
