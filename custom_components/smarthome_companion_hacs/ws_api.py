@@ -293,6 +293,34 @@ async def handle_save_group(hass, connection, msg):
     if not success:
         connection.send_result(msg["id"], {"save_failed": True})
         return
+
+    # Sync native Home Assistant group entity if possible
+    try:
+        if hass.services.has_service("group", "set"):
+            dev_reg = dr.async_get(hass)
+            ent_reg = er.async_get(hass)
+            eids = []
+            for child_ref in group.get("children", []):
+                if hass.states.get(child_ref):
+                    eids.append(child_ref)
+                elif dev_reg.async_get(child_ref):
+                    dev_ents = [
+                        e.entity_id for e in ent_reg.entities.values()
+                        if e.device_id == child_ref and not e.disabled_by and not e.hidden_by
+                        and e.domain in ("light", "switch", "cover", "valve", "media_player")
+                    ]
+                    if dev_ents:
+                        eids.append(dev_ents[0])
+            if eids:
+                safe_object_id = re.sub(r"[^a-zA-Z0-9_]", "_", group_id).lower()
+                await hass.services.async_call(
+                    "group", "set",
+                    {"object_id": safe_object_id, "name": group.get("name") or "Gruppe", "entities": eids},
+                    blocking=False
+                )
+    except Exception as err:
+        _LOGGER.debug("Could not create native HA group: %s", err)
+
     safe_fire_event(hass, f"{DOMAIN}_dashboard_updated")
     connection.send_result(msg["id"], {"success": True, "group_id": group_id, "group": group})
 
@@ -313,6 +341,14 @@ async def handle_delete_group(hass, connection, msg):
             if group_id in children:
                 children.remove(group_id)
         await store.save_groups(groups)
+
+        # Remove native HA group entity if possible
+        try:
+            if hass.services.has_service("group", "remove"):
+                safe_object_id = re.sub(r"[^a-zA-Z0-9_]", "_", group_id).lower()
+                await hass.services.async_call("group", "remove", {"object_id": safe_object_id}, blocking=False)
+        except Exception as err:
+            _LOGGER.debug("Could not remove native HA group: %s", err)
     safe_fire_event(hass, f"{DOMAIN}_dashboard_updated")
     connection.send_result(msg["id"], {"success": True})
 

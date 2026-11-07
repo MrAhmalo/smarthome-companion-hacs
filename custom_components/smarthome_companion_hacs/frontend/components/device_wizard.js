@@ -1,6 +1,6 @@
-import { h, icon, domainOf } from '../lib/util.js?v=2.8.20';
-import { EntityPicker } from './entity_picker.js?v=2.8.20';
-import { CustomDropdown } from './custom_dropdown.js?v=2.8.20';
+import { h, icon, domainOf } from '../lib/util.js?v=2.8.21';
+import { EntityPicker } from './entity_picker.js?v=2.8.21';
+import { CustomDropdown } from './custom_dropdown.js?v=2.8.21';
 
 export const DEVICE_CATEGORIES = [
   { id: 'leuchte', name: 'Leuchte', icon: 'mdi:lightbulb', color: '#ffc107', desc: 'Lampen, Spots & LED-Streifen' },
@@ -531,9 +531,14 @@ export class DeviceWizard {
       }).join(', ');
       const hasSubGroup = selectedList.some((id) => !!this.groups[id]);
 
+      const canGroup = selectedList.length >= 2;
+      const countText = canGroup
+        ? `${selectedList.length} ausgewählt`
+        : `${selectedList.length} ausgewählt (mind. 2 zum Gruppieren)`;
+
       const bar = h('div', { class: 'selection-action-bar' },
         h('div', { class: 'sel-info' },
-          h('span', { class: 'sel-count' }, `${selectedList.length} ausgewählt`),
+          h('span', { class: 'sel-count' }, countText),
           h('span', { class: 'sel-names' }, names)),
         h('div', { class: 'sel-buttons' },
           h('button', {
@@ -544,7 +549,12 @@ export class DeviceWizard {
           h('button', {
             class: 'btn primary small',
             type: 'button',
-            onClick: () => this._openGroupModal(),
+            disabled: !canGroup,
+            title: canGroup ? '' : 'Mindestens 2 Geräte oder Gruppen auswählen',
+            style: canGroup ? {} : { opacity: '0.45', cursor: 'not-allowed' },
+            onClick: () => {
+              if (canGroup) this._openGroupModal();
+            },
           }, icon('mdi:lightbulb-group'),
             h('span', { class: 'btn-label-desktop' }, hasSubGroup ? 'Als Hauptgruppe zusammenfassen' : 'Als Gruppe zusammenfassen'),
             h('span', { class: 'btn-label-mobile' }, hasSubGroup ? 'Hauptgruppe' : 'Gruppieren')))
@@ -556,7 +566,7 @@ export class DeviceWizard {
   }
 
   _openGroupModal() {
-    if (!this.selectedDevices.size) return;
+    if (this.selectedDevices.size < 2) return;
     const selectedIds = Array.from(this.selectedDevices);
     const isMultiGroup = selectedIds.some((id) => !!this.groups[id]);
 

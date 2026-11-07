@@ -1,9 +1,9 @@
 // Room detail subview: dedicated granular control page for a single room.
 import {
   h, icon, domainOf, numeric, isActive, isUnavailable, entityIcon, setSliderVal,
-} from '../lib/util.js?v=2.8.20';
-import { Tile, GroupTile } from './tile.js?v=2.8.20';
-import { effectiveCategory, applySmartTileLayout } from './room.js?v=2.8.20';
+} from '../lib/util.js?v=2.8.21';
+import { Tile, GroupTile } from './tile.js?v=2.8.21';
+import { effectiveCategory, applySmartTileLayout } from './room.js?v=2.8.21';
 
 const GROUPS = [
   { key: 'light', icon: 'mdi:lightbulb', label: 'Alle Lichter', color: '#ffc107' },
@@ -317,34 +317,6 @@ export class RoomDetailView {
 
   _orderAndLayoutTiles() {
     if (!this.gridEl || !this.childTiles.length) return;
-
-    // Partition tiles into matching height/feature groups so equal tiles sit side-by-side:
-    // 1. Intrinsically wide tiles (media players, explicit wide, groups)
-    // 2. Compact tiles (switches, off lights, tiles without active slider/swatches)
-    // 3. Slider/feature tiles (lights with active brightness slider / color swatches)
-    const wideTiles = [];
-    const sliderTiles = [];
-    const compactTiles = [];
-
-    for (const t of this.childTiles) {
-      if (t.kind === 'media_player' || t.kind === 'cover' || t.spec?.wide === true || t.spec?.is_group) {
-        wideTiles.push(t);
-      } else if (t.feature && !t.feature.hidden) {
-        sliderTiles.push(t);
-      } else {
-        compactTiles.push(t);
-      }
-    }
-
-    // Order: Wide at top, then compact pairs, then slider pairs
-    const sorted = [...wideTiles, ...compactTiles, ...sliderTiles];
-
-    const currentChildren = Array.from(this.gridEl.children);
-    const needsReorder = sorted.some((t, i) => currentChildren[i] !== t.el);
-    if (needsReorder) {
-      this.gridEl.replaceChildren(...sorted.map((t) => t.el));
-    }
-
-    applySmartTileLayout(sorted);
+    applySmartTileLayout(this.childTiles);
   }
 }

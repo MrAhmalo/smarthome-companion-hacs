@@ -445,6 +445,27 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                         "category": g_cat,
                         "icon": g.get("icon") or cat_info.get("icon"),
                     })
+                elif dev_reg.async_get(ref):
+                    dev = dev_reg.async_get(ref)
+                    dev_name = dev.name_by_user or dev.name or "Gerät"
+                    dev_ents = [
+                        e for e in ent_reg.entities.values()
+                        if e.device_id == ref and not e.disabled_by and not e.hidden_by
+                        and e.domain in ("light", "switch", "cover", "valve", "media_player")
+                    ]
+                    if dev_ents:
+                        dev_ents.sort(key=lambda e: (0 if (g_cat in ("leuchte", "light") and e.domain == "light") else (0 if e.domain in ("switch", "light") else 1), e.entity_id))
+                        primary_e = dev_ents[0]
+                        descendant_eids.append(primary_e.entity_id)
+                        child_specs.append({
+                            "key": f"d:{ref}:{primary_e.entity_id}",
+                            "device_id": ref,
+                            "entity_id": primary_e.entity_id,
+                            "name": dev_name,
+                            "category": g_cat,
+                            "icon": g.get("icon") or cat_info.get("icon"),
+                            "area_id": dev.area_id or g.get("area_id"),
+                        })
 
             unique_eids = list(dict.fromkeys(descendant_eids))
             area_id = g.get("area_id")

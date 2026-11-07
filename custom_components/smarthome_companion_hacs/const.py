@@ -1,7 +1,7 @@
 DOMAIN = "smarthome_companion_hacs"
 STORAGE_KEY = "smarthome_companion_hacs.configuration"
 STORAGE_VERSION = 1
-VERSION = "2.8.20"
+VERSION = "2.8.21"
 
 DEFAULT_CATEGORIES = {
     "leuchte": {

@@ -173,6 +173,9 @@ button { font: inherit; color: inherit; }
   display: grid; gap: 8px; padding: 8px 10px 8px 8px; min-width: 0; overflow: hidden; border-radius: var(--cd-tile-radius, 12px);
   background: var(--cd-tile-bg); transition: background .2s, opacity .2s;
 }
+.tile:not(:has(.tile-feature:not([hidden]))):not(:has(.group-sub-container)) {
+  align-content: center;
+}
 .tile.wide { grid-column: span 2; }
 .tile[data-active="false"] { --tile-color: var(--cd-secondary); }
 .tile[data-unavailable] { opacity: .5; }
@@ -216,7 +219,7 @@ button { font: inherit; color: inherit; }
 }
 .sel-checkbox ha-icon { --mdc-icon-size: 16px; }
 .device-card[data-selected] {
-  outline: 2px solid var(--cd-accent);
+  box-shadow: 0 0 0 2px var(--cd-accent);
   background: color-mix(in srgb, var(--cd-accent) 14%, var(--cd-tile-bg));
 }
 .selection-action-bar {
@@ -264,20 +267,29 @@ input[type=range].slider {
   padding: 0;
   margin: 0;
 }
+input[type=range].slider::-webkit-slider-runnable-track {
+  height: 28px;
+  border-radius: 14px;
+}
 input[type=range].slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 6px;
   height: 18px;
   background-color: #fff;
-  border-radius: 999px;
+  border-radius: 3px;
+  margin-top: 5px;
   border: 0;
   box-shadow: 0 1px 3px rgba(0,0,0,.4);
+}
+input[type=range].slider::-moz-range-track {
+  height: 28px;
+  border-radius: 14px;
 }
 input[type=range].slider::-moz-range-thumb {
   width: 6px;
   height: 18px;
   background-color: #fff;
-  border-radius: 999px;
+  border-radius: 3px;
   border: 0;
   box-shadow: 0 1px 3px rgba(0,0,0,.4);
 }
@@ -424,7 +436,7 @@ input[type=range].slider::-moz-range-thumb {
 .tab { flex-shrink: 0; border: 0; background: transparent; cursor: pointer; padding: 9px 14px; border-radius: 10px 10px 0 0; font-weight: 600; font-size: 13px; color: var(--cd-secondary); white-space: nowrap; transition: color .15s, background .15s; }
 .tab:hover { color: var(--primary-text-color, #fff); background: rgba(128,128,128,.08); }
 .tab[data-active] { color: var(--cd-accent); box-shadow: inset 0 -2px 0 var(--cd-accent); }
-.dialog-body { flex: 1; min-height: 520px; overflow-y: auto; overflow-x: hidden; padding: 22px 28px 80px; display: grid; gap: 16px; align-content: start; }
+.dialog-body { flex: 1; min-height: 480px; overflow-y: auto; overflow-x: hidden; padding: 20px 24px 20px; display: flex; flex-direction: column; gap: 14px; }
 .dialog-foot { flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 24px; border-top: 1px solid rgba(128,128,128,.18); background: var(--cd-card); }
 .dialog-foot-actions { display: flex; align-items: center; gap: 10px; }
 .hint { font-size: 12px; color: var(--cd-secondary); line-height: 1.5; white-space: pre-line; }
@@ -466,7 +478,7 @@ input[type=range].slider::-moz-range-thumb {
 .wizard-bar { height: 4px; border-radius: 2px; background: rgba(128,128,128,.2); transition: background .3s; }
 .wizard-step[data-active] .wizard-bar { background: var(--cd-accent); }
 .wizard-step[data-done] .wizard-bar { background: var(--success-color, #43a047); }
-.device-list { display: grid; gap: 8px; max-height: 520px; overflow-y: auto; }
+.device-list { display: grid; gap: 8px; flex: 1; min-height: 250px; max-height: none; overflow-y: auto; }
 .device-card {
   display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px;
   background: var(--cd-tile-bg); cursor: pointer; border: 1px solid transparent; transition: border-color .2s, background .2s;
@@ -734,20 +746,29 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   padding: 0;
   margin: 0;
 }
+.cover-slider-wrap input[type=range].slider::-webkit-slider-runnable-track {
+  height: 24px;
+  border-radius: 12px;
+}
 .cover-slider-wrap input[type=range].slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 6px;
   height: 16px;
   background-color: #fff;
-  border-radius: 999px;
+  border-radius: 3px;
+  margin-top: 4px;
   border: 0;
   box-shadow: 0 1px 3px rgba(0,0,0,.4);
+}
+.cover-slider-wrap input[type=range].slider::-moz-range-track {
+  height: 24px;
+  border-radius: 12px;
 }
 .cover-slider-wrap input[type=range].slider::-moz-range-thumb {
   width: 6px;
   height: 16px;
   background-color: #fff;
-  border-radius: 999px;
+  border-radius: 3px;
   border: 0;
   box-shadow: 0 1px 3px rgba(0,0,0,.4);
 }
