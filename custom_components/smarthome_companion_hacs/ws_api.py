@@ -154,6 +154,7 @@ async def handle_configure_device(hass, connection, msg):
         "category": category,
         "configured_at": datetime.now().isoformat(),
         "custom_name": custom_name,
+        "area_id": area_id,
         "entities": entities,
         "options": options,
         "icon": custom_icon,

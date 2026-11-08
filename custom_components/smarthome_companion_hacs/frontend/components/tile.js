@@ -2,7 +2,7 @@
 import {
   h, icon, domainOf, entityIcon, isActive, isUnavailable, stateLabel, numeric, moreInfo, toggleEntity,
   isToggleable, resolveColor, effectiveCategory, getEntityColor, setSliderVal,
-} from '../lib/util.js?v=2.8.22';
+} from '../lib/util.js?v=2.8.23';
 
 const COLOR_MODES = ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'];
 
@@ -298,7 +298,7 @@ export class Tile {
  */
 export class GroupTile {
   /**
-   * @param {object} spec  {key, group_id, name, category, icon, color, entity_ids, children}
+   * @param {object} spec  {key, group_id, name, category, icon, color, entity_ids, children, expandable}
    * @param {object} ctx
    */
   constructor(spec, ctx) {
@@ -307,6 +307,7 @@ export class GroupTile {
     this.entityIds = spec.entity_ids || [];
     this.category = spec.category || 'leuchte';
     this.domain = this.category === 'leuchte' ? 'light' : 'switch';
+    this.isExpandable = spec.expandable !== false;
     this.hass = null;
     this._open = false;
     this._dragging = false;
@@ -323,7 +324,7 @@ export class GroupTile {
   }
 
   get isWide() {
-    return true; // Master group is wide so it sits above its collapsible children
+    return true; // Wide so brightness sliders or collapsible children fit comfortably
   }
 
   setWide(wide) {
@@ -332,39 +333,66 @@ export class GroupTile {
 
   _build() {
     this.iconEl = icon(this.spec.icon || (this.category === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug'));
-    this.badgeEl = h('span', { class: 'group-badge', hidden: true }, '0');
 
-    this.iconBtn = h('button', {
-      class: 'tile-icon group-icon-btn',
-      'aria-label': `${this.spec.name} Schalten`,
-      title: 'Alle ein-/ausschalten',
-      onClick: (e) => {
-        e.stopPropagation();
-        this._toggleMaster();
-      },
-    }, this.iconEl, this.badgeEl);
+    if (this.isExpandable) {
+      this.badgeEl = h('span', { class: 'group-badge', hidden: true }, '0');
+      this.iconBtn = h('button', {
+        class: 'tile-icon group-icon-btn',
+        'aria-label': `${this.spec.name} Schalten`,
+        title: 'Alle ein-/ausschalten',
+        onClick: (e) => {
+          e.stopPropagation();
+          this._toggleMaster();
+        },
+      }, this.iconEl, this.badgeEl);
+    } else {
+      this.badgeEl = null;
+      this.iconBtn = h('button', {
+        class: 'tile-icon',
+        'aria-label': `${this.spec.name} Schalten`,
+        title: 'Ein-/Ausschalten',
+        onClick: (e) => {
+          e.stopPropagation();
+          this._toggleMaster();
+        },
+      }, this.iconEl);
+    }
 
     this.nameEl = h('div', { class: 'tile-name' }, this.spec.name);
     this.stateEl = h('div', { class: 'tile-state' }, 'Aus');
     this.chevron = icon('mdi:chevron-down');
 
-    this.info = h('div', {
-      class: 'tile-info',
-      title: 'Ausklappen / Zuklappen',
-      onClick: () => this._toggleOpen(),
-    }, this.nameEl, this.stateEl);
+    if (this.isExpandable) {
+      this.info = h('div', {
+        class: 'tile-info',
+        title: 'Ausklappen / Zuklappen',
+        onClick: () => this._toggleOpen(),
+      }, this.nameEl, this.stateEl);
 
-    this.btnChevron = h('button', {
-      class: 'mini-btn chevron-btn',
-      'aria-label': 'Ausklappen',
-      title: 'Unterlampen anzeigen',
-      onClick: (e) => {
-        e.stopPropagation();
-        this._toggleOpen();
-      },
-    }, this.chevron);
+      this.btnChevron = h('button', {
+        class: 'mini-btn chevron-btn',
+        'aria-label': 'Ausklappen',
+        title: 'Unterlampen anzeigen',
+        onClick: (e) => {
+          e.stopPropagation();
+          this._toggleOpen();
+        },
+      }, this.chevron);
 
-    this.btns = h('div', { class: 'tile-btns' }, this.btnChevron);
+      this.btns = h('div', { class: 'tile-btns' }, this.btnChevron);
+    } else {
+      this.info = h('div', {
+        class: 'tile-info',
+        title: 'Schalten',
+        onClick: () => {
+          if (this.ctx?.isEditMode?.()) return;
+          this._toggleMaster();
+        },
+      }, this.nameEl, this.stateEl);
+
+      this.btnChevron = null;
+      this.btns = h('div', { class: 'tile-btns' });
+    }
 
     // Master brightness slider
     this.feature = h('div', { class: 'tile-feature', hidden: true });
@@ -383,21 +411,27 @@ export class GroupTile {
     });
     this.feature.append(this.slider);
 
-    // Collapsible Sub-Items Container
-    this.subGrid = h('div', { class: 'group-sub-grid' }, ...this.children.map((c) => c.el));
+    // Collapsible Sub-Items Container (only for expandable groups)
+    if (this.isExpandable) {
+      this.subGrid = h('div', { class: 'group-sub-grid' }, ...this.children.map((c) => c.el));
+      this.subContainer = h('div', { class: 'group-sub-container', hidden: true }, this.subGrid);
+    } else {
+      this.subGrid = null;
+      this.subContainer = null;
+    }
 
-    this.subContainer = h('div', { class: 'group-sub-container', hidden: true }, this.subGrid);
+    const items = [
+      h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns),
+      this.feature,
+    ];
+    if (this.subContainer) items.push(this.subContainer);
 
     this.el = h('div', {
-      class: 'tile group wide',
+      class: 'tile group wide' + (!this.isExpandable ? ' flat-group' : ''),
       'data-key': this.spec.key,
       'data-group': 'true',
       style: { '--tile-color': this.spec.color || '#ffc107' },
-    },
-      h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns),
-      this.feature,
-      this.subContainer
-    );
+    }, ...items);
 
     // Edit Mode click interception
     this.el.addEventListener('pointerdown', (e) => {
@@ -416,6 +450,7 @@ export class GroupTile {
   }
 
   _toggleOpen() {
+    if (!this.isExpandable || !this.subContainer) return;
     this._open = !this._open;
     this.el.toggleAttribute('data-open', this._open);
     this.subContainer.hidden = !this._open;
@@ -423,23 +458,35 @@ export class GroupTile {
   }
 
   _toggleMaster() {
-    if (!this.hass) return;
+    if (!this.hass || !this.entityIds.length) return;
     const states = this.entityIds.map((id) => this.hass.states[id]).filter(Boolean);
     const anyOn = states.some((s) => s.state === 'on');
     const service = anyOn ? 'turn_off' : 'turn_on';
-    const domain = this.domain;
-    for (const eid of this.entityIds) {
-      const d = domainOf(eid);
-      this.hass.callService(d === 'light' || d === 'switch' ? d : domain, service, { entity_id: eid });
+    const nextActive = !anyOn;
+
+    // Immediate optimistic UI updates
+    this.el.dataset.active = String(nextActive);
+    this.iconBtn.classList.toggle('active', nextActive);
+    if (!this.isExpandable) {
+      this.stateEl.textContent = nextActive ? 'Ein' : 'Aus';
+    }
+
+    const lightIds = this.entityIds.filter((id) => domainOf(id) === 'light');
+    const otherIds = this.entityIds.filter((id) => domainOf(id) !== 'light');
+
+    if (lightIds.length > 0) {
+      this.hass.callService('light', service, { entity_id: lightIds });
+    }
+    if (otherIds.length > 0) {
+      this.hass.callService('homeassistant', service, { entity_id: otherIds });
     }
   }
 
   _setMasterBrightness(pct) {
     if (!this.hass) return;
-    for (const eid of this.entityIds) {
-      if (domainOf(eid) === 'light') {
-        this.hass.callService('light', 'turn_on', { entity_id: eid, brightness_pct: pct });
-      }
+    const lightIds = this.entityIds.filter((id) => domainOf(id) === 'light');
+    if (lightIds.length > 0) {
+      this.hass.callService('light', 'turn_on', { entity_id: lightIds, brightness_pct: pct });
     }
   }
 
@@ -455,17 +502,23 @@ export class GroupTile {
     this.el.dataset.active = String(anyOn);
     this.iconBtn.classList.toggle('active', anyOn);
 
-    if (activeCount > 0) {
-      this.badgeEl.textContent = String(activeCount);
-      this.badgeEl.hidden = false;
-    } else {
-      this.badgeEl.hidden = true;
+    if (this.isExpandable && this.badgeEl) {
+      if (activeCount > 0) {
+        this.badgeEl.textContent = String(activeCount);
+        this.badgeEl.hidden = false;
+      } else {
+        this.badgeEl.hidden = true;
+      }
     }
 
     if (!states.length) {
       this.stateEl.textContent = 'Keine Entitäten';
     } else if (activeCount === 0) {
       this.stateEl.textContent = 'Aus';
+    } else if (!this.isExpandable) {
+      // Flat unified group: behaves like a single lamp tile
+      const avgBr = this._avgBrightness(activeStates);
+      this.stateEl.textContent = avgBr ? `${avgBr} %` : 'Ein';
     } else if (activeCount === states.length) {
       const avgBr = this._avgBrightness(activeStates);
       this.stateEl.textContent = avgBr ? `Alle Ein · ${avgBr} %` : 'Alle Ein';

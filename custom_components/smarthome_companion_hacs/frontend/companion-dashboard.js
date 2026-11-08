@@ -1,16 +1,16 @@
 // SmartHome Companion dashboard panel (sidebar entry "Übersicht").
 // Self-contained: no HACS cards required. The layout is resolved by the backend on every load,
 // so renamed entities / re-configured devices never leave dead tiles behind.
-import { STYLES } from './lib/styles.js?v=2.8.22';
-import { h, icon, debounce } from './lib/util.js?v=2.8.22';
-import { Room } from './components/room.js?v=2.8.22';
-import { RoomDetailView } from './components/room_detail.js?v=2.8.22';
-import { WarningDetailView } from './components/warning_detail.js?v=2.8.22';
+import { STYLES } from './lib/styles.js?v=2.8.23';
+import { h, icon, debounce } from './lib/util.js?v=2.8.23';
+import { Room } from './components/room.js?v=2.8.23';
+import { RoomDetailView } from './components/room_detail.js?v=2.8.23';
+import { WarningDetailView } from './components/warning_detail.js?v=2.8.23';
 import {
   Badges, SmokeAlerts, WarningCard, TrashCard, PersonCards, AnnounceCard, NavBar,
-} from './components/specials.js?v=2.8.22';
-import { Settings } from './components/settings.js?v=2.8.22';
-import { DeviceWizard } from './components/device_wizard.js?v=2.8.22';
+} from './components/specials.js?v=2.8.23';
+import { Settings } from './components/settings.js?v=2.8.23';
+import { DeviceWizard } from './components/device_wizard.js?v=2.8.23';
 
 class CompanionDashboardPanel extends HTMLElement {
   constructor() {
@@ -137,7 +137,7 @@ class CompanionDashboardPanel extends HTMLElement {
       },
       onOpenGroup: (groupId) => {
         if (this._editMode) this._toggleEditMode();
-        this._openSettings();
+        this._openWizard(groupId);
       },
       isEditMode: () => !!this._editMode,
     };

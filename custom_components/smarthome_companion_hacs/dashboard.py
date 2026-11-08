@@ -473,17 +473,23 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                 first = child_specs[0]
                 area_id = first.get("area_id")
 
+            has_subgroup = any(ref in groups for ref in g.get("children", []))
+            is_expandable = g.get("expandable")
+            if is_expandable is None:
+                is_expandable = has_subgroup
+
             return {
                 "key": f"group:{gid}",
                 "is_group": True,
                 "group_id": gid,
                 "name": g.get("name") or "Gruppe",
                 "category": g_cat,
-                "icon": g.get("icon") or "mdi:lightbulb-group",
+                "icon": g.get("icon") or (cat_info.get("icon") if cat_info else "mdi:lightbulb-group"),
                 "color": cat_info.get("color"),
                 "area_id": area_id,
                 "entity_ids": unique_eids,
                 "children": child_specs,
+                "expandable": bool(is_expandable),
             }
 
         claimed_tile_keys = set()

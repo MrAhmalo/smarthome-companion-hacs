@@ -1,6 +1,10 @@
-import { h, icon, domainOf } from '../lib/util.js?v=2.8.22';
-import { EntityPicker } from './entity_picker.js?v=2.8.22';
-import { CustomDropdown } from './custom_dropdown.js?v=2.8.22';
+import {
+  h, icon, domainOf, toSafeEntityId, cleanRoomFromText,
+  buildCleanFriendlyName, buildSuggestedEntityId,
+} from '../lib/util.js?v=2.8.23';
+import { EntityPicker } from './entity_picker.js?v=2.8.23';
+import { IconPicker } from './icon_picker.js?v=2.8.23';
+import { CustomDropdown } from './custom_dropdown.js?v=2.8.23';
 
 export const DEVICE_CATEGORIES = [
   { id: 'leuchte', name: 'Leuchte', icon: 'mdi:lightbulb', color: '#ffc107', desc: 'Lampen, Spots & LED-Streifen' },
@@ -62,6 +66,7 @@ export class DeviceWizard {
     this.customName = '';
     this.selectedAreaId = '';
     this.selectedCategory = 'schalter';
+    this.selectedIcon = '';
     this.renameInHA = true;
 
     // Channels / sub-entities
@@ -116,6 +121,12 @@ export class DeviceWizard {
       this.groups = setup.groups || {};
 
       if (this.initialDeviceId) {
+        if (this.groups[this.initialDeviceId]) {
+          this._openGroupModal(this.groups[this.initialDeviceId]);
+          this._render();
+          return;
+        }
+
         let id = this.initialDeviceId;
         if (id.includes(':') && !id.startsWith('e:') && !id.startsWith('l:')) {
           id = id.split(':')[0];
@@ -401,10 +412,23 @@ export class DeviceWizard {
           h('div', { class: 'd-name' }, g.name),
           h('div', { class: 'd-meta' },
             h('span', { class: 'badge-tag category', style: { '--badge-cat-color': catColor } },
-              icon('mdi:lightbulb-group'), `Gruppe (${g.children?.length || 0} Elemente)`))),
+              icon('mdi:lightbulb-group'), `Gruppe (${g.children?.length || 0} Elemente)`),
+            g.expandable === false
+              ? h('span', { class: 'badge-tag' }, icon('mdi:view-headline'), 'Kompakt')
+              : h('span', { class: 'badge-tag' }, icon('mdi:chevron-down'), 'Ausklappbar'))),
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
           h('button', {
+            class: 'btn secondary small',
+            title: 'Gruppe bearbeiten',
+            'aria-label': 'Bearbeiten',
+            onClick: (e) => {
+              e.stopPropagation();
+              this._openGroupModal(g);
+            },
+          }, icon('mdi:pencil'), 'Bearbeiten'),
+          h('button', {
             class: 'icon-btn danger', title: 'Gruppe auflösen',
+            'aria-label': 'Auflösen',
             onClick: (e) => {
               e.stopPropagation();
               this._removeGroup(g.id, g.name);
@@ -565,36 +589,50 @@ export class DeviceWizard {
     this.deviceListEl.replaceChildren(...children);
   }
 
-  _openGroupModal() {
-    if (this.selectedDevices.size < 2) return;
-    const selectedIds = Array.from(this.selectedDevices);
+  _openGroupModal(groupToEdit = null) {
+    let selectedIds = [];
+    if (groupToEdit) {
+      selectedIds = Array.isArray(groupToEdit.children) ? [...groupToEdit.children] : [];
+    } else {
+      if (this.selectedDevices.size < 2) return;
+      selectedIds = Array.from(this.selectedDevices);
+    }
     const isMultiGroup = selectedIds.some((id) => !!this.groups[id]);
 
-    let groupName = isMultiGroup ? 'Hauptgruppe' : 'Lichtgruppe';
-    let defaultArea = '';
-    let detectedCat = 'leuchte';
+    let groupName = groupToEdit?.name || (isMultiGroup ? 'Hauptgruppe' : 'Lichtgruppe');
+    let defaultArea = groupToEdit?.area_id || '';
+    let detectedCat = groupToEdit?.category || 'leuchte';
 
-    for (const id of selectedIds) {
-      if (this.groups[id]?.area_id) { defaultArea = this.groups[id].area_id; }
-      else {
-        const dev = this.devices.find((d) => d.id === id);
-        if (dev?.area_id) defaultArea = dev.area_id;
+    if (!defaultArea) {
+      for (const id of selectedIds) {
+        if (this.groups[id]?.area_id) { defaultArea = this.groups[id].area_id; }
         else {
-          const ent = this.entities.find((e) => (e.device_id === id || e.entity_id === id) && e.area_id);
-          if (ent?.area_id) defaultArea = ent.area_id;
+          const dev = this.devices.find((d) => d.id === id);
+          if (dev?.area_id) defaultArea = dev.area_id;
+          else {
+            const ent = this.entities.find((e) => (e.device_id === id || e.entity_id === id) && e.area_id);
+            if (ent?.area_id) defaultArea = ent.area_id;
+          }
         }
+        if (defaultArea) break;
       }
-      if (defaultArea) break;
     }
 
-    for (const id of selectedIds) {
-      if (this.groups[id]?.category) { detectedCat = this.groups[id].category; break; }
-      const cfg = this.configuredDevices[id];
-      if (cfg?.category) { detectedCat = cfg.category; break; }
+    if (!groupToEdit?.category) {
+      for (const id of selectedIds) {
+        if (this.groups[id]?.category) { detectedCat = this.groups[id].category; break; }
+        const cfg = this.configuredDevices[id];
+        if (cfg?.category) { detectedCat = cfg.category; break; }
+      }
     }
 
     let selectedArea = defaultArea;
     let selectedCat = detectedCat;
+    let selectedIcon = groupToEdit?.icon || (selectedCat === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug');
+    // If not explicitly defined: leaf group defaults to flat (expandable = false), master group to expandable = true
+    let isExpandable = groupToEdit?.expandable !== undefined
+      ? !!groupToEdit.expandable
+      : isMultiGroup;
 
     const overlay = h('div', { class: 'overlay', style: { zIndex: '999' } });
     const nameInput = h('input', {
@@ -619,12 +657,51 @@ export class DeviceWizard {
       onChange: (v) => { selectedArea = v; },
     });
 
+    const iconPicker = new IconPicker({
+      hass: this.hass,
+      value: selectedIcon,
+      placeholder: 'mdi:...',
+      onChange: (val) => { selectedIcon = val; },
+    });
+
     const catDd = new CustomDropdown({
       options: catOptions,
       value: selectedCat,
       placeholder: 'Kategorie auswählen...',
-      onChange: (v) => { selectedCat = v; },
+      onChange: (v) => {
+        const prevCat = selectedCat;
+        selectedCat = v;
+        const prevDefault = prevCat === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug';
+        if (!selectedIcon || selectedIcon === prevDefault) {
+          const newDefault = v === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug';
+          selectedIcon = newDefault;
+          iconPicker._setValue(newDefault);
+        }
+      },
     });
+
+    const expDesc = h('div', { class: 'feature-desc' }, isExpandable
+      ? 'Kachel zeigt ein Chevron und klappt Unterelemente auf dem Dashboard aus.'
+      : 'Kachel verhält sich wie eine normale Einzellampe ohne Unterkategorien.');
+
+    const expCard = h('div', {
+      class: `feature-card${isExpandable ? ' active' : ''}`,
+      style: { '--feat-color': 'var(--cd-accent)', cursor: 'pointer', marginTop: '4px' },
+      ...(isExpandable ? { 'data-active': '' } : {}),
+      onClick: () => {
+        isExpandable = !isExpandable;
+        expCard.toggleAttribute('data-active', isExpandable);
+        expCard.classList.toggle('active', isExpandable);
+        expDesc.textContent = isExpandable
+          ? 'Kachel zeigt ein Chevron und klappt Unterelemente auf dem Dashboard aus.'
+          : 'Kachel verhält sich wie eine normale Einzellampe ohne Unterkategorien.';
+      },
+    },
+    h('div', { class: 'feature-icon' }, icon('mdi:chevron-down-box-outline')),
+    h('div', { class: 'feature-info' },
+      h('div', { class: 'feature-title' }, 'Auf Dashboard ausklappbar'),
+      expDesc),
+    h('div', { class: 'switch-ui' }));
 
     const selectedTags = selectedIds.map((id) => {
       let label = id;
@@ -641,8 +718,8 @@ export class DeviceWizard {
 
     const dialog = h('div', { class: 'dialog group-modal-dialog', style: { maxWidth: '520px', width: 'min(520px, 94vw)' } },
       h('div', { class: 'dialog-head' },
-        icon('mdi:lightbulb-group'),
-        h('h2', {}, isMultiGroup ? 'Hauptgruppe erstellen' : 'Gruppe erstellen'),
+        icon(groupToEdit ? 'mdi:pencil' : 'mdi:lightbulb-group'),
+        h('h2', {}, groupToEdit ? 'Gruppe bearbeiten' : (isMultiGroup ? 'Hauptgruppe erstellen' : 'Gruppe erstellen')),
         h('button', { class: 'icon-btn', onClick: () => { overlay.remove(); areaDd.destroy(); catDd.destroy(); } }, icon('mdi:close'))),
       h('div', { class: 'dialog-body', style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
         h('div', {},
@@ -654,6 +731,10 @@ export class DeviceWizard {
         h('div', {},
           h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Kategorie:'),
           catDd.el),
+        h('div', {},
+          h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Icon:'),
+          iconPicker.el),
+        expCard,
         h('div', {},
           h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, `Ausgewählte Elemente (${selectedIds.length}):`),
           h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '120px', overflowY: 'auto' } }, ...selectedTags))),
@@ -669,10 +750,12 @@ export class DeviceWizard {
                 await this.hass.callWS({
                   type: 'smarthome_companion/groups/save',
                   group: {
+                    ...(groupToEdit?.id ? { id: groupToEdit.id } : {}),
                     name: groupName,
                     area_id: selectedArea,
                     category: selectedCat,
-                    icon: selectedCat === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug',
+                    icon: selectedIcon || (selectedCat === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug'),
+                    expandable: isExpandable,
                     children: selectedIds,
                   },
                 });
@@ -683,7 +766,7 @@ export class DeviceWizard {
                 this._load();
                 this.onSaved?.(null);
               } catch (err) {
-                alert(`Fehler beim Erstellen der Gruppe: ${err.message || err}`);
+                alert(`Fehler beim Speichern der Gruppe: ${err.message || err}`);
               }
             },
           }, icon('mdi:check'), 'Gruppe speichern')))
@@ -709,54 +792,22 @@ export class DeviceWizard {
   // ═══════════════ Strip Room Name Helper ═══════════════
   _stripRoomName(rawName, preferredAreaId) {
     if (!rawName) return '';
-    let name = rawName;
-
-    const candidateAreas = [];
     if (preferredAreaId) {
       const a = this.areas.find((ar) => ar.area_id === preferredAreaId);
-      if (a) candidateAreas.push(a);
+      if (a?.name) {
+        const cleaned = cleanRoomFromText(rawName, a.name);
+        if (cleaned && cleaned !== rawName.trim()) return cleaned;
+      }
     }
     for (const a of this.areas) {
-      if (!candidateAreas.includes(a)) candidateAreas.push(a);
-    }
-
-    for (const a of candidateAreas) {
-      if (!a?.name) continue;
-      const aName = a.name.trim();
-      if (!aName || aName.length < 2) continue;
-
-      const escaped = aName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const prefixRegex = new RegExp(`^${escaped}\\s*[-_–—:]*\\s*`, 'i');
-      const compoundPrefixRegex = new RegExp(`^${escaped}(?=[A-ZÄÖÜa-zäöü])`, 'i');
-      const suffixRegex = new RegExp(`\\s*[-_–—:]*\\s*${escaped}$`, 'i');
-      const midRegex = new RegExp(`\\s+[-_–—:]*\\s*${escaped}\\s*[-_–—:]*\\s+`, 'i');
-      const wordRegex = new RegExp(`\\b${escaped}\\b`, 'i');
-
-      let stripped = name;
-      if (prefixRegex.test(stripped)) {
-        stripped = stripped.replace(prefixRegex, '');
-      } else if (compoundPrefixRegex.test(stripped)) {
-        stripped = stripped.replace(compoundPrefixRegex, '');
-      } else if (suffixRegex.test(stripped)) {
-        stripped = stripped.replace(suffixRegex, '');
-      } else if (midRegex.test(stripped)) {
-        stripped = stripped.replace(midRegex, ' ');
-      } else if (wordRegex.test(stripped)) {
-        stripped = stripped.replace(wordRegex, '');
-      }
-
-      stripped = stripped.trim().replace(/\s{2,}/g, ' ').replace(/^[-_–—:\s]+|[-_–—:\s]+$/g, '');
-      if (stripped.length > 0 && stripped.length < name.length) {
-        name = stripped;
-        if (!this.selectedAreaId) {
-          this.selectedAreaId = a.area_id;
-        }
-        break;
+      if (a.area_id === preferredAreaId || !a.name) continue;
+      const cleaned = cleanRoomFromText(rawName, a.name);
+      if (cleaned && cleaned.length < rawName.length) {
+        if (!this.selectedAreaId) this.selectedAreaId = a.area_id;
+        return cleaned;
       }
     }
-
-    if (name) name = name.charAt(0).toUpperCase() + name.slice(1);
-    return name;
+    return rawName.trim();
   }
 
   // ═══════════════ Initialize selected device ═══════════════
@@ -794,6 +845,25 @@ export class DeviceWizard {
 
     this.selectedCategory = existing?.category || autoCat;
 
+    // Auto-detect best primary entity (Hauptentität)
+    let bestPrimary = existing?.entities?.primary;
+    if (!bestPrimary || !controllable.some((e) => e.entity_id === bestPrimary)) {
+      const prefDomain = this.selectedCategory === 'leuchte' ? 'light'
+        : this.selectedCategory === 'jalousie' ? 'cover'
+        : this.selectedCategory === 'wasserventil' ? 'valve'
+        : this.selectedCategory === 'fernseher' ? 'media_player'
+        : this.selectedCategory === 'klima' ? 'climate'
+        : 'switch';
+      const matchPref = controllable.find((e) => domainOf(e.entity_id) === prefDomain);
+      bestPrimary = matchPref?.entity_id || controllable[0]?.entity_id || '';
+    }
+    this.primaryEntityId = bestPrimary;
+
+    // Detect icon: existing custom icon > entity registry icon > category default
+    const catObj = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory);
+    const entWithIcon = devEntities.find((e) => e.entity_id === this.primaryEntityId && (e.icon || e.original_icon));
+    this.selectedIcon = existing?.icon || entWithIcon?.icon || catObj?.icon || 'mdi:devices';
+
     // Sub-entities / channels
     const existingSubs = existing?.entities?.sub_entities || {};
     this.channels = controllable.map((e, idx) => {
@@ -814,12 +884,11 @@ export class DeviceWizard {
       };
     });
 
-    this.primaryEntityId = existing?.entities?.primary || controllable[0]?.entity_id || '';
     this.powerEntityId = existing?.entities?.power || powerSensor;
     this.energyEntityId = existing?.entities?.energy || energySensor;
   }
 
-  // ═══════════════ STEP 1: Details (Name, Kategorie, Raum) ═══════════════
+  // ═══════════════ STEP 1: Details (Name, Kategorie, Raum, Icon) ═══════════════
   _renderStep1() {
     const areaOptions = [
       { value: '', label: 'Kein Raum', icon: 'mdi:map-marker-off' },
@@ -848,14 +917,31 @@ export class DeviceWizard {
       onInput: (e) => { this.customName = e.target.value; },
     });
 
+    const curCat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
+    const initialIcon = this.selectedIcon || curCat.icon || 'mdi:devices';
+
+    const iconPicker = new IconPicker({
+      hass: this.hass,
+      value: initialIcon,
+      placeholder: 'mdi:...',
+      onChange: (val) => {
+        this.selectedIcon = val;
+      },
+    });
+
     const catGrid = h('div', { class: 'cat-grid' },
       ...DEVICE_CATEGORIES.map((c) => {
         const card = h('div', {
           class: 'cat-card', style: { '--cat-color': c.color },
           ...(this.selectedCategory === c.id ? { 'data-selected': '' } : {}),
           onClick: () => {
+            const prevCat = DEVICE_CATEGORIES.find((catItem) => catItem.id === this.selectedCategory);
             this.selectedCategory = c.id;
             this.channels.forEach((ch) => { ch.category = c.id; });
+            if (!this.selectedIcon || this.selectedIcon === prevCat?.icon) {
+              this.selectedIcon = c.icon;
+              iconPicker._setValue(c.icon);
+            }
             this._render();
           },
         },
@@ -864,8 +950,7 @@ export class DeviceWizard {
         return card;
       }));
 
-    const curCat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
-    const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color, '--hero-color': curCat.color } }, icon(curCat.icon));
+    const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color, '--hero-color': curCat.color } }, icon(this.selectedIcon || curCat.icon));
 
     this.body.replaceChildren(
       hero,
@@ -873,6 +958,8 @@ export class DeviceWizard {
       h('div', { class: 'fields' },
         h('div', { class: 'field' }, 'Anzeigename im Dashboard', nameInput),
         h('div', { class: 'field' }, 'Raum (Bereich)', areaDropdown.el)),
+      h('div', { class: 'section-title', style: { marginTop: '16px' } }, 'Kachel-Icon (Home Assistant & Dashboard)'),
+      h('div', { style: { marginTop: '6px' } }, iconPicker.el),
       h('div', { class: 'section-title', style: { marginTop: '16px' } }, 'Haupt-Kategorie'),
       h('div', { class: 'hint' }, 'Bestimmt das Standard-Icon und das Verhalten im Dashboard:'),
       catGrid);
@@ -902,6 +989,36 @@ export class DeviceWizard {
     if (!isMulti) {
       // SINGLE ENTITY: No duplicate channel name, no duplicate category, no confusing disable switch!
       const ch = this.channels[0];
+
+      const devEntities = this.entities.filter((e) => e.device_id === this.selectedDevice?.id && !e.disabled_by);
+      const devActuators = devEntities.filter(isControllableActuator);
+
+      let primaryCard = null;
+      if (devActuators.length > 1) {
+        const primaryOptions = devActuators.map((e) => ({
+          value: e.entity_id,
+          label: `${e.name || e.original_name || e.entity_id} (${e.entity_id})`,
+          icon: domainOf(e.entity_id) === 'light' ? 'mdi:lightbulb' : 'mdi:power-plug',
+        }));
+        const primaryDd = new CustomDropdown({
+          options: primaryOptions,
+          value: this.primaryEntityId || ch.entity_id,
+          placeholder: 'Hauptentität auswählen...',
+          onChange: (val) => {
+            this.primaryEntityId = val;
+            ch.entity_id = val;
+          },
+        });
+        this._dropdowns.push(primaryDd);
+
+        primaryCard = h('div', { class: 'row-card', style: { padding: '14px 18px', gap: '8px' } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+            h('div', { class: 'feature-icon', style: { color: curCat.color || 'var(--cd-accent)' } }, icon('mdi:star-circle-outline')),
+            h('div', { style: { flex: 1 } },
+              h('div', { style: { fontWeight: '600', fontSize: '14px' } }, 'Hauptentität (Primäre Steuerentität)'),
+              h('div', { class: 'hint' }, 'Bestimmt die primäre Kachel-ID und das Hauptschaltverhalten.'))),
+          primaryDd.el);
+      }
 
       const powerPicker = new EntityPicker({
         hass: this.hass,
@@ -944,7 +1061,11 @@ export class DeviceWizard {
         h('div', { class: 'feature-desc' }, 'Zufälliges automatisches Schalten bei Abwesenheit zum Einbruchschutz')),
       h('div', { class: 'switch-ui' }));
 
-      this.body.replaceChildren(hero, header, powerCard, simCard);
+      const items = [hero, header];
+      if (primaryCard) items.push(primaryCard);
+      items.push(powerCard, simCard);
+
+      this.body.replaceChildren(...items);
       return;
     }
 
@@ -952,6 +1073,30 @@ export class DeviceWizard {
     const catOptions = DEVICE_CATEGORIES.map((c) => ({
       value: c.id, label: c.name, icon: c.icon, color: c.color,
     }));
+
+    const enabledChannels = this.channels.filter((c) => c.enabled);
+    const primaryOptions = (enabledChannels.length ? enabledChannels : this.channels).map((c) => ({
+      value: c.entity_id,
+      label: `${c.name || c.entity_id} (${c.entity_id})`,
+      icon: domainOf(c.entity_id) === 'light' ? 'mdi:lightbulb' : 'mdi:power-plug',
+    }));
+    const primaryDd = new CustomDropdown({
+      options: primaryOptions,
+      value: this.primaryEntityId || primaryOptions[0]?.value || '',
+      placeholder: 'Hauptkanal auswählen...',
+      onChange: (val) => {
+        this.primaryEntityId = val;
+      },
+    });
+    this._dropdowns.push(primaryDd);
+
+    const primaryCard = h('div', { class: 'row-card', style: { padding: '14px 18px', gap: '8px', marginBottom: '8px' } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+        h('div', { class: 'feature-icon', style: { color: curCat.color || 'var(--cd-accent)', display: 'grid', placeItems: 'center', width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(255,255,255,0.08)' } }, icon('mdi:star-circle-outline')),
+        h('div', { style: { flex: 1 } },
+          h('div', { style: { fontWeight: '600', fontSize: '14px' } }, 'Hauptentität (Primärer Hauptkanal)'),
+          h('div', { class: 'hint' }, 'Bestimmt die primäre Kachel-Repräsentation auf dem Dashboard.'))),
+      primaryDd.el);
 
     const channelCards = this.channels.map((ch, idx) => {
       const nameInput = h('input', {
@@ -1035,7 +1180,7 @@ export class DeviceWizard {
         simCard);
     });
 
-    this.body.replaceChildren(hero, header, ...channelCards);
+    this.body.replaceChildren(hero, header, primaryCard, ...channelCards);
   }
 
   // ═══════════════ STEP 3: Zusammenfassung & Speichern ═══════════════
@@ -1044,9 +1189,10 @@ export class DeviceWizard {
     const areaName = area?.name || 'Kein Raum';
     const cat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
     const activeChannels = this.channels.filter((c) => c.enabled);
+    const isMulti = activeChannels.length > 1;
 
     // Reliable Hero Badge with Category Icon and glowing ring
-    const hero = h('div', { class: 'win11-hero-badge', style: { color: cat.color, '--hero-color': cat.color } }, icon(cat.icon || 'mdi:check-circle'));
+    const hero = h('div', { class: 'win11-hero-badge', style: { color: cat.color, '--hero-color': cat.color } }, icon(this.selectedIcon || cat.icon || 'mdi:check-circle'));
 
     const header = h('div', { style: { textAlign: 'center', marginBottom: '14px' } },
       h('h3', { style: { margin: '0 0 4px', fontSize: '18px', fontWeight: '700' } }, 'Fast fertig!'),
@@ -1056,16 +1202,33 @@ export class DeviceWizard {
     const hasSim = activeChannels.some((c) => c.presence_simulation);
     const hasPower = activeChannels.some((c) => c.power);
 
+    const primaryCh = activeChannels.find((c) => c.entity_id === this.primaryEntityId) || activeChannels[0] || this.channels[0];
+    const dom = domainOf(primaryCh?.entity_id || 'light.demo');
+    const previewId = buildSuggestedEntityId({
+      domain: dom,
+      deviceName: this.customName,
+      roomName: area?.name,
+      channelName: primaryCh?.name,
+      isMultiChannel: false,
+    });
+    const previewFriendly = buildCleanFriendlyName({
+      deviceName: this.customName,
+      roomName: area?.name,
+      channelName: primaryCh?.name,
+      isMultiChannel: false,
+    });
+
     const previewCard = h('div', {
       class: 'win11-preview-card',
       style: { '--preview-color': cat.color },
     },
-    h('div', { class: 'win11-preview-icon' }, icon(cat.icon)),
+    h('div', { class: 'win11-preview-icon' }, icon(this.selectedIcon || cat.icon)),
     h('div', { class: 'win11-preview-info' },
-      h('div', { class: 'win11-preview-name' }, this.customName || 'Mein Gerät'),
-      h('div', { class: 'win11-preview-meta' },
-        h('span', { class: 'badge-tag category', style: { '--badge-cat-color': cat.color } }, icon(cat.icon), cat.name),
+      h('div', { class: 'win11-preview-name' }, previewFriendly || this.customName || 'Mein Gerät'),
+      h('div', { class: 'win11-preview-meta', style: { display: 'flex', flexWrap: 'wrap', gap: '6px' } },
+        h('span', { class: 'badge-tag category', style: { '--badge-cat-color': cat.color } }, icon(this.selectedIcon || cat.icon), cat.name),
         h('span', { class: 'badge-tag area' }, icon('mdi:map-marker'), areaName),
+        h('span', { class: 'badge-tag' }, icon('mdi:identifier'), previewId),
         hasPower ? h('span', { class: 'badge-tag', style: { color: '#ffb74d' } }, icon('mdi:flash'), 'Leistungsmessung') : null,
         hasSim ? h('span', { class: 'badge-tag', style: { color: '#ce93d8' } }, icon('mdi:home-clock'), 'Simulation') : null)));
 
@@ -1083,7 +1246,7 @@ export class DeviceWizard {
     h('div', { class: 'feature-icon' }, icon('mdi:home-assistant')),
     h('div', { class: 'feature-info' },
       h('div', { class: 'feature-title' }, 'In Home Assistant synchronisieren (Standard: Aktiv)'),
-      h('div', { class: 'feature-desc' }, 'Aktualisiert Gerätename und Raumzuweisung direkt in den HA-Registries')),
+      h('div', { class: 'feature-desc' }, `Aktualisiert Gerätename, Entity-IDs (z. B. ${previewId}), Kachel-Icon und Raumzuweisung in Home Assistant.`)),
     h('div', { class: 'switch-ui' }));
 
     const syncAccordion = h('details', { class: 'adv-options' },
@@ -1096,7 +1259,14 @@ export class DeviceWizard {
         h('div', { style: { fontWeight: '600', fontSize: '13px' } }, `Kanäle (${activeChannels.length} aktiv)`),
         h('div', { class: 'hint' }, activeChannels.map((c) => {
           const cCat = DEVICE_CATEGORIES.find((catItem) => catItem.id === c.category);
-          return `• ${c.name} (${c.entity_id}) – ${cCat?.name || c.category}`;
+          const cId = buildSuggestedEntityId({
+            domain: domainOf(c.entity_id),
+            deviceName: this.customName,
+            roomName: area?.name,
+            channelName: c.name,
+            isMultiChannel: true,
+          });
+          return `• ${c.name} ➔ ${cId} – ${cCat?.name || c.category}`;
         }).join('\n')))
       : null;
 
@@ -1166,9 +1336,11 @@ export class DeviceWizard {
     const d = this.selectedDevice;
     const activeChannels = this.channels.filter((c) => c.enabled);
     const isMulti = activeChannels.length > 1;
+    const area = this.areas.find((a) => a.area_id === this.selectedAreaId);
+    const roomName = area?.name || '';
 
     try {
-      // 1. Rename in Home Assistant if checked
+      // 1. Rename and sync in Home Assistant if checked
       if (this.renameInHA && d) {
         try {
           await this.hass.callWS({
@@ -1181,15 +1353,39 @@ export class DeviceWizard {
           console.warn('[wizard] device rename failed', err);
         }
 
-        // Entity renames
+        // Entity renames in HA
         for (const ch of activeChannels) {
+          const dom = domainOf(ch.entity_id);
+          const friendlyName = buildCleanFriendlyName({
+            deviceName: this.customName,
+            roomName,
+            channelName: ch.name,
+            isMultiChannel: isMulti,
+          });
+          const suggestedId = buildSuggestedEntityId({
+            domain: dom,
+            deviceName: this.customName,
+            roomName,
+            channelName: ch.name,
+            isMultiChannel: isMulti,
+          });
+
           try {
-            await this.hass.callWS({
+            const updatePayload = {
               type: 'config/entity_registry/update',
               entity_id: ch.entity_id,
-              name: ch.name || undefined,
+              name: friendlyName || undefined,
               area_id: this.selectedAreaId || undefined,
-            });
+            };
+            if (this.selectedIcon) {
+              updatePayload.icon = this.selectedIcon;
+            }
+            if (suggestedId && suggestedId !== ch.entity_id) {
+              updatePayload.new_entity_id = suggestedId;
+            }
+            await this.hass.callWS(updatePayload);
+            // Update local ch.entity_id with new ID
+            ch.entity_id = suggestedId;
           } catch (err) {
             console.warn('[wizard] entity rename failed', err);
           }
@@ -1207,7 +1403,7 @@ export class DeviceWizard {
             category: ch.category,
             custom_name: ch.name,
             name: ch.name,
-            icon: DEVICE_CATEGORIES.find((cat) => cat.id === ch.category)?.icon || 'mdi:power-plug',
+            icon: this.selectedIcon || DEVICE_CATEGORIES.find((cat) => cat.id === ch.category)?.icon || 'mdi:power-plug',
             original_id: ch.entity_id,
             unique_id: ch.unique_id,
             power: ch.power || undefined,
@@ -1216,14 +1412,14 @@ export class DeviceWizard {
           };
         }
         entitiesConfig = {
-          primary: firstId,
+          primary: this.primaryEntityId || firstId,
           primary_unique_id: activeChannels[0]?.unique_id,
           sub_entities,
         };
       } else {
         const primary = activeChannels[0] || this.channels[0];
         entitiesConfig = {
-          primary: primary?.entity_id,
+          primary: (this.primaryEntityId && activeChannels.some((c) => c.entity_id === this.primaryEntityId)) ? this.primaryEntityId : primary?.entity_id,
           primary_unique_id: primary?.unique_id,
           power: primary?.power || undefined,
           energy: primary?.energy || undefined,
@@ -1236,6 +1432,7 @@ export class DeviceWizard {
         device_id: d.id,
         category: this.selectedCategory,
         custom_name: this.customName,
+        icon: this.selectedIcon || undefined,
         area_id: this.selectedAreaId || undefined,
         entities: entitiesConfig,
       });

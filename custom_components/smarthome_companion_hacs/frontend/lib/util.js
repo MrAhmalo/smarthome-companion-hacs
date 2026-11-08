@@ -402,9 +402,8 @@ export function debounce(fn, ms) {
 }
 
 /**
- * Sets a range slider's value and computes the exact CSS `--val` gradient stop
- * so the colored fill matches the right edge of the 6px rounded thumb pill
- * at every percentage from 0% to 100%.
+ * Sets a range slider's value and computes the CSS `--val` gradient stop
+ * so the colored fill matches the thumb position cleanly from 0% to 100%.
  */
 export function setSliderVal(slider, val) {
   if (!slider) return;
@@ -418,6 +417,122 @@ export function setSliderVal(slider, val) {
   }
   const p = max > min ? (v - min) / (max - min) : 0;
   const pct = (p * 100).toFixed(2);
-  const offsetPx = ((1 - p) * 6).toFixed(2);
-  slider.style.setProperty('--val', `calc(${pct}% + ${offsetPx}px)`);
+  slider.style.setProperty('--val', `${pct}%`);
+}
+
+/**
+ * Converts a human string to a safe identifier without German umlaut issues:
+ * ä->ae, ö->oe, ü->ue, ß->ss, spaces and dashes to underscores.
+ */
+export function toSafeEntityId(input) {
+  if (!input) return '';
+  return input
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9_]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+/**
+ * Robustly strips room names and German room prefixes from device / channel names:
+ * e.g. "Zimmer von Julian Lampe" with room "Julian" -> "Lampe"
+ * e.g. "Julian Deckenleuchte" with room "Julian" -> "Deckenleuchte"
+ * e.g. "Julians Zimmer Lampe" with room "Julian" -> "Lampe"
+ * e.g. "Raum Julian Schalter" with room "Julian" -> "Schalter"
+ */
+export function cleanRoomFromText(input, roomName) {
+  if (!input) return '';
+  let str = input.trim();
+  if (!roomName || roomName === 'Ohne Raum' || roomName === 'Kein Raum') {
+    return str;
+  }
+
+  const rClean = roomName.trim();
+  if (!rClean || rClean.length < 2) return str;
+
+  const escaped = rClean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // Match full compound prefixes: "Zimmer von Julian", "Raum von Julian", "Im Zimmer von Julian"
+  const compoundPrefix = new RegExp(`^(?:(?:im|in|vom|am)\\s+)?(?:zimmer|raum)\\s+(?:von\\s+)?${escaped}\\s*[-_–—:]*\\s*`, 'i');
+  // Match possessive: "Julians Zimmer", "Julian's Zimmer", "Julian Zimmer", "Julian Raum"
+  const possessivePrefix = new RegExp(`^${escaped}(?:'s|s)?\\s+(?:zimmer|raum)\\s*[-_–—:]*\\s*`, 'i');
+  // Match direct room prefix: "Julian - Lampe", "Julian: Lampe", "Julian Lampe"
+  const directPrefix = new RegExp(`^${escaped}\\s*[-_–—:]*\\s*`, 'i');
+  // Match suffix: "Lampe - Julian", "Lampe im Zimmer von Julian"
+  const suffix = new RegExp(`\\s*[-_–—:]*\\s*(?:(?:im|in)\\s+)?(?:zimmer|raum\\s+(?:von\\s+)?)?${escaped}$`, 'i');
+
+  if (compoundPrefix.test(str)) {
+    str = str.replace(compoundPrefix, '');
+  } else if (possessivePrefix.test(str)) {
+    str = str.replace(possessivePrefix, '');
+  } else if (directPrefix.test(str)) {
+    str = str.replace(directPrefix, '');
+  } else if (suffix.test(str)) {
+    str = str.replace(suffix, '');
+  }
+
+  // Also clean any dangling "Zimmer von " or "Raum von " if room was stripped previously
+  str = str.replace(/^(?:(?:im|in)\s+)?(?:zimmer|raum)(?:\s+von)?\s*[-_–—:]*\s*/i, '');
+  str = str.trim().replace(/^[-_–—:\s]+|[-_–—:\s]+$/g, '');
+
+  if (str) {
+    str = str.charAt(0).toUpperCase() + str.slice(1);
+  }
+  return str;
+}
+
+/**
+ * Builds the clean Friendly Name for Home Assistant.
+ * Schema: "<RoomName> <CleanDeviceName>" (avoiding duplicate room names).
+ */
+export function buildCleanFriendlyName({ deviceName, roomName, channelName, isMultiChannel = false }) {
+  const cleanRoom = (roomName && roomName !== 'Ohne Raum' && roomName !== 'Kein Raum') ? roomName.trim() : null;
+  const targetRaw = isMultiChannel
+    ? (channelName && channelName.trim() ? channelName : deviceName)
+    : (deviceName && deviceName.trim() ? deviceName : channelName);
+
+  let cleanTarget = cleanRoom ? cleanRoomFromText(targetRaw, cleanRoom) : (targetRaw || '').trim();
+  if (!cleanTarget) return cleanRoom || 'Gerät';
+  if (!cleanRoom) return cleanTarget;
+
+  if (cleanTarget.toLowerCase().startsWith(cleanRoom.toLowerCase())) {
+    return cleanTarget;
+  }
+  return `${cleanRoom} ${cleanTarget}`;
+}
+
+/**
+ * Builds a standardized Home Assistant entity ID safely:
+ * Schema: "<domain>.<safe_room>_<safe_device>"
+ * e.g. "light.julian_lampe", "switch.garten_ventilbox_rasen_nord"
+ */
+export function buildSuggestedEntityId({ domain, deviceName, roomName, channelName, isMultiChannel = false }) {
+  const cleanRoom = (roomName && roomName !== 'Ohne Raum' && roomName !== 'Kein Raum') ? roomName.trim() : null;
+  const safeRoom = cleanRoom ? toSafeEntityId(cleanRoom) : null;
+
+  const targetRaw = isMultiChannel
+    ? (channelName && channelName.trim() ? channelName : deviceName)
+    : (deviceName && deviceName.trim() ? deviceName : channelName);
+
+  let cleanTarget = cleanRoom ? cleanRoomFromText(targetRaw, cleanRoom) : (targetRaw || '').trim();
+  let safeTarget = toSafeEntityId(cleanTarget);
+  if (!safeTarget) safeTarget = 'geraet';
+
+  const segments = [];
+  if (safeRoom) {
+    segments.push(safeRoom);
+  }
+  if (!safeRoom || !safeTarget.startsWith(safeRoom)) {
+    segments.push(safeTarget);
+  } else {
+    segments.length = 0;
+    segments.push(safeTarget);
+  }
+
+  const idBody = segments.join('_').replace(/_+/g, '_');
+  return `${domain}.${idBody}`;
 }

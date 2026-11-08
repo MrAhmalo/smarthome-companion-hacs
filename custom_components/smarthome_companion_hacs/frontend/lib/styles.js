@@ -205,6 +205,9 @@ button { font: inherit; color: inherit; }
 .group-sub-grid {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0;
 }
+.group-sub-grid .tile {
+  grid-column: span 1;
+}
 .chevron-btn { transition: transform .25s ease; }
 .tile[data-open] .chevron-btn { transform: rotate(180deg); }
 
@@ -264,7 +267,7 @@ input[type=range].slider {
   background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
   touch-action: none;
   box-sizing: border-box;
-  padding: 0;
+  padding: 0 4px;
   margin: 0;
 }
 input[type=range].slider::-webkit-slider-runnable-track {
@@ -273,25 +276,25 @@ input[type=range].slider::-webkit-slider-runnable-track {
 }
 input[type=range].slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 6px;
+  width: 8px;
   height: 18px;
   background-color: #fff;
-  border-radius: 3px;
+  border-radius: 4px;
   margin-top: 5px;
   border: 0;
-  box-shadow: 0 1px 3px rgba(0,0,0,.4);
+  box-shadow: 0 1px 4px rgba(0,0,0,.45);
 }
 input[type=range].slider::-moz-range-track {
   height: 28px;
   border-radius: 14px;
 }
 input[type=range].slider::-moz-range-thumb {
-  width: 6px;
+  width: 8px;
   height: 18px;
   background-color: #fff;
-  border-radius: 3px;
+  border-radius: 4px;
   border: 0;
-  box-shadow: 0 1px 3px rgba(0,0,0,.4);
+  box-shadow: 0 1px 4px rgba(0,0,0,.45);
 }
 
 /* media + climate cards */
@@ -817,7 +820,7 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   height: 24px;
   border-radius: 12px;
   box-sizing: border-box;
-  padding: 0;
+  padding: 0 4px;
   margin: 0;
 }
 .cover-slider-wrap input[type=range].slider::-webkit-slider-runnable-track {
@@ -826,25 +829,25 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 }
 .cover-slider-wrap input[type=range].slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 6px;
+  width: 8px;
   height: 16px;
   background-color: #fff;
-  border-radius: 3px;
+  border-radius: 4px;
   margin-top: 4px;
   border: 0;
-  box-shadow: 0 1px 3px rgba(0,0,0,.4);
+  box-shadow: 0 1px 4px rgba(0,0,0,.45);
 }
 .cover-slider-wrap input[type=range].slider::-moz-range-track {
   height: 24px;
   border-radius: 12px;
 }
 .cover-slider-wrap input[type=range].slider::-moz-range-thumb {
-  width: 6px;
+  width: 8px;
   height: 16px;
   background-color: #fff;
-  border-radius: 3px;
+  border-radius: 4px;
   border: 0;
-  box-shadow: 0 1px 3px rgba(0,0,0,.4);
+  box-shadow: 0 1px 4px rgba(0,0,0,.45);
 }
 
 /* ── Custom Dropdown (No native browser <select>) ── */
