@@ -2397,14 +2397,22 @@ class Tile {
     this.el.classList.add('media');
   }
 
-  get isWide() {
-    const isDetail = !!this.ctx?.isDetail;
-    const active = this._active(this._st);
-    const { brightness } = lightSupport(this._st);
+  get hasSlider() {
+    if (this.domain === 'light') {
+      const { brightness } = lightSupport(this._st);
+      return this._active(this._st) && !!brightness;
+    }
+    return false;
+  }
+
+  get isAlwaysWide() {
     return ['cover', 'media_player', 'climate'].includes(this.kind)
       || this.spec.is_group === true
-      || (!isDetail && this.domain === 'light' && active && brightness)
       || this.spec.wide === true;
+  }
+
+  get isWide() {
+    return this.el.classList.contains('wide');
   }
 
   setWide(wide) {
@@ -2571,10 +2579,6 @@ class Tile {
     const showSwatches = active && color && presets.length > 0;
     const hasFeature = showSlider || showSwatches;
     this.feature.hidden = !hasFeature;
-    const isDetail = !!this.ctx?.isDetail;
-    if (!isDetail) {
-      this.el.classList.toggle('wide', hasFeature);
-    }
     if (!hasFeature) return;
     this.slider.hidden = !showSlider;
     this.swatches.hidden = !showSwatches;
@@ -2613,6 +2617,14 @@ class GroupTile {
     });
 
     this._build();
+  }
+
+  get hasSlider() {
+    return true;
+  }
+
+  get isAlwaysWide() {
+    return true;
   }
 
   get isWide() {
@@ -2810,32 +2822,63 @@ function average(hass, ids) {
 }
 
 /**
- * Smart 2-per-row pairing layout algorithm.
- * Pairs compact/half tiles side-by-side (2 in a row).
- * Expands any odd leftover half tile to full-width (span 2) so no empty gap exists.
+ * Smart 2-per-row layout algorithm respecting slider vs compact tiles.
+ * - Naturally wide tiles (Media Player/TV, covers) get full width.
+ * - Slider tiles: if 2 exist, paired side-by-side in 1 row; if 1 (or odd leftover), gets full width!
+ * - Compact non-slider tiles: paired side-by-side with each other in rows!
+ * - Master group tiles sit at the bottom in full width.
  */
-function applySmartTileLayout(tiles) {
-  let halfPending = null;
+function applySmartTileLayout(tiles, grid = null) {
+  if (!tiles || !tiles.length) return;
+
+  const topWide = [];
+  const bottomWide = [];
+  const sliderTiles = [];
+  const compactTiles = [];
+
   for (const t of tiles) {
-    const wide = t.isWide;
-    if (wide) {
-      if (halfPending) {
-        halfPending.setWide(true);
-        halfPending = null;
-      }
-      t.setWide(true);
-    } else {
-      if (halfPending) {
-        halfPending.setWide(false);
-        t.setWide(false);
-        halfPending = null;
+    if (t.isAlwaysWide) {
+      if (t.spec?.is_group || t.is_group === true || t.constructor?.name === 'GroupTile') {
+        bottomWide.push(t);
       } else {
-        halfPending = t;
+        topWide.push(t);
       }
+    } else if (t.hasSlider) {
+      sliderTiles.push(t);
+    } else {
+      compactTiles.push(t);
     }
   }
-  if (halfPending) {
-    halfPending.setWide(true);
+
+  // Always wide tiles
+  topWide.forEach((t) => t.setWide(true));
+  bottomWide.forEach((t) => t.setWide(true));
+
+  // Slider tiles:
+  // "wenn zwei geräte mit slider existieren das diese nebeneinander sind"
+  // "falls nur ein gerät mit slider es immer ein eigene zeile bekommt"
+  if (sliderTiles.length % 2 === 1) {
+    sliderTiles[0].setWide(true);
+    for (let i = 1; i < sliderTiles.length; i++) {
+      sliderTiles[i].setWide(false);
+    }
+  } else {
+    sliderTiles.forEach((t) => t.setWide(false));
+  }
+
+  // Compact non-slider tiles: pair in 2s
+  if (compactTiles.length % 2 === 1) {
+    for (let i = 0; i < compactTiles.length - 1; i++) {
+      compactTiles[i].setWide(false);
+    }
+    compactTiles[compactTiles.length - 1].setWide(true);
+  } else {
+    compactTiles.forEach((t) => t.setWide(false));
+  }
+
+  if (grid) {
+    const ordered = [...topWide, ...compactTiles, ...sliderTiles, ...bottomWide];
+    grid.replaceChildren(...ordered.map((t) => t.el));
   }
 }
 
@@ -2851,6 +2894,8 @@ class GroupedCoverTile {
     this.hass = null;
     this.entityIds = coverSpecs.map((c) => c.entity_id);
     this.isWide = true;
+    this.isAlwaysWide = true;
+    this.hasSlider = false;
     this._build();
   }
 
@@ -3069,7 +3114,7 @@ class Room {
       this.head,
       h('div', { class: 'room-body' }, h('div', { class: 'room-body-inner' }, this.grid)));
     this._applyOpen();
-    applySmartTileLayout(this.tiles);
+    applySmartTileLayout(this.tiles, this.grid);
   }
 
   _applyOpen() {
@@ -3120,7 +3165,7 @@ class Room {
   update(hass) {
     this.hass = hass;
     this.tiles.forEach((t) => t.update(hass));
-    applySmartTileLayout(this.tiles);
+    applySmartTileLayout(this.tiles, this.grid);
 
     // Group controls
     for (const g of this.groups) {

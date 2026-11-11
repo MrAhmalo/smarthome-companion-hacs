@@ -117,6 +117,14 @@ export class MockHass {
     }
   }
 
+  updateState(entityId, state, attributes = {}) {
+    if (this.states[entityId]) {
+      this.states[entityId].state = state;
+      Object.assign(this.states[entityId].attributes, attributes);
+      this._notify();
+    }
+  }
+
   applyScenario(scenario) {
     if (scenario === 'all_on') {
       for (const [id, st] of Object.entries(this.states)) {

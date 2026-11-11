@@ -69,6 +69,14 @@ def capture(scene="dashboard", out_name=None, width=1280, height=800):
         action_code = "window.panel._openWarningDetail();"
     elif scene == "all_on":
         action_code = "window.mockHass.applyScenario('all_on');"
+    elif scene == "single_slider":
+        action_code = "window.mockHass.updateState('light.bettlampe', 'off');"
+    elif scene == "master_off":
+        action_code = """
+        window.mockHass.states['light.schreibtisch_lampe'].state = 'off';
+        window.mockHass.states['light.lavalampe'].state = 'off';
+        window.panel._reload();
+        """
     elif scene == "edit_mode":
         action_code = "window.panel._toggleEditMode();"
     elif scene == "group_modal":

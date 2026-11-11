@@ -112,14 +112,22 @@ export class Tile {
     this.el.classList.add('media');
   }
 
-  get isWide() {
-    const isDetail = !!this.ctx?.isDetail;
-    const active = this._active(this._st);
-    const { brightness } = lightSupport(this._st);
+  get hasSlider() {
+    if (this.domain === 'light') {
+      const { brightness } = lightSupport(this._st);
+      return this._active(this._st) && !!brightness;
+    }
+    return false;
+  }
+
+  get isAlwaysWide() {
     return ['cover', 'media_player', 'climate'].includes(this.kind)
       || this.spec.is_group === true
-      || (!isDetail && this.domain === 'light' && active && brightness)
       || this.spec.wide === true;
+  }
+
+  get isWide() {
+    return this.el.classList.contains('wide');
   }
 
   setWide(wide) {
@@ -286,10 +294,6 @@ export class Tile {
     const showSwatches = active && color && presets.length > 0;
     const hasFeature = showSlider || showSwatches;
     this.feature.hidden = !hasFeature;
-    const isDetail = !!this.ctx?.isDetail;
-    if (!isDetail) {
-      this.el.classList.toggle('wide', hasFeature);
-    }
     if (!hasFeature) return;
     this.slider.hidden = !showSlider;
     this.swatches.hidden = !showSwatches;
@@ -328,6 +332,14 @@ export class GroupTile {
     });
 
     this._build();
+  }
+
+  get hasSlider() {
+    return true;
+  }
+
+  get isAlwaysWide() {
+    return true;
   }
 
   get isWide() {
