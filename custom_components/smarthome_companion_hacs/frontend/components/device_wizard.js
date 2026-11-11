@@ -1,6 +1,6 @@
-import { h, icon, domainOf } from '../lib/util.js?v=2.8.22';
-import { EntityPicker } from './entity_picker.js?v=2.8.22';
-import { CustomDropdown } from './custom_dropdown.js?v=2.8.22';
+import { h, icon, domainOf } from '../lib/util.js?v=2.8.23';
+import { EntityPicker } from './entity_picker.js?v=2.8.23';
+import { CustomDropdown } from './custom_dropdown.js?v=2.8.23';
 
 export const DEVICE_CATEGORIES = [
   { id: 'leuchte', name: 'Leuchte', icon: 'mdi:lightbulb', color: '#ffc107', desc: 'Lampen, Spots & LED-Streifen' },
@@ -73,6 +73,7 @@ export class DeviceWizard {
     this.searchQuery = '';
     this.statusFilter = 'unconfigured'; // 'unconfigured' | 'all' | 'configured'
     this.selectedDevices = new Set();
+    this._expandedDeviceChannels = new Set();
     this.groups = {};
 
     this.isCelebration = false;
@@ -404,6 +405,15 @@ export class DeviceWizard {
               icon('mdi:lightbulb-group'), `Gruppe (${g.children?.length || 0} Elemente)`))),
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
           h('button', {
+            class: 'btn secondary small',
+            title: 'Gruppe bearbeiten',
+            'aria-label': 'Bearbeiten',
+            onClick: (e) => {
+              e.stopPropagation();
+              this._openGroupModal(g);
+            },
+          }, icon('mdi:pencil'), 'Bearbeiten'),
+          h('button', {
             class: 'icon-btn danger', title: 'Gruppe auflösen',
             onClick: (e) => {
               e.stopPropagation();
@@ -441,8 +451,21 @@ export class DeviceWizard {
             class: 'badge-tag category',
             style: { '--badge-cat-color': catColor },
           }, icon(cat?.icon || 'mdi:check-circle'), cat?.name || cfg.category));
-        } else if (controllable.length > 0) {
-          badges.push(h('span', { class: 'badge-tag' }, `${controllable.length} steuerbar`));
+        } else if (controllable.length > 1) {
+          const isExp = this._expandedDeviceChannels.has(d.id);
+          badges.push(h('button', {
+            class: 'btn-channels-toggle',
+            type: 'button',
+            title: isExp ? 'Kanäle einklappen' : 'Kanäle anzeigen',
+            onClick: (e) => {
+              e.stopPropagation();
+              if (isExp) this._expandedDeviceChannels.delete(d.id);
+              else this._expandedDeviceChannels.add(d.id);
+              this._updateDeviceList();
+            },
+          }, icon(isExp ? 'mdi:chevron-up' : 'mdi:chevron-down'), `${controllable.length} Kanäle`));
+        } else if (controllable.length === 1) {
+          badges.push(h('span', { class: 'badge-tag' }, '1 steuerbar'));
         }
 
         const actions = [];
@@ -487,7 +510,7 @@ export class DeviceWizard {
           );
         }
 
-        return h('div', {
+        const mainCard = h('div', {
           class: 'device-card',
           ...(isChecked ? { 'data-selected': '' } : {}),
           onClick: () => {
@@ -509,15 +532,52 @@ export class DeviceWizard {
           h('div', { class: 'd-name' }, name),
           h('div', { class: 'd-meta' }, mfg ? h('span', {}, mfg) : null, ...badges)),
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, ...actions));
+
+        const isExp = this._expandedDeviceChannels.has(d.id);
+        if (isExp && controllable.length > 1) {
+          const channelRows = controllable.map((e) => {
+            const chKey = `d:${d.id}:${e.entity_id}`;
+            const isChChecked = this.selectedDevices.has(chKey);
+            const chName = e.name || e.original_name || e.entity_id;
+            const isLight = domainOf(e.entity_id) === 'light';
+            return h('div', {
+              class: 'device-channel-row', ...(isChChecked ? { 'data-selected': '' } : {}),
+              onClick: (ev) => {
+                ev.stopPropagation();
+                if (this.selectedDevices.has(chKey)) this.selectedDevices.delete(chKey);
+                else this.selectedDevices.add(chKey);
+                this._updateDeviceList();
+              },
+            },
+            h('button', {
+              class: 'sel-checkbox', ...(isChChecked ? { 'data-checked': '' } : {}),
+              type: 'button', 'aria-label': `${chName} auswählen`,
+              onClick: (ev) => {
+                ev.stopPropagation();
+                if (this.selectedDevices.has(chKey)) this.selectedDevices.delete(chKey);
+                else this.selectedDevices.add(chKey);
+                this._updateDeviceList();
+              },
+            }, isChChecked ? icon('mdi:check') : null),
+            icon(isLight ? 'mdi:lightbulb' : 'mdi:power-plug'),
+            h('div', { class: 'device-channel-info' },
+              h('div', { class: 'device-channel-name' }, chName),
+              h('div', { class: 'device-channel-meta' }, e.entity_id)));
+          });
+          return [mainCard, h('div', { class: 'device-channels-wrap' }, ...channelRows)];
+        }
+
+        return [mainCard];
       });
 
+      const devCardElements = devCards.flat();
       const totalCount = groupCards.length + devCards.length;
       return h('div', { class: 'device-room-section' },
         h('div', { class: 'device-room-header' },
           icon(areaName === 'Ohne Raum' ? 'mdi:help-circle-outline' : 'mdi:home-outline'),
           h('span', {}, areaName),
           h('span', { class: 'room-count' }, `(${totalCount})`)),
-        h('div', { class: 'device-list' }, ...groupCards, ...devCards));
+        h('div', { class: 'device-list' }, ...groupCards, ...devCardElements));
     });
 
     const children = [...sections];
@@ -526,38 +586,90 @@ export class DeviceWizard {
       const selectedList = Array.from(this.selectedDevices);
       const names = selectedList.map((id) => {
         if (this.groups[id]) return this.groups[id].name;
+        if (id.startsWith('d:')) {
+          const parts = id.split(':', 2);
+          const ent = this.entities.find((e) => e.entity_id === parts[2]);
+          return ent?.name || ent?.original_name || parts[2];
+        }
         const d = this.devices.find((dev) => dev.id === id);
         return d?.name_by_user || d?.name || id;
       }).join(', ');
-      const hasSubGroup = selectedList.some((id) => !!this.groups[id]);
 
-      const canGroup = selectedList.length >= 2;
-      const countText = canGroup
-        ? `${selectedList.length} ausgewählt`
-        : `${selectedList.length} ausgewählt (mind. 2 zum Gruppieren)`;
+      const isSingle = selectedList.length === 1;
+      const singleId = selectedList[0];
+      const isSingleGroup = isSingle && !!this.groups[singleId];
+      const allGroups = selectedList.length >= 2 && selectedList.every((id) => !!this.groups[id]);
+      const hasExistingGroups = Object.keys(this.groups).length > 0;
 
-      const bar = h('div', { class: 'selection-action-bar' },
-        h('div', { class: 'sel-info' },
-          h('span', { class: 'sel-count' }, countText),
-          h('span', { class: 'sel-names' }, names)),
-        h('div', { class: 'sel-buttons' },
+      const buttons = [
+        h('button', {
+          class: 'btn secondary small',
+          type: 'button',
+          onClick: () => { this.selectedDevices.clear(); this._updateDeviceList(); },
+        }, 'Abbrechen')
+      ];
+
+      if (isSingleGroup) {
+        buttons.push(
           h('button', {
             class: 'btn secondary small',
             type: 'button',
-            onClick: () => { this.selectedDevices.clear(); this._updateDeviceList(); },
-          }, 'Abbrechen'),
+            onClick: () => this._openGroupModal(this.groups[singleId]),
+          }, icon('mdi:pencil'), 'Gruppe bearbeiten'),
+          h('button', {
+            class: 'btn danger small',
+            type: 'button',
+            onClick: () => this._removeGroup(singleId, this.groups[singleId].name),
+          }, icon('mdi:delete-outline'), 'Auflösen')
+        );
+      } else if (isSingle) {
+        if (hasExistingGroups) {
+          buttons.push(
+            h('button', {
+              class: 'btn primary small',
+              type: 'button',
+              onClick: () => this._openAddToGroupModal(selectedList),
+            }, icon('mdi:plus-box-multiple'), 'Zu bestehender Gruppe hinzufügen')
+          );
+        }
+        buttons.push(
           h('button', {
             class: 'btn primary small',
             type: 'button',
-            disabled: !canGroup,
-            title: canGroup ? '' : 'Mindestens 2 Geräte oder Gruppen auswählen',
-            style: canGroup ? {} : { opacity: '0.45', cursor: 'not-allowed' },
-            onClick: () => {
-              if (canGroup) this._openGroupModal();
-            },
-          }, icon('mdi:lightbulb-group'),
-            h('span', { class: 'btn-label-desktop' }, hasSubGroup ? 'Als Hauptgruppe zusammenfassen' : 'Als Gruppe zusammenfassen'),
-            h('span', { class: 'btn-label-mobile' }, hasSubGroup ? 'Hauptgruppe' : 'Gruppieren')))
+            disabled: true,
+            title: 'Mindestens 2 Geräte oder Gruppen zum Gruppieren auswählen',
+            style: { opacity: '0.45', cursor: 'not-allowed' },
+          }, icon('mdi:lightbulb-group'), 'Neue Gruppe (mind. 2)')
+        );
+      } else {
+        // >= 2 items
+        buttons.push(
+          h('button', {
+            class: 'btn primary small',
+            type: 'button',
+            onClick: () => this._openGroupModal(),
+          }, icon(allGroups ? 'mdi:folder-multiple' : 'mdi:lightbulb-group'),
+            h('span', { class: 'btn-label-desktop' }, allGroups ? 'Als Hauptgruppe zusammenfassen' : 'Als Gruppe zusammenfassen'),
+            h('span', { class: 'btn-label-mobile' }, allGroups ? 'Hauptgruppe' : 'Gruppieren'))
+        );
+        if (hasExistingGroups && !allGroups) {
+          buttons.push(
+            h('button', {
+              class: 'btn secondary small',
+              type: 'button',
+              onClick: () => this._openAddToGroupModal(selectedList),
+            }, icon('mdi:plus-box-multiple'),
+              h('span', { class: 'btn-label-desktop' }, 'Zu bestehender Gruppe hinzufügen'),
+              h('span', { class: 'btn-label-mobile' }, '+ Gruppe'))
+          );
+        }
+      }
+
+      const bar = h('div', { class: 'selection-action-bar' },
+        h('div', { class: 'sel-info' },
+          h('span', { class: 'sel-count' }, `${selectedList.length} ausgewählt`),
+          h('span', { class: 'sel-names' }, names)),
+        h('div', { class: 'sel-buttons' }, ...buttons)
       );
       children.push(bar);
     }
@@ -565,32 +677,96 @@ export class DeviceWizard {
     this.deviceListEl.replaceChildren(...children);
   }
 
-  _openGroupModal() {
-    if (this.selectedDevices.size < 2) return;
-    const selectedIds = Array.from(this.selectedDevices);
-    const isMultiGroup = selectedIds.some((id) => !!this.groups[id]);
+  _openAddToGroupModal(selectedIds) {
+    const existingGroups = Object.values(this.groups);
+    if (!existingGroups.length) return;
 
-    let groupName = isMultiGroup ? 'Hauptgruppe' : 'Lichtgruppe';
-    let defaultArea = '';
-    let detectedCat = 'leuchte';
+    const overlay = h('div', { class: 'overlay', style: { zIndex: '999' } });
+    const groupCards = existingGroups.map((g) => {
+      const cat = DEVICE_CATEGORIES.find((c) => c.id === g.category);
+      const catColor = cat?.color || '#ffc107';
+      const a = this.areas.find((ar) => ar.area_id === g.area_id);
+      const roomTxt = a ? ` · ${a.name}` : '';
+      return h('div', {
+        class: 'device-card group-card',
+        style: { marginBottom: '8px' },
+        onClick: async () => {
+          const currentChildren = g.children || [];
+          const updatedChildren = Array.from(new Set([...currentChildren, ...selectedIds]));
+          try {
+            await this.hass.callWS({
+              type: 'smarthome_companion/groups/save',
+              group: {
+                ...g,
+                children: updatedChildren,
+              },
+            });
+            overlay.remove();
+            this.selectedDevices.clear();
+            this._load();
+            this.onSaved?.(null);
+          } catch (err) {
+            alert(`Fehler beim Aktualisieren der Gruppe: ${err.message || err}`);
+          }
+        },
+      },
+      h('div', { class: 'd-icon', style: { color: catColor } }, icon(g.icon || 'mdi:lightbulb-group')),
+      h('div', { class: 'd-info' },
+        h('div', { class: 'd-name' }, g.name),
+        h('div', { class: 'd-meta' },
+          h('span', { class: 'badge-tag category', style: { '--badge-cat-color': catColor } },
+            icon('mdi:lightbulb-group'), `Gruppe (${g.children?.length || 0} Elemente)${roomTxt}`))),
+      h('div', { style: { display: 'flex', alignItems: 'center' } }, icon('mdi:chevron-right')));
+    });
 
-    for (const id of selectedIds) {
-      if (this.groups[id]?.area_id) { defaultArea = this.groups[id].area_id; }
-      else {
-        const dev = this.devices.find((d) => d.id === id);
-        if (dev?.area_id) defaultArea = dev.area_id;
-        else {
-          const ent = this.entities.find((e) => (e.device_id === id || e.entity_id === id) && e.area_id);
-          if (ent?.area_id) defaultArea = ent.area_id;
+    const dialog = h('div', { class: 'dialog group-modal-dialog', style: { maxWidth: '480px', width: 'min(480px, 94vw)' } },
+      h('div', { class: 'dialog-head' },
+        icon('mdi:plus-box-multiple'),
+        h('h2', {}, 'Zu Gruppe hinzufügen'),
+        h('button', { class: 'icon-btn', onClick: () => overlay.remove() }, icon('mdi:close'))),
+      h('div', { class: 'dialog-body', style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+        h('div', { class: 'hint', style: { marginBottom: '4px' } }, `Wähle die Gruppe, zu der die ${selectedIds.length} ausgewählte(n) Element(e) hinzugefügt werden sollen:`),
+        h('div', { style: { maxHeight: '340px', overflowY: 'auto' } }, ...groupCards)),
+      h('div', { class: 'dialog-foot' },
+        h('div', { class: 'dialog-foot-actions' },
+          h('button', { class: 'btn', onClick: () => overlay.remove() }, 'Abbrechen')))
+    );
+    overlay.appendChild(dialog);
+    this.el.appendChild(overlay);
+  }
+
+  _openGroupModal(existingGroup = null) {
+    let selectedIds = existingGroup ? [...(existingGroup.children || [])] : Array.from(this.selectedDevices);
+    if (!existingGroup && selectedIds.length < 2) return;
+    const isMultiGroup = !existingGroup && selectedIds.some((id) => !!this.groups[id]);
+
+    let groupName = existingGroup ? existingGroup.name : (isMultiGroup ? 'Hauptgruppe' : 'Lichtgruppe');
+    let defaultArea = existingGroup ? (existingGroup.area_id || '') : '';
+    let detectedCat = existingGroup ? (existingGroup.category || 'leuchte') : 'leuchte';
+
+    if (!existingGroup) {
+      for (const id of selectedIds) {
+        if (this.groups[id]?.area_id) { defaultArea = this.groups[id].area_id; }
+        else if (id.startsWith('d:')) {
+          const parts = id.split(':', 2);
+          const dev = this.devices.find((d) => d.id === parts[1]);
+          if (dev?.area_id) defaultArea = dev.area_id;
+        } else {
+          const dev = this.devices.find((d) => d.id === id);
+          if (dev?.area_id) defaultArea = dev.area_id;
+          else {
+            const ent = this.entities.find((e) => (e.device_id === id || e.entity_id === id) && e.area_id);
+            if (ent?.area_id) defaultArea = ent.area_id;
+          }
         }
+        if (defaultArea) break;
       }
-      if (defaultArea) break;
-    }
 
-    for (const id of selectedIds) {
-      if (this.groups[id]?.category) { detectedCat = this.groups[id].category; break; }
-      const cfg = this.configuredDevices[id];
-      if (cfg?.category) { detectedCat = cfg.category; break; }
+      for (const id of selectedIds) {
+        if (this.groups[id]?.category) { detectedCat = this.groups[id].category; break; }
+        const cfg = this.configuredDevices[id];
+        if (cfg?.category) { detectedCat = cfg.category; break; }
+      }
     }
 
     let selectedArea = defaultArea;
@@ -626,23 +802,81 @@ export class DeviceWizard {
       onChange: (v) => { selectedCat = v; },
     });
 
-    const selectedTags = selectedIds.map((id) => {
-      let label = id;
-      let isG = false;
-      if (this.groups[id]) {
-        label = `📁 ${this.groups[id].name} (Gruppe)`;
-        isG = true;
-      } else {
-        const dev = this.devices.find((d) => d.id === id);
-        label = dev?.name_by_user || dev?.name || id;
+    const getLabelForId = (id) => {
+      if (this.groups[id]) return `📁 ${this.groups[id].name} (Gruppe)`;
+      if (id.startsWith('d:')) {
+        const parts = id.split(':', 2);
+        const ent = this.entities.find((e) => e.entity_id === parts[2]);
+        return ent?.name || ent?.original_name || parts[2];
       }
-      return h('span', { class: 'badge-tag' + (isG ? ' category' : '') }, label);
-    });
+      const dev = this.devices.find((d) => d.id === id);
+      return dev?.name_by_user || dev?.name || id;
+    };
+
+    const countHeader = h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, `Ausgewählte Elemente (${selectedIds.length}):`);
+    const tagsContainer = h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '130px', overflowY: 'auto' } });
+
+    const renderTags = () => {
+      const tags = selectedIds.map((id) => {
+        const isG = !!this.groups[id];
+        const label = getLabelForId(id);
+        return h('span', { class: 'group-member-tag' },
+          icon(isG ? 'mdi:folder-multiple' : 'mdi:lightbulb'),
+          h('span', {}, label),
+          h('button', {
+            type: 'button',
+            class: 'remove-btn',
+            title: `${label} entfernen`,
+            onClick: () => {
+              selectedIds = selectedIds.filter((x) => x !== id);
+              renderTags();
+            },
+          }, icon('mdi:close'))
+        );
+      });
+      tagsContainer.replaceChildren(...tags);
+      countHeader.textContent = `Ausgewählte Elemente (${selectedIds.length}):`;
+    };
+    renderTags();
+
+    // Inline picker to add unselected items
+    const availableToAdd = [];
+    // Groups
+    for (const [gid, g] of Object.entries(this.groups)) {
+      if (existingGroup && gid === existingGroup.id) continue;
+      if (!selectedIds.includes(gid)) {
+        availableToAdd.push({ value: gid, label: `📁 ${g.name} (Gruppe)`, icon: 'mdi:folder-multiple' });
+      }
+    }
+    // Devices
+    for (const d of this.devices) {
+      if (!selectedIds.includes(d.id)) {
+        const dName = d.name_by_user || d.name || d.id;
+        availableToAdd.push({ value: d.id, label: dName, icon: 'mdi:devices' });
+      }
+    }
+
+    let addDropdownWrap = null;
+    if (availableToAdd.length > 0) {
+      const addDd = new CustomDropdown({
+        options: availableToAdd,
+        value: '',
+        placeholder: '+ Element hinzufügen...',
+        onChange: (val) => {
+          if (val && !selectedIds.includes(val)) {
+            selectedIds.push(val);
+            renderTags();
+            addDd.setValue('');
+          }
+        },
+      });
+      addDropdownWrap = h('div', { style: { marginTop: '6px' } }, addDd.el);
+    }
 
     const dialog = h('div', { class: 'dialog group-modal-dialog', style: { maxWidth: '520px', width: 'min(520px, 94vw)' } },
       h('div', { class: 'dialog-head' },
-        icon('mdi:lightbulb-group'),
-        h('h2', {}, isMultiGroup ? 'Hauptgruppe erstellen' : 'Gruppe erstellen'),
+        icon(isMultiGroup ? 'mdi:folder-multiple' : 'mdi:lightbulb-group'),
+        h('h2', {}, existingGroup ? 'Gruppe bearbeiten' : (isMultiGroup ? 'Hauptgruppe erstellen' : 'Gruppe erstellen')),
         h('button', { class: 'icon-btn', onClick: () => { overlay.remove(); areaDd.destroy(); catDd.destroy(); } }, icon('mdi:close'))),
       h('div', { class: 'dialog-body', style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
         h('div', {},
@@ -655,8 +889,9 @@ export class DeviceWizard {
           h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Kategorie:'),
           catDd.el),
         h('div', {},
-          h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, `Ausgewählte Elemente (${selectedIds.length}):`),
-          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '120px', overflowY: 'auto' } }, ...selectedTags))),
+          countHeader,
+          tagsContainer,
+          addDropdownWrap)),
       h('div', { class: 'dialog-foot' },
         h('div', { class: 'dialog-foot-actions' },
           h('button', { class: 'btn', onClick: () => { overlay.remove(); areaDd.destroy(); catDd.destroy(); } }, 'Abbrechen')),
@@ -665,10 +900,12 @@ export class DeviceWizard {
             class: 'btn primary',
             onClick: async () => {
               if (!groupName) { alert('Bitte einen Namen eingeben'); return; }
+              if (selectedIds.length === 0) { alert('Bitte mindestens ein Element zur Gruppe hinzufügen'); return; }
               try {
                 await this.hass.callWS({
                   type: 'smarthome_companion/groups/save',
                   group: {
+                    ...(existingGroup ? { id: existingGroup.id } : {}),
                     name: groupName,
                     area_id: selectedArea,
                     category: selectedCat,
@@ -683,7 +920,7 @@ export class DeviceWizard {
                 this._load();
                 this.onSaved?.(null);
               } catch (err) {
-                alert(`Fehler beim Erstellen der Gruppe: ${err.message || err}`);
+                alert(`Fehler beim Speichern der Gruppe: ${err.message || err}`);
               }
             },
           }, icon('mdi:check'), 'Gruppe speichern')))

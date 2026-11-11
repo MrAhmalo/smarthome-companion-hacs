@@ -1,9 +1,9 @@
-import { h, icon, COLOR_NAMES, resolveColor, renderTrashBin } from '../lib/util.js?v=2.8.22';
-import { EntityPicker } from './entity_picker.js?v=2.8.22';
-import { IconPicker } from './icon_picker.js?v=2.8.22';
-import { ColorPicker } from './color_picker.js?v=2.8.22';
-import { CustomDropdown } from './custom_dropdown.js?v=2.8.22';
-import { DEVICE_CATEGORIES } from './device_wizard.js?v=2.8.22';
+import { h, icon, COLOR_NAMES, resolveColor, renderTrashBin } from '../lib/util.js?v=2.8.23';
+import { EntityPicker } from './entity_picker.js?v=2.8.23';
+import { IconPicker } from './icon_picker.js?v=2.8.23';
+import { ColorPicker } from './color_picker.js?v=2.8.23';
+import { CustomDropdown } from './custom_dropdown.js?v=2.8.23';
+import { DEVICE_CATEGORIES } from './device_wizard.js?v=2.8.23';
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 
@@ -20,13 +20,14 @@ export class Settings {
   /**
    * @param {{hass:object, config:object, layout:object, users:Array, onClose:Function, onSaved:Function, onOpenDevice?:Function}} opts
    */
-  constructor({ hass, config, layout, users, onClose, onSaved, onOpenDevice }) {
+  constructor({ hass, config, layout, users, onClose, onSaved, onOpenDevice, onOpenGroup }) {
     this.hass = hass;
     this.users = users;
     this.areas = layout.areas;
     this.onClose = onClose;
     this.onSaved = onSaved;
     this.onOpenDevice = onOpenDevice;
+    this.onOpenGroup = onOpenGroup;
     this.draft = clone(config);
     this.draft.rooms ||= {};
 
@@ -523,6 +524,15 @@ export class Settings {
                   h('span', { class: 'badge-tag category', style: { '--badge-cat-color': catColor } },
                     icon('mdi:lightbulb-group'), `Gruppe (${g.children?.length || 0} Elemente)`))),
               h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+                h('button', {
+                  class: 'btn secondary small',
+                  type: 'button',
+                  title: 'Gruppe bearbeiten',
+                  'aria-label': 'Bearbeiten',
+                  onClick: () => {
+                    this.onOpenGroup?.(g.id);
+                  },
+                }, icon('mdi:pencil'), 'Bearbeiten'),
                 h('button', {
                   class: 'icon-btn danger',
                   type: 'button',

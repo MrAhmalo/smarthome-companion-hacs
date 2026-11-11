@@ -1,5 +1,5 @@
 // Rich Icon Picker for Companion Dashboard (Shadow-DOM safe, instant visual search).
-import { h, icon, POPULAR_ICONS } from '../lib/util.js?v=2.8.22';
+import { h, icon, POPULAR_ICONS } from '../lib/util.js?v=2.8.23';
 
 export class IconPicker {
   constructor({ hass, value = '', onChange, placeholder = 'mdi:...' }) {

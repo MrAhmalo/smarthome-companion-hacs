@@ -301,12 +301,16 @@ async def handle_save_group(hass, connection, msg):
             ent_reg = er.async_get(hass)
             eids = []
             for child_ref in group.get("children", []):
-                if hass.states.get(child_ref):
+                if child_ref.startswith("d:"):
+                    parts = child_ref.split(":", 2)
+                    if len(parts) >= 3 and hass.states.get(parts[2]):
+                        eids.append(parts[2])
+                elif hass.states.get(child_ref):
                     eids.append(child_ref)
                 elif dev_reg.async_get(child_ref):
                     dev_ents = [
                         e.entity_id for e in ent_reg.entities.values()
-                        if e.device_id == child_ref and not e.disabled_by and not e.hidden_by
+                        if e.device_id == child_ref and not e.disabled_by
                         and e.domain in ("light", "switch", "cover", "valve", "media_player")
                     ]
                     if dev_ents:

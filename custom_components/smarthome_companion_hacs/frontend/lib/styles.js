@@ -174,7 +174,15 @@ button { font: inherit; color: inherit; }
   background: var(--cd-tile-bg); transition: background .2s, opacity .2s;
 }
 .tile:not(:has(.tile-feature:not([hidden]))):not(:has(.group-sub-container)) {
-  align-content: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 48px;
+  height: 100%;
+  box-sizing: border-box;
+}
+.tile:not(:has(.tile-feature:not([hidden]))):not(:has(.group-sub-container)) .tile-main {
+  width: 100%;
 }
 .tile.wide { grid-column: span 2; }
 .tile[data-active="false"] { --tile-color: var(--cd-secondary); }
@@ -218,10 +226,6 @@ button { font: inherit; color: inherit; }
   background: var(--cd-accent); border-color: var(--cd-accent); color: #fff;
 }
 .sel-checkbox ha-icon { --mdc-icon-size: 16px; }
-.device-card[data-selected] {
-  box-shadow: 0 0 0 2px var(--cd-accent);
-  background: color-mix(in srgb, var(--cd-accent) 14%, var(--cd-tile-bg));
-}
 .selection-action-bar {
   position: sticky; bottom: 0; left: 0; right: 0; z-index: 20;
   display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
@@ -478,13 +482,55 @@ input[type=range].slider::-moz-range-thumb {
 .wizard-bar { height: 4px; border-radius: 2px; background: rgba(128,128,128,.2); transition: background .3s; }
 .wizard-step[data-active] .wizard-bar { background: var(--cd-accent); }
 .wizard-step[data-done] .wizard-bar { background: var(--success-color, #43a047); }
-.device-list { display: grid; gap: 8px; flex: 1; min-height: 250px; max-height: none; overflow-y: auto; }
+.device-list { display: grid; gap: 8px; flex: 1; min-height: 250px; max-height: none; overflow-y: auto; padding-right: 6px; box-sizing: border-box; }
 .device-card {
   display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px;
-  background: var(--cd-tile-bg); cursor: pointer; border: 1px solid transparent; transition: border-color .2s, background .2s;
+  background: var(--cd-tile-bg); cursor: pointer; border: 2px solid transparent; transition: border-color .2s, background .2s;
+  box-sizing: border-box;
 }
 .device-card:hover { background: color-mix(in srgb, var(--primary-text-color, #fff) 10%, transparent); }
-.device-card[data-selected] { border-color: var(--cd-accent); background: color-mix(in srgb, var(--cd-accent) 15%, transparent); }
+.device-card[data-selected] { border-color: var(--cd-accent); background: color-mix(in srgb, var(--cd-accent) 14%, var(--cd-tile-bg)); }
+.group-card {
+  border: 1.5px solid rgba(255, 193, 7, 0.28);
+}
+.group-card[data-selected] {
+  border-color: var(--cd-accent);
+  background: color-mix(in srgb, var(--cd-accent) 14%, var(--cd-tile-bg));
+}
+.device-channels-wrap {
+  display: grid; gap: 4px; padding: 6px 10px 8px 36px; margin-top: -4px;
+  background: rgba(0,0,0,.25); border-radius: 0 0 12px 12px;
+  border-left: 2px solid var(--cd-accent);
+}
+.device-channel-row {
+  display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px;
+  background: var(--cd-tile-bg); cursor: pointer; border: 1.5px solid transparent;
+  transition: border-color .15s, background .15s;
+}
+.device-channel-row:hover { background: color-mix(in srgb, var(--primary-text-color, #fff) 8%, transparent); }
+.device-channel-row[data-selected] {
+  border-color: var(--cd-accent);
+  background: color-mix(in srgb, var(--cd-accent) 14%, var(--cd-tile-bg));
+}
+.device-channel-info { flex: 1; min-width: 0; }
+.device-channel-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-channel-meta { font-size: 11px; color: var(--cd-secondary); }
+.btn-channels-toggle {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 8px;
+  background: rgba(255,255,255,.08); color: var(--primary-text-color, #fff); font-size: 11px; font-weight: 600;
+  border: 0; cursor: pointer; transition: background .15s;
+}
+.btn-channels-toggle:hover { background: rgba(255,255,255,.15); }
+.btn-channels-toggle ha-icon { --mdc-icon-size: 14px; }
+.group-member-tag {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px;
+  background: rgba(128,128,128,.2); font-size: 12px; font-weight: 600; color: var(--primary-text-color, #fff);
+}
+.group-member-tag .remove-btn {
+  background: transparent; border: 0; cursor: pointer; color: rgba(255,255,255,.6);
+  padding: 0; display: grid; place-items: center; font-size: 12px; border-radius: 50%;
+}
+.group-member-tag .remove-btn:hover { color: #f44336; }
 .device-card .d-icon {
   width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
   background: rgba(128,128,128,.18); color: var(--cd-accent); flex: none;

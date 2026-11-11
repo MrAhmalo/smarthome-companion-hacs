@@ -436,6 +436,21 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                     child_specs.append(t)
                     if t.get("entity_id"):
                         descendant_eids.append(t["entity_id"])
+                elif ref.startswith("d:"):
+                    parts = ref.split(":", 2)
+                    if len(parts) >= 3 and hass.states.get(parts[2]):
+                        eid = parts[2]
+                        descendant_eids.append(eid)
+                        st = hass.states.get(eid)
+                        child_specs.append({
+                            "key": ref,
+                            "entity_id": eid,
+                            "device_id": parts[1],
+                            "name": st.attributes.get("friendly_name") or eid,
+                            "category": g_cat,
+                            "icon": g.get("icon") or cat_info.get("icon"),
+                            "area_id": g.get("area_id"),
+                        })
                 elif hass.states.get(ref):
                     descendant_eids.append(ref)
                     child_specs.append({
@@ -450,22 +465,31 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                     dev_name = dev.name_by_user or dev.name or "Gerät"
                     dev_ents = [
                         e for e in ent_reg.entities.values()
-                        if e.device_id == ref and not e.disabled_by and not e.hidden_by
+                        if e.device_id == ref and not e.disabled_by
                         and e.domain in ("light", "switch", "cover", "valve", "media_player")
                     ]
                     if dev_ents:
-                        dev_ents.sort(key=lambda e: (0 if (g_cat in ("leuchte", "light") and e.domain == "light") else (0 if e.domain in ("switch", "light") else 1), e.entity_id))
-                        primary_e = dev_ents[0]
-                        descendant_eids.append(primary_e.entity_id)
-                        child_specs.append({
-                            "key": f"d:{ref}:{primary_e.entity_id}",
-                            "device_id": ref,
-                            "entity_id": primary_e.entity_id,
-                            "name": dev_name,
-                            "category": g_cat,
-                            "icon": g.get("icon") or cat_info.get("icon"),
-                            "area_id": dev.area_id or g.get("area_id"),
-                        })
+                        # Prioritize lights if group category is leuchte/light
+                        matching_ents = [e for e in dev_ents if (e.domain == "light" if g_cat in ("leuchte", "light") else e.domain in ("switch", "light"))]
+                        ents_to_use = matching_ents or dev_ents
+                        for e_item in ents_to_use:
+                            descendant_eids.append(e_item.entity_id)
+                            ent_st = hass.states.get(e_item.entity_id)
+                            item_name = (
+                                (ent_st.attributes.get("friendly_name") if ent_st else None)
+                                or e_item.name
+                                or e_item.original_name
+                                or dev_name
+                            )
+                            child_specs.append({
+                                "key": f"d:{ref}:{e_item.entity_id}",
+                                "device_id": ref,
+                                "entity_id": e_item.entity_id,
+                                "name": item_name,
+                                "category": g_cat,
+                                "icon": g.get("icon") or cat_info.get("icon"),
+                                "area_id": dev.area_id or g.get("area_id"),
+                            })
 
             unique_eids = list(dict.fromkeys(descendant_eids))
             area_id = g.get("area_id")

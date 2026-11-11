@@ -138,7 +138,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if cfg.get("enabled", False):
             await adaptive_light_mgr.start()
 
-    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "number", "button", "switch", "text", "select"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "number", "button", "switch", "text", "select", "light"])
 
     # Clean up obsolete entities from the registry
     # pyrefly: ignore [missing-import]
@@ -181,7 +181,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "number", "button", "switch", "text", "select"])
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "number", "button", "switch", "text", "select", "light"])
     if unload_ok:
         async_remove_dashboard_panel(hass)
         hass.data.pop(DOMAIN, None)
