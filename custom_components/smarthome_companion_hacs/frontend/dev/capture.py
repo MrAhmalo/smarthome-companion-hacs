@@ -69,8 +69,14 @@ def capture(scene="dashboard", out_name=None, width=1280, height=800):
         action_code = "window.panel._openWarningDetail();"
     elif scene == "all_on":
         action_code = "window.mockHass.applyScenario('all_on');"
-    elif scene == "single_slider":
-        action_code = "window.mockHass.updateState('light.bettlampe', 'off');"
+    elif scene == "test_toggle":
+        action_code = """
+        const room = window.panel._components.find(c => c.spec?.area_id === 'julian');
+        if (room) {
+          const master = room.tiles.find(t => t.spec?.name === 'Deckenlampen Master');
+          if (master) master._toggleMaster();
+        }
+        """
     elif scene == "master_off":
         action_code = """
         window.mockHass.states['light.schreibtisch_lampe'].state = 'off';

@@ -3502,7 +3502,7 @@ class RoomDetailView {
 
   _orderAndLayoutTiles() {
     if (!this.gridEl || !this.childTiles.length) return;
-    applySmartTileLayout(this.childTiles);
+    applySmartTileLayout(this.childTiles, this.gridEl);
   }
 }
 // ─── END: components/room_detail.js ───
