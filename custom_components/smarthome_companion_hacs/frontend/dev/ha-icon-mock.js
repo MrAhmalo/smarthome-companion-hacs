@@ -71,3 +71,4 @@ export class HaIconMock extends HTMLElement {
 if (!customElements.get('ha-icon')) {
   customElements.define('ha-icon', HaIconMock);
 }
+

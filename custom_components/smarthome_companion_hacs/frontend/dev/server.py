@@ -50,13 +50,13 @@ class DevHandler(SimpleHTTPRequestHandler):
         if args and str(args[1]).startswith(("4", "5")):
             super().log_message(format, *args)
 
-def run(port=5173):
-    server = ThreadingHTTPServer(("127.0.0.1", port), DevHandler)
+def run(port=5173, host="0.0.0.0"):
+    server = ThreadingHTTPServer((host, port), DevHandler)
     print(f"\n=======================================================")
     print(f"  SmartHome Companion OS Local Dev Server")
-    print(f"  Workbench: http://127.0.0.1:{port}/dev/index.html")
-    print(f"  Raw Panel: http://127.0.0.1:{port}/companion-dashboard.js")
-    print(f"  Serving:   {FRONTEND_DIR}")
+    print(f"  Workbench Local: http://localhost:{port}/dev/index.html")
+    print(f"  Workbench LAN:   http://<Deine-PC-IP>:{port}/dev/index.html")
+    print(f"  Serving:         {FRONTEND_DIR}")
     print(f"=======================================================\n")
     try:
         server.serve_forever()
@@ -67,3 +67,4 @@ def run(port=5173):
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 5173
     run(port)
+
