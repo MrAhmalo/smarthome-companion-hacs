@@ -196,11 +196,19 @@ button { font: inherit; color: inherit; }
 /* ── Hierarchical Group Tile ── */
 .tile.group {
   position: relative;
-  transition: background .2s, box-shadow .2s;
+  transition: background .2s, box-shadow .2s, border-color .2s;
 }
 .tile.group[data-open] {
-  background: color-mix(in srgb, var(--cd-tile-bg) 85%, var(--cd-accent));
+  background: var(--cd-tile-bg);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 4px 18px rgba(0,0,0,.35);
+}
+.tile.group.subgroup {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tile.group.subgroup:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 .group-icon-btn { position: relative; }
 .group-badge {
@@ -213,7 +221,6 @@ button { font: inherit; color: inherit; }
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.25);
   border-radius: 0 0 var(--cd-tile-radius, 12px) var(--cd-tile-radius, 12px);
-  animation: cdFadeIn 0.2s ease-out;
 }
 .group-sub-grid {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0;
@@ -2603,6 +2610,7 @@ class GroupTile {
   constructor(spec, ctx) {
     this.spec = spec;
     this.ctx = ctx;
+    this.isSubGroup = !!ctx?.isSubGroup;
     this.entityIds = spec.entity_ids || [];
     this.category = spec.category || 'leuchte';
     this.domain = this.category === 'leuchte' ? 'light' : 'switch';
@@ -2610,13 +2618,17 @@ class GroupTile {
     this._open = false;
     this._dragging = false;
 
-    // Instantiate child components (either nested GroupTile or Tile)
-    this.children = (spec.children || []).map((childSpec) => {
-      if (childSpec.is_group) {
-        return new GroupTile(childSpec, ctx);
-      }
-      return new Tile(childSpec, ctx);
-    });
+    // Sub-groups inside a group NEVER have children or nested accordions!
+    if (this.isSubGroup) {
+      this.children = [];
+    } else {
+      this.children = (spec.children || []).map((childSpec) => {
+        if (childSpec.is_group) {
+          return new GroupTile(childSpec, { ...ctx, isSubGroup: true });
+        }
+        return new Tile(childSpec, ctx);
+      });
+    }
 
     this._build();
   }
@@ -2626,11 +2638,11 @@ class GroupTile {
   }
 
   get isAlwaysWide() {
-    return true;
+    return !this.isSubGroup;
   }
 
   get isWide() {
-    return true; // Master group is wide so it sits above its collapsible children
+    return !this.isSubGroup;
   }
 
   setWide(wide) {
@@ -2638,7 +2650,9 @@ class GroupTile {
   }
 
   _build() {
-    this.iconEl = icon(this.spec.icon || (this.category === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug'));
+    const isLeuchte = this.category === 'leuchte';
+    const defaultIcon = isLeuchte ? 'mdi:lightbulb-group-outline' : 'mdi:power-plug-off';
+    this.iconEl = icon(this.spec.icon ? `${this.spec.icon}-outline` : defaultIcon);
     this.badgeEl = h('span', { class: 'group-badge', hidden: true }, '0');
 
     this.iconBtn = h('button', {
@@ -2653,25 +2667,38 @@ class GroupTile {
 
     this.nameEl = h('div', { class: 'tile-name' }, this.spec.name);
     this.stateEl = h('div', { class: 'tile-state' }, 'Aus');
-    this.chevron = icon('mdi:chevron-down');
 
     this.info = h('div', {
       class: 'tile-info',
-      title: 'Ausklappen / Zuklappen',
-      onClick: () => this._toggleOpen(),
+      title: this.isSubGroup ? 'Schalten' : 'Ausklappen / Zuklappen',
+      onClick: () => {
+        if (this.ctx?.isEditMode?.()) {
+          this.ctx.onOpenGroup?.(this.spec.group_id);
+          return;
+        }
+        if (this.isSubGroup) {
+          this._toggleMaster();
+        } else {
+          this._toggleOpen();
+        }
+      },
     }, this.nameEl, this.stateEl);
 
-    this.btnChevron = h('button', {
-      class: 'mini-btn chevron-btn',
-      'aria-label': 'Ausklappen',
-      title: 'Unterlampen anzeigen',
-      onClick: (e) => {
-        e.stopPropagation();
-        this._toggleOpen();
-      },
-    }, this.chevron);
-
-    this.btns = h('div', { class: 'tile-btns' }, this.btnChevron);
+    if (this.isSubGroup) {
+      this.btns = h('div', { class: 'tile-btns' });
+    } else {
+      this.chevron = icon('mdi:chevron-down');
+      this.btnChevron = h('button', {
+        class: 'mini-btn chevron-btn',
+        'aria-label': 'Ausklappen',
+        title: 'Unterlampen anzeigen',
+        onClick: (e) => {
+          e.stopPropagation();
+          this._toggleOpen();
+        },
+      }, this.chevron);
+      this.btns = h('div', { class: 'tile-btns' }, this.btnChevron);
+    }
 
     // Master brightness slider
     this.feature = h('div', { class: 'tile-feature', hidden: true });
@@ -2690,21 +2717,23 @@ class GroupTile {
     });
     this.feature.append(this.slider);
 
-    // Collapsible Sub-Items Container
-    this.subGrid = h('div', { class: 'group-sub-grid' }, ...this.children.map((c) => c.el));
+    const mainRow = h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns);
 
-    this.subContainer = h('div', { class: 'group-sub-container', hidden: true }, this.subGrid);
-
-    this.el = h('div', {
-      class: 'tile group wide',
-      'data-key': this.spec.key,
-      'data-group': 'true',
-      style: { '--tile-color': this.spec.color || '#ffc107' },
-    },
-      h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns),
-      this.feature,
-      this.subContainer
-    );
+    if (this.isSubGroup) {
+      this.el = h('div', {
+        class: 'tile group subgroup',
+        'data-key': this.spec.key,
+        'data-group': 'true',
+      }, mainRow, this.feature);
+    } else {
+      this.subGrid = h('div', { class: 'group-sub-grid' }, ...this.children.map((c) => c.el));
+      this.subContainer = h('div', { class: 'group-sub-container', hidden: true }, this.subGrid);
+      this.el = h('div', {
+        class: 'tile group wide',
+        'data-key': this.spec.key,
+        'data-group': 'true',
+      }, mainRow, this.feature, this.subContainer);
+    }
 
     // Edit Mode click interception
     this.el.addEventListener('pointerdown', (e) => {
@@ -2723,10 +2752,13 @@ class GroupTile {
   }
 
   _toggleOpen() {
+    if (this.isSubGroup) return;
     this._open = !this._open;
     this.el.toggleAttribute('data-open', this._open);
     this.subContainer.hidden = !this._open;
-    this.chevron.setAttribute('icon', this._open ? 'mdi:chevron-up' : 'mdi:chevron-down');
+    if (this.chevron) {
+      this.chevron.setAttribute('icon', this._open ? 'mdi:chevron-up' : 'mdi:chevron-down');
+    }
   }
 
   _toggleMaster() {
@@ -2762,10 +2794,16 @@ class GroupTile {
     this.el.dataset.active = String(anyOn);
     this.iconBtn.classList.toggle('active', anyOn);
 
-    if (activeCount > 0) {
+    if (anyOn) {
+      const activeColor = this.spec.color || '#ffc107';
+      this.el.style.setProperty('--tile-color', activeColor);
+      this.iconEl.setAttribute('icon', this.spec.icon || (this.category === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug'));
       this.badgeEl.textContent = String(activeCount);
       this.badgeEl.hidden = false;
     } else {
+      this.el.style.removeProperty('--tile-color');
+      const offIcon = this.spec.icon ? `${this.spec.icon}-outline` : (this.category === 'leuchte' ? 'mdi:lightbulb-group-outline' : 'mdi:power-plug-off');
+      this.iconEl.setAttribute('icon', offIcon);
       this.badgeEl.hidden = true;
     }
 
@@ -2880,7 +2918,11 @@ function applySmartTileLayout(tiles, grid = null) {
 
   if (grid) {
     const ordered = [...topWide, ...sliderTiles, ...compactTiles, ...bottomWide];
-    grid.replaceChildren(...ordered.map((t) => t.el));
+    const current = Array.from(grid.children);
+    const changed = current.length !== ordered.length || ordered.some((t, i) => current[i] !== t.el);
+    if (changed) {
+      grid.replaceChildren(...ordered.map((t) => t.el));
+    }
   }
 }
 

@@ -83,6 +83,25 @@ def capture(scene="dashboard", out_name=None, width=1280, height=800):
         action_code = "window.mockHass.applyScenario('single_slider');"
     elif scene == "edit_mode":
         action_code = "window.panel._toggleEditMode();"
+    elif scene == "group_open":
+        action_code = """
+        const room = window.panel._components.find(c => c.spec?.area_id === 'julian');
+        if (room) {
+          const master = room.tiles.find(t => t.spec?.name === 'Deckenlampen Master');
+          if (master && !master._open) master._toggleOpen();
+        }
+        """
+    elif scene == "group_open_off":
+        action_code = """
+        window.mockHass.applyScenario('master_off');
+        setTimeout(() => {
+          const room = window.panel._components.find(c => c.spec?.area_id === 'julian');
+          if (room) {
+            const master = room.tiles.find(t => t.spec?.name === 'Deckenlampen Master');
+            if (master && !master._open) master._toggleOpen();
+          }
+        }, 150);
+        """
     elif scene == "group_modal":
         action_code = """
         window.panel._openWizard();

@@ -191,11 +191,19 @@ button { font: inherit; color: inherit; }
 /* ── Hierarchical Group Tile ── */
 .tile.group {
   position: relative;
-  transition: background .2s, box-shadow .2s;
+  transition: background .2s, box-shadow .2s, border-color .2s;
 }
 .tile.group[data-open] {
-  background: color-mix(in srgb, var(--cd-tile-bg) 85%, var(--cd-accent));
+  background: var(--cd-tile-bg);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 4px 18px rgba(0,0,0,.35);
+}
+.tile.group.subgroup {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tile.group.subgroup:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 .group-icon-btn { position: relative; }
 .group-badge {
@@ -208,7 +216,6 @@ button { font: inherit; color: inherit; }
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.25);
   border-radius: 0 0 var(--cd-tile-radius, 12px) var(--cd-tile-radius, 12px);
-  animation: cdFadeIn 0.2s ease-out;
 }
 .group-sub-grid {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0;

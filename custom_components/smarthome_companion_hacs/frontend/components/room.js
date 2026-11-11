@@ -77,7 +77,11 @@ export function applySmartTileLayout(tiles, grid = null) {
 
   if (grid) {
     const ordered = [...topWide, ...sliderTiles, ...compactTiles, ...bottomWide];
-    grid.replaceChildren(...ordered.map((t) => t.el));
+    const current = Array.from(grid.children);
+    const changed = current.length !== ordered.length || ordered.some((t, i) => current[i] !== t.el);
+    if (changed) {
+      grid.replaceChildren(...ordered.map((t) => t.el));
+    }
   }
 }
 
