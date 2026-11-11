@@ -206,6 +206,7 @@ button { font: inherit; color: inherit; }
 .tile.group.subgroup {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  grid-column: span 1;
 }
 .tile.group.subgroup:hover {
   background: rgba(255, 255, 255, 0.08);
@@ -217,10 +218,10 @@ button { font: inherit; color: inherit; }
   display: grid; place-items: center; box-shadow: 0 1px 4px rgba(0,0,0,.5);
 }
 .group-sub-container {
-  width: 100%; padding: 8px 6px 10px; margin-top: 6px;
+  width: 100%; padding: 8px 0 0 0; margin-top: 6px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 0 0 var(--cd-tile-radius, 12px) var(--cd-tile-radius, 12px);
+  background: transparent;
+  border-radius: 0;
 }
 .group-sub-grid {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0;
@@ -2407,7 +2408,7 @@ class Tile {
   get hasSlider() {
     if (this.domain === 'light') {
       const { brightness } = lightSupport(this._st);
-      return this._active(this._st) && !!brightness;
+      return !!brightness;
     }
     return false;
   }
@@ -2726,6 +2727,14 @@ class GroupTile {
         'data-group': 'true',
       }, mainRow, this.feature);
     } else {
+      if (this.children.length % 2 === 1) {
+        for (let i = 0; i < this.children.length - 1; i++) {
+          this.children[i].setWide?.(false);
+        }
+        this.children[this.children.length - 1].setWide?.(true);
+      } else {
+        this.children.forEach((c) => c.setWide?.(false));
+      }
       this.subGrid = h('div', { class: 'group-sub-grid' }, ...this.children.map((c) => c.el));
       this.subContainer = h('div', { class: 'group-sub-container', hidden: true }, this.subGrid);
       this.el = h('div', {
@@ -2898,10 +2907,10 @@ function applySmartTileLayout(tiles, grid = null) {
   // "wenn zwei geräte mit slider existieren das diese nebeneinander sind"
   // "falls nur ein gerät mit slider es immer ein eigene zeile bekommt"
   if (sliderTiles.length % 2 === 1) {
-    sliderTiles[0].setWide(true);
-    for (let i = 1; i < sliderTiles.length; i++) {
+    for (let i = 0; i < sliderTiles.length - 1; i++) {
       sliderTiles[i].setWide(false);
     }
+    sliderTiles[sliderTiles.length - 1].setWide(true);
   } else {
     sliderTiles.forEach((t) => t.setWide(false));
   }
@@ -2917,7 +2926,7 @@ function applySmartTileLayout(tiles, grid = null) {
   }
 
   if (grid) {
-    const ordered = [...topWide, ...sliderTiles, ...compactTiles, ...bottomWide];
+    const ordered = [...topWide, ...compactTiles, ...sliderTiles, ...bottomWide];
     const current = Array.from(grid.children);
     const changed = current.length !== ordered.length || ordered.some((t, i) => current[i] !== t.el);
     if (changed) {
@@ -5399,6 +5408,19 @@ class DeviceWizard {
     ];
     const catOptions = DEVICE_CATEGORIES.map((c) => ({ value: c.id, label: c.name, icon: c.icon, color: c.color }));
 
+    let selectedIcon = existingGroup?.icon || (selectedCat === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug');
+    let isCustomIcon = !!existingGroup?.icon;
+
+    const iconPicker = new IconPicker({
+      hass: this.hass,
+      value: selectedIcon,
+      placeholder: 'Icon auswählen (z. B. mdi:lightbulb-group)...',
+      onChange: (v) => {
+        selectedIcon = v;
+        isCustomIcon = true;
+      },
+    });
+
     const areaDd = new CustomDropdown({
       options: areaOptions,
       value: selectedArea,
@@ -5410,7 +5432,16 @@ class DeviceWizard {
       options: catOptions,
       value: selectedCat,
       placeholder: 'Kategorie auswählen...',
-      onChange: (v) => { selectedCat = v; },
+      onChange: (v) => {
+        selectedCat = v;
+        if (!isCustomIcon) {
+          const catObj = DEVICE_CATEGORIES.find((c) => c.id === v);
+          const defIcon = v === 'leuchte' ? 'mdi:lightbulb-group' : (catObj?.icon || 'mdi:power-plug');
+          selectedIcon = defIcon;
+          iconPicker._setValue(defIcon);
+          isCustomIcon = false;
+        }
+      },
     });
 
     const getLabelForId = (id) => {
@@ -5499,6 +5530,9 @@ class DeviceWizard {
         h('div', { style: { position: 'relative', zIndex: '20' } },
           h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Kategorie:'),
           catDd.el),
+        h('div', { style: { position: 'relative', zIndex: '15' } },
+          h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Symbol / Icon:'),
+          iconPicker.el),
         h('div', { style: { position: 'relative', zIndex: '10' } },
           countHeader,
           tagsContainer,
@@ -5520,13 +5554,14 @@ class DeviceWizard {
                     name: groupName,
                     area_id: selectedArea,
                     category: selectedCat,
-                    icon: selectedCat === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug',
+                    icon: selectedIcon || (selectedCat === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug'),
                     children: selectedIds,
                   },
                 });
                 overlay.remove();
                 areaDd.destroy();
                 catDd.destroy();
+                iconPicker._close();
                 this.selectedDevices.clear();
                 this._load();
                 this.onSaved?.(null);
@@ -5614,6 +5649,7 @@ class DeviceWizard {
     const existing = this.configuredDevices[d.id];
 
     this.selectedAreaId = d.area_id || '';
+    this.customIcon = existing?.icon || '';
     let rawName = existing?.custom_name || d.name_by_user || d.name || '';
     if (!existing?.custom_name) {
       rawName = this._stripRoomName(rawName, this.selectedAreaId);
@@ -5696,6 +5732,16 @@ class DeviceWizard {
       onInput: (e) => { this.customName = e.target.value; },
     });
 
+    const curCat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
+    const devIconPicker = new IconPicker({
+      hass: this.hass,
+      value: this.customIcon || curCat.icon,
+      placeholder: 'Icon auswählen (z. B. mdi:lightbulb)...',
+      onChange: (val) => {
+        this.customIcon = val;
+      },
+    });
+
     const catGrid = h('div', { class: 'cat-grid' },
       ...DEVICE_CATEGORIES.map((c) => {
         const card = h('div', {
@@ -5704,6 +5750,9 @@ class DeviceWizard {
           onClick: () => {
             this.selectedCategory = c.id;
             this.channels.forEach((ch) => { ch.category = c.id; });
+            if (!this.customIcon) {
+              devIconPicker._setValue(c.icon);
+            }
             this._render();
           },
         },
@@ -5712,15 +5761,15 @@ class DeviceWizard {
         return card;
       }));
 
-    const curCat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
-    const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color, '--hero-color': curCat.color } }, icon(curCat.icon));
+    const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color, '--hero-color': curCat.color } }, icon(this.customIcon || curCat.icon));
 
     this.body.replaceChildren(
       hero,
       h('div', { class: 'section-title' }, 'Geräteinformationen'),
       h('div', { class: 'fields' },
         h('div', { class: 'field' }, 'Anzeigename im Dashboard', nameInput),
-        h('div', { class: 'field' }, 'Raum (Bereich)', areaDropdown.el)),
+        h('div', { class: 'field' }, 'Raum (Bereich)', areaDropdown.el),
+        h('div', { class: 'field', style: { position: 'relative', zIndex: '15' } }, 'Symbol / Icon', devIconPicker.el)),
       h('div', { class: 'section-title', style: { marginTop: '16px' } }, 'Haupt-Kategorie'),
       h('div', { class: 'hint' }, 'Bestimmt das Standard-Icon und das Verhalten im Dashboard:'),
       catGrid);
@@ -6085,6 +6134,7 @@ class DeviceWizard {
         category: this.selectedCategory,
         custom_name: this.customName,
         area_id: this.selectedAreaId || undefined,
+        icon: this.customIcon || undefined,
         entities: entitiesConfig,
       });
 

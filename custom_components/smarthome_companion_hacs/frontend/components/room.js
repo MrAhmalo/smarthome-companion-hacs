@@ -57,10 +57,10 @@ export function applySmartTileLayout(tiles, grid = null) {
   // "wenn zwei geräte mit slider existieren das diese nebeneinander sind"
   // "falls nur ein gerät mit slider es immer ein eigene zeile bekommt"
   if (sliderTiles.length % 2 === 1) {
-    sliderTiles[0].setWide(true);
-    for (let i = 1; i < sliderTiles.length; i++) {
+    for (let i = 0; i < sliderTiles.length - 1; i++) {
       sliderTiles[i].setWide(false);
     }
+    sliderTiles[sliderTiles.length - 1].setWide(true);
   } else {
     sliderTiles.forEach((t) => t.setWide(false));
   }
@@ -76,7 +76,7 @@ export function applySmartTileLayout(tiles, grid = null) {
   }
 
   if (grid) {
-    const ordered = [...topWide, ...sliderTiles, ...compactTiles, ...bottomWide];
+    const ordered = [...topWide, ...compactTiles, ...sliderTiles, ...bottomWide];
     const current = Array.from(grid.children);
     const changed = current.length !== ordered.length || ordered.some((t, i) => current[i] !== t.el);
     if (changed) {

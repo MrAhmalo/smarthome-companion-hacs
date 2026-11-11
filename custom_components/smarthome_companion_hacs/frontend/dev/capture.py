@@ -111,10 +111,6 @@ def capture(scene="dashboard", out_name=None, width=1280, height=800):
             wiz.selectedDevices.add('dev_shelly2pm');
             wiz.selectedDevices.add('dev_wasserpumpe');
             wiz._openGroupModal();
-            setTimeout(() => {
-              const cdd = wiz.el.querySelector('.custom-dropdown .cdd-box');
-              if (cdd) cdd.click();
-            }, 200);
           }
         }, 400);
         """

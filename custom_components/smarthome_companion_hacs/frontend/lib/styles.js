@@ -201,6 +201,7 @@ button { font: inherit; color: inherit; }
 .tile.group.subgroup {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  grid-column: span 1;
 }
 .tile.group.subgroup:hover {
   background: rgba(255, 255, 255, 0.08);
@@ -212,10 +213,10 @@ button { font: inherit; color: inherit; }
   display: grid; place-items: center; box-shadow: 0 1px 4px rgba(0,0,0,.5);
 }
 .group-sub-container {
-  width: 100%; padding: 8px 6px 10px; margin-top: 6px;
+  width: 100%; padding: 8px 0 0 0; margin-top: 6px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 0 0 var(--cd-tile-radius, 12px) var(--cd-tile-radius, 12px);
+  background: transparent;
+  border-radius: 0;
 }
 .group-sub-grid {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0;

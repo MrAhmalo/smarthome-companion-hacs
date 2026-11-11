@@ -1,6 +1,7 @@
 import { h, icon, domainOf } from '../lib/util.js';
 import { EntityPicker } from './entity_picker.js';
 import { CustomDropdown } from './custom_dropdown.js';
+import { IconPicker } from './icon_picker.js';
 
 export const DEVICE_CATEGORIES = [
   { id: 'leuchte', name: 'Leuchte', icon: 'mdi:lightbulb', color: '#ffc107', desc: 'Lampen, Spots & LED-Streifen' },
@@ -788,6 +789,19 @@ export class DeviceWizard {
     ];
     const catOptions = DEVICE_CATEGORIES.map((c) => ({ value: c.id, label: c.name, icon: c.icon, color: c.color }));
 
+    let selectedIcon = existingGroup?.icon || (selectedCat === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug');
+    let isCustomIcon = !!existingGroup?.icon;
+
+    const iconPicker = new IconPicker({
+      hass: this.hass,
+      value: selectedIcon,
+      placeholder: 'Icon auswählen (z. B. mdi:lightbulb-group)...',
+      onChange: (v) => {
+        selectedIcon = v;
+        isCustomIcon = true;
+      },
+    });
+
     const areaDd = new CustomDropdown({
       options: areaOptions,
       value: selectedArea,
@@ -799,7 +813,16 @@ export class DeviceWizard {
       options: catOptions,
       value: selectedCat,
       placeholder: 'Kategorie auswählen...',
-      onChange: (v) => { selectedCat = v; },
+      onChange: (v) => {
+        selectedCat = v;
+        if (!isCustomIcon) {
+          const catObj = DEVICE_CATEGORIES.find((c) => c.id === v);
+          const defIcon = v === 'leuchte' ? 'mdi:lightbulb-group' : (catObj?.icon || 'mdi:power-plug');
+          selectedIcon = defIcon;
+          iconPicker._setValue(defIcon);
+          isCustomIcon = false;
+        }
+      },
     });
 
     const getLabelForId = (id) => {
@@ -888,6 +911,9 @@ export class DeviceWizard {
         h('div', { style: { position: 'relative', zIndex: '20' } },
           h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Kategorie:'),
           catDd.el),
+        h('div', { style: { position: 'relative', zIndex: '15' } },
+          h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Symbol / Icon:'),
+          iconPicker.el),
         h('div', { style: { position: 'relative', zIndex: '10' } },
           countHeader,
           tagsContainer,
@@ -909,13 +935,14 @@ export class DeviceWizard {
                     name: groupName,
                     area_id: selectedArea,
                     category: selectedCat,
-                    icon: selectedCat === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug',
+                    icon: selectedIcon || (selectedCat === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug'),
                     children: selectedIds,
                   },
                 });
                 overlay.remove();
                 areaDd.destroy();
                 catDd.destroy();
+                iconPicker._close();
                 this.selectedDevices.clear();
                 this._load();
                 this.onSaved?.(null);
@@ -1003,6 +1030,7 @@ export class DeviceWizard {
     const existing = this.configuredDevices[d.id];
 
     this.selectedAreaId = d.area_id || '';
+    this.customIcon = existing?.icon || '';
     let rawName = existing?.custom_name || d.name_by_user || d.name || '';
     if (!existing?.custom_name) {
       rawName = this._stripRoomName(rawName, this.selectedAreaId);
@@ -1085,6 +1113,16 @@ export class DeviceWizard {
       onInput: (e) => { this.customName = e.target.value; },
     });
 
+    const curCat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
+    const devIconPicker = new IconPicker({
+      hass: this.hass,
+      value: this.customIcon || curCat.icon,
+      placeholder: 'Icon auswählen (z. B. mdi:lightbulb)...',
+      onChange: (val) => {
+        this.customIcon = val;
+      },
+    });
+
     const catGrid = h('div', { class: 'cat-grid' },
       ...DEVICE_CATEGORIES.map((c) => {
         const card = h('div', {
@@ -1093,6 +1131,9 @@ export class DeviceWizard {
           onClick: () => {
             this.selectedCategory = c.id;
             this.channels.forEach((ch) => { ch.category = c.id; });
+            if (!this.customIcon) {
+              devIconPicker._setValue(c.icon);
+            }
             this._render();
           },
         },
@@ -1101,15 +1142,15 @@ export class DeviceWizard {
         return card;
       }));
 
-    const curCat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
-    const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color, '--hero-color': curCat.color } }, icon(curCat.icon));
+    const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color, '--hero-color': curCat.color } }, icon(this.customIcon || curCat.icon));
 
     this.body.replaceChildren(
       hero,
       h('div', { class: 'section-title' }, 'Geräteinformationen'),
       h('div', { class: 'fields' },
         h('div', { class: 'field' }, 'Anzeigename im Dashboard', nameInput),
-        h('div', { class: 'field' }, 'Raum (Bereich)', areaDropdown.el)),
+        h('div', { class: 'field' }, 'Raum (Bereich)', areaDropdown.el),
+        h('div', { class: 'field', style: { position: 'relative', zIndex: '15' } }, 'Symbol / Icon', devIconPicker.el)),
       h('div', { class: 'section-title', style: { marginTop: '16px' } }, 'Haupt-Kategorie'),
       h('div', { class: 'hint' }, 'Bestimmt das Standard-Icon und das Verhalten im Dashboard:'),
       catGrid);
@@ -1474,6 +1515,7 @@ export class DeviceWizard {
         category: this.selectedCategory,
         custom_name: this.customName,
         area_id: this.selectedAreaId || undefined,
+        icon: this.customIcon || undefined,
         entities: entitiesConfig,
       });
 

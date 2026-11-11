@@ -115,7 +115,7 @@ export class Tile {
   get hasSlider() {
     if (this.domain === 'light') {
       const { brightness } = lightSupport(this._st);
-      return this._active(this._st) && !!brightness;
+      return !!brightness;
     }
     return false;
   }
@@ -434,6 +434,14 @@ export class GroupTile {
         'data-group': 'true',
       }, mainRow, this.feature);
     } else {
+      if (this.children.length % 2 === 1) {
+        for (let i = 0; i < this.children.length - 1; i++) {
+          this.children[i].setWide?.(false);
+        }
+        this.children[this.children.length - 1].setWide?.(true);
+      } else {
+        this.children.forEach((c) => c.setWide?.(false));
+      }
       this.subGrid = h('div', { class: 'group-sub-grid' }, ...this.children.map((c) => c.el));
       this.subContainer = h('div', { class: 'group-sub-container', hidden: true }, this.subGrid);
       this.el = h('div', {

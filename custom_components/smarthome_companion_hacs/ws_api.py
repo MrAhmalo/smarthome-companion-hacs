@@ -10,6 +10,7 @@ from homeassistant.helpers import (
     entity_registry as er,
     device_registry as dr,
     label_registry as lr,
+    area_registry as ar,
 )
 from .const import DOMAIN
 from .util import safe_fire_event
@@ -203,6 +204,34 @@ async def handle_configure_device(hass, connection, msg):
     except Exception as e:
         _LOGGER.warning("Could not update device registry for %s: %s", device_id, e)
 
+    # Sync primary entity ID in HA entity registry on rename
+    if custom_name and primary:
+        ent_reg = er.async_get(hass)
+        p_entry = ent_reg.async_get(primary)
+        if p_entry:
+            domain = p_entry.domain
+            clean_name = re.sub(r"[^a-z0-9_]+", "_", custom_name.lower()).strip("_")
+            effective_area = area_id or p_entry.area_id
+            area_slug = ""
+            if effective_area:
+                area_reg = ar.async_get(hass)
+                a_entry = area_reg.async_get_area(effective_area)
+                if a_entry:
+                    area_slug = re.sub(r"[^a-z0-9_]+", "_", a_entry.name.lower()).strip("_")
+            if area_slug and not clean_name.startswith(f"{area_slug}_") and clean_name != area_slug:
+                clean_slug = f"{area_slug}_{clean_name}"
+            else:
+                clean_slug = clean_name
+            target_eid = f"{domain}.{clean_slug}"
+            if p_entry.entity_id != target_eid:
+                existing = ent_reg.async_get(target_eid)
+                if not existing or existing.unique_id == p_entry.unique_id:
+                    try:
+                        ent_reg.async_update_entity(p_entry.entity_id, new_entity_id=target_eid)
+                        _LOGGER.info("Updated primary entity ID from %s to %s", p_entry.entity_id, target_eid)
+                    except Exception as e:
+                        _LOGGER.warning("Could not rename entity ID for %s: %s", p_entry.entity_id, e)
+
     safe_fire_event(hass, f"{DOMAIN}_dashboard_updated")
     connection.send_result(msg["id"], {"success": True})
 
@@ -296,9 +325,42 @@ async def handle_save_group(hass, connection, msg):
 
     # Sync native Home Assistant group entity if possible
     try:
+        dev_reg = dr.async_get(hass)
+        ent_reg = er.async_get(hass)
+        group_name = group.get("name") or "Gruppe"
+        area_id = group.get("area_id")
+
+        # 1. Update group device in device registry
+        dev_entry = dev_reg.async_get_device(identifiers={(DOMAIN, f"group_{group_id}")})
+        if dev_entry:
+            dev_reg.async_update_device(dev_entry.id, name_by_user=group_name, area_id=area_id or None)
+
+        # 2. Update group entity in entity registry (clean slug, no duplicated suffixes)
+        unique_id = f"smarthome_companion_group_light_{group_id}"
+        current_eid = ent_reg.async_get_entity_id("light", DOMAIN, unique_id)
+        if current_eid:
+            clean_name = re.sub(r"[^a-z0-9_]+", "_", group_name.lower()).strip("_")
+            area_slug = ""
+            if area_id:
+                area_reg = ar.async_get(hass)
+                a_entry = area_reg.async_get_area(area_id)
+                if a_entry:
+                    area_slug = re.sub(r"[^a-z0-9_]+", "_", a_entry.name.lower()).strip("_")
+            if area_slug and not clean_name.startswith(f"{area_slug}_") and clean_name != area_slug:
+                clean_slug = f"{area_slug}_{clean_name}"
+            else:
+                clean_slug = clean_name
+            target_eid = f"light.{clean_slug}"
+            if current_eid != target_eid:
+                existing = ent_reg.async_get(target_eid)
+                if not existing or existing.unique_id == unique_id:
+                    try:
+                        ent_reg.async_update_entity(current_eid, new_entity_id=target_eid, original_name=None)
+                        _LOGGER.info("Synchronized group entity ID: %s -> %s", current_eid, target_eid)
+                    except Exception as err:
+                        _LOGGER.warning("Could not rename group entity %s: %s", current_eid, err)
+
         if hass.services.has_service("group", "set"):
-            dev_reg = dr.async_get(hass)
-            ent_reg = er.async_get(hass)
             eids = []
             for child_ref in group.get("children", []):
                 if child_ref.startswith("d:"):

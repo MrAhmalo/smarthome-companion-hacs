@@ -27,7 +27,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     if not store:
         return
 
-    added_group_ids = set()
+    existing_entities: dict[str, CompanionGroupLight] = {}
 
     @callback
     def sync_group_lights(event=None):
@@ -35,9 +35,13 @@ async def async_setup_entry(hass, entry, async_add_entities):
         new_entities = []
         for group_id, g_cfg in groups.items():
             cat = g_cfg.get("category") or "leuchte"
-            if cat in ("leuchte", "light") and group_id not in added_group_ids:
-                new_entities.append(CompanionGroupLight(hass, store, group_id))
-                added_group_ids.add(group_id)
+            if cat in ("leuchte", "light"):
+                if group_id not in existing_entities:
+                    entity = CompanionGroupLight(hass, store, group_id)
+                    existing_entities[group_id] = entity
+                    new_entities.append(entity)
+                else:
+                    existing_entities[group_id].async_refresh_group()
         if new_entities:
             async_add_entities(new_entities)
 
@@ -67,7 +71,9 @@ class CompanionGroupLight(LightEntity):
         g = self._store.get_groups().get(self._group_id, {})
         self._name = g.get("name") or "Lichtgruppe"
         self._area_id = g.get("area_id")
-        self._attr_name = self._name
+        # ADR-0007 Entity Naming: Primary entity of device must have _attr_name = None
+        # so HA names the entity after device in area without suffix duplication!
+        self._attr_name = None
         self._attr_unique_id = f"smarthome_companion_group_light_{self._group_id}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"group_{self._group_id}")},
@@ -78,6 +84,13 @@ class CompanionGroupLight(LightEntity):
         )
         self._attr_supported_color_modes = {ColorMode.BRIGHTNESS}
         self._attr_color_mode = ColorMode.BRIGHTNESS
+
+    @callback
+    def async_refresh_group(self) -> None:
+        self._update_attrs()
+        self._update_tracking()
+        if self.hass:
+            self.async_write_ha_state()
 
     def _get_child_entities(self) -> list[str]:
         groups = self._store.get_groups()
@@ -162,6 +175,17 @@ class CompanionGroupLight(LightEntity):
 
     async def async_added_to_hass(self) -> None:
         self._update_tracking()
+        # Self-healing: if an older version registered entity with duplicated suffix (e.g. light.julian_licht_licht),
+        # clean it up in entity registry to light.julian_licht
+        if self.entity_id and self.entity_id.endswith("_licht_licht"):
+            ent_reg = er.async_get(self.hass)
+            clean_eid = self.entity_id[:-6]
+            if not ent_reg.async_get(clean_eid):
+                try:
+                    ent_reg.async_update_entity(self.entity_id, new_entity_id=clean_eid)
+                    _LOGGER.info("Cleaned up duplicated entity_id: %s -> %s", self.entity_id, clean_eid)
+                except Exception as err:
+                    _LOGGER.debug("Could not rename duplicated entity_id: %s", err)
 
     def _update_tracking(self) -> None:
         if self._unsub_tracker:
