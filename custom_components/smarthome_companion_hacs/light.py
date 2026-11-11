@@ -76,7 +76,7 @@ class CompanionGroupLight(LightEntity):
             model="Lichtgruppe (Companion)",
             suggested_area=self._area_id,
         )
-        self._attr_supported_color_modes = {ColorMode.BRIGHTNESS, ColorMode.ONOFF}
+        self._attr_supported_color_modes = {ColorMode.BRIGHTNESS}
         self._attr_color_mode = ColorMode.BRIGHTNESS
 
     def _get_child_entities(self) -> list[str]:
