@@ -36,6 +36,26 @@ export const MOCK_DATA = {
       state: 'off',
       attributes: { friendly_name: 'Lavalampe', supported_color_modes: ['onoff'] },
     },
+    'light.deckenlampe_1': {
+      entity_id: 'light.deckenlampe_1',
+      state: 'on',
+      attributes: { friendly_name: 'Deckenlampe Links 1', brightness: 107, supported_color_modes: ['brightness'] },
+    },
+    'light.deckenlampe_2': {
+      entity_id: 'light.deckenlampe_2',
+      state: 'on',
+      attributes: { friendly_name: 'Deckenlampe Links 2', brightness: 107, supported_color_modes: ['brightness'] },
+    },
+    'light.deckenlampe_3': {
+      entity_id: 'light.deckenlampe_3',
+      state: 'off',
+      attributes: { friendly_name: 'Deckenlampe Rechts 1', brightness: 107, supported_color_modes: ['brightness'] },
+    },
+    'light.deckenlampe_4': {
+      entity_id: 'light.deckenlampe_4',
+      state: 'off',
+      attributes: { friendly_name: 'Deckenlampe Rechts 2', brightness: 107, supported_color_modes: ['brightness'] },
+    },
     'sensor.temperatur_julian': {
       entity_id: 'sensor.temperatur_julian',
       state: '21.4',
@@ -156,7 +176,7 @@ export const MOCK_DATA = {
       area_id: 'julian',
       category: 'leuchte',
       icon: 'mdi:lightbulb-group',
-      children: ['light.lichtstreifen', 'light.bettlampe'],
+      children: ['light.deckenlampe_3', 'light.deckenlampe_4'],
     },
     'group_links': {
       id: 'group_links',
@@ -164,7 +184,7 @@ export const MOCK_DATA = {
       area_id: 'julian',
       category: 'leuchte',
       icon: 'mdi:lightbulb-group',
-      children: ['light.schreibtisch_lampe', 'light.lavalampe'],
+      children: ['light.deckenlampe_1', 'light.deckenlampe_2'],
     },
     'group_master': {
       id: 'group_master',
@@ -245,7 +265,7 @@ export const MOCK_DATA = {
             category: 'leuchte',
             icon: 'mdi:lightbulb-group',
             area_id: 'julian',
-            entity_ids: ['light.schreibtisch_lampe', 'light.lavalampe', 'light.lichtstreifen', 'light.bettlampe'],
+            entity_ids: ['light.deckenlampe_1', 'light.deckenlampe_2', 'light.deckenlampe_3', 'light.deckenlampe_4'],
             children: [
               {
                 key: 'group:group_links',
@@ -255,10 +275,10 @@ export const MOCK_DATA = {
                 category: 'leuchte',
                 icon: 'mdi:lightbulb-group',
                 area_id: 'julian',
-                entity_ids: ['light.schreibtisch_lampe', 'light.lavalampe'],
+                entity_ids: ['light.deckenlampe_1', 'light.deckenlampe_2'],
                 children: [
-                  { key: 'dev_schreibtisch:light', entity_id: 'light.schreibtisch_lampe', name: 'Schreibtisch-Lampe', category: 'leuchte', icon: 'mdi:lightbulb' },
-                  { key: 'dev_lavalampe:light', entity_id: 'light.lavalampe', name: 'Lavalampe', category: 'leuchte', icon: 'mdi:lightbulb' },
+                  { key: 'dev_dl1:light', entity_id: 'light.deckenlampe_1', name: 'Deckenlampe Links 1', category: 'leuchte', icon: 'mdi:lightbulb' },
+                  { key: 'dev_dl2:light', entity_id: 'light.deckenlampe_2', name: 'Deckenlampe Links 2', category: 'leuchte', icon: 'mdi:lightbulb' },
                 ],
               },
               {
@@ -269,10 +289,10 @@ export const MOCK_DATA = {
                 category: 'leuchte',
                 icon: 'mdi:lightbulb-group',
                 area_id: 'julian',
-                entity_ids: ['light.lichtstreifen', 'light.bettlampe'],
+                entity_ids: ['light.deckenlampe_3', 'light.deckenlampe_4'],
                 children: [
-                  { key: 'dev_lichtstreifen:light', entity_id: 'light.lichtstreifen', name: 'Lichtstreifen', category: 'leuchte', icon: 'mdi:lightbulb' },
-                  { key: 'dev_bettlampe:light', entity_id: 'light.bettlampe', name: 'Bettlampe', category: 'leuchte', icon: 'mdi:lightbulb' },
+                  { key: 'dev_dl3:light', entity_id: 'light.deckenlampe_3', name: 'Deckenlampe Rechts 1', category: 'leuchte', icon: 'mdi:lightbulb' },
+                  { key: 'dev_dl4:light', entity_id: 'light.deckenlampe_4', name: 'Deckenlampe Rechts 2', category: 'leuchte', icon: 'mdi:lightbulb' },
                 ],
               },
             ],

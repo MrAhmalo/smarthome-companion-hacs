@@ -112,7 +112,8 @@ export class MockHass {
 
   _notify() {
     if (this.panel) {
-      // Trigger reactive update on WebComponent
+      // Deep clone states so component value-checks and references strictly update
+      this.states = JSON.parse(JSON.stringify(this.states));
       this.panel.hass = { ...this };
     }
   }
@@ -126,7 +127,31 @@ export class MockHass {
   }
 
   applyScenario(scenario) {
-    if (scenario === 'all_on') {
+    if (scenario === 'default') {
+      this.states = JSON.parse(JSON.stringify(MOCK_DATA.states));
+      this.layout.warning = MOCK_DATA.layout.warning;
+    } else if (scenario === 'master_off') {
+      this.states['light.deckenlampe_1'].state = 'off';
+      this.states['light.deckenlampe_2'].state = 'off';
+      this.states['light.deckenlampe_3'].state = 'off';
+      this.states['light.deckenlampe_4'].state = 'off';
+      this.states['light.schreibtisch_lampe'].state = 'off';
+      this.states['light.lavalampe'].state = 'off';
+      this.states['light.lichtstreifen'].state = 'on';
+      this.states['light.lichtstreifen'].attributes.brightness = 188;
+      this.states['light.bettlampe'].state = 'on';
+      this.states['light.bettlampe'].attributes.brightness = 26;
+    } else if (scenario === 'single_slider') {
+      this.states['light.deckenlampe_1'].state = 'off';
+      this.states['light.deckenlampe_2'].state = 'off';
+      this.states['light.deckenlampe_3'].state = 'off';
+      this.states['light.deckenlampe_4'].state = 'off';
+      this.states['light.schreibtisch_lampe'].state = 'off';
+      this.states['light.lavalampe'].state = 'off';
+      this.states['light.bettlampe'].state = 'off';
+      this.states['light.lichtstreifen'].state = 'on';
+      this.states['light.lichtstreifen'].attributes.brightness = 188;
+    } else if (scenario === 'all_on') {
       for (const [id, st] of Object.entries(this.states)) {
         if (id.startsWith('light.') || id.startsWith('switch.')) {
           st.state = 'on';

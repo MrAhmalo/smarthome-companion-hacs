@@ -78,11 +78,9 @@ def capture(scene="dashboard", out_name=None, width=1280, height=800):
         }
         """
     elif scene == "master_off":
-        action_code = """
-        window.mockHass.states['light.schreibtisch_lampe'].state = 'off';
-        window.mockHass.states['light.lavalampe'].state = 'off';
-        window.panel._reload();
-        """
+        action_code = "window.mockHass.applyScenario('master_off');"
+    elif scene == "single_slider":
+        action_code = "window.mockHass.applyScenario('single_slider');"
     elif scene == "edit_mode":
         action_code = "window.panel._toggleEditMode();"
     elif scene == "group_modal":

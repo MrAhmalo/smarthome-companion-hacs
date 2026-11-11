@@ -205,8 +205,10 @@ export class Tile {
     this.hass = hass;
     const st = hass.states[this.entityId];
     const pw = this.spec.power ? hass.states[this.spec.power] : null;
-    if (this._rendered && st === this._st && pw === this._pw) return;
+    const stateKey = `${st?.state}|${st?.attributes?.brightness}|${st?.attributes?.current_position}|${st?.attributes?.rgb_color}|${st?.last_updated}|${pw?.state}`;
+    if (this._rendered && this._stateKey === stateKey) return;
     this._rendered = true;
+    this._stateKey = stateKey;
     this._st = st;
     this._pw = pw;
 

@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>SmartHome Companion OS - Local Live Preview & Workbench</title>
   <style>
     :root {
@@ -107,6 +110,8 @@
       <span>Szenario:</span>
       <select id="sel-scenario">
         <option value="default">Standard (Reale Lichter/Geräte)</option>
+        <option value="master_off">Deckenlampen Master Aus (Lichtstreifen & Bettlampe Ein)</option>
+        <option value="single_slider">Nur 1 Slider (Lichtstreifen Ein, Bettlampe Aus)</option>
         <option value="all_on">Alle Lampen Ein (100%)</option>
         <option value="all_off">Alle Lampen Aus</option>
         <option value="warning_frost">Wetterwarnung: FROST</option>
@@ -126,8 +131,10 @@
   </div>
 
   <script type="module">
-    import '../companion-dashboard.js';
-    import { MockHass } from './mock-hass.js';
+    // Automatic zero-cache buster: forces fresh bundle download on every reload
+    const buster = Date.now();
+    await import(`../dist/companion-dashboard.bundle.js?t=${buster}`);
+    const { MockHass } = await import(`./mock-hass.js?t=${buster}`);
 
     const panel = document.getElementById('dashboard-panel');
     const container = document.getElementById('viewport-container');

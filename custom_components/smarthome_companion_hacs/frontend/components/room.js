@@ -76,7 +76,7 @@ export function applySmartTileLayout(tiles, grid = null) {
   }
 
   if (grid) {
-    const ordered = [...topWide, ...compactTiles, ...sliderTiles, ...bottomWide];
+    const ordered = [...topWide, ...sliderTiles, ...compactTiles, ...bottomWide];
     grid.replaceChildren(...ordered.map((t) => t.el));
   }
 }
