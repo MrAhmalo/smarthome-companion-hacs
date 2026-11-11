@@ -711,13 +711,32 @@ async def async_register_dashboard_panel(hass):
     except Exception:  # noqa: BLE001
         pass
 
+    dev_server = os.environ.get("COMPANION_DEV_SERVER")
+    if not dev_server and DOMAIN in hass.data and "store" in hass.data[DOMAIN]:
+        try:
+            cfg = await async_get_or_create_config(hass, hass.data[DOMAIN]["store"])
+            dev_server = cfg.get("dev_server_url")
+        except Exception:  # noqa: BLE001
+            dev_server = None
+
+    if dev_server:
+        dev_server = dev_server.rstrip("/")
+        module_url = f"{dev_server}/companion-dashboard.js"
+        _LOGGER.warning("Companion Dashboard running in LIVE DEV MODE from: %s", module_url)
+    else:
+        bundle_file = Path(__file__).parent / "frontend" / "dist" / "companion-dashboard.bundle.js"
+        if bundle_file.exists():
+            module_url = f"{STATIC_URL}/dist/companion-dashboard.bundle.js?v={VERSION}"
+        else:
+            module_url = f"{STATIC_URL}/companion-dashboard.js?v={VERSION}"
+
     await panel_custom.async_register_panel(
         hass,
         frontend_url_path=PANEL_URL,
         webcomponent_name="companion-dashboard-panel",
         sidebar_title="Übersicht",
         sidebar_icon="mdi:view-dashboard",
-        module_url=f"{STATIC_URL}/companion-dashboard.js?v={VERSION}",
+        module_url=module_url,
         embed_iframe=False,
         require_admin=False,
         config={},

@@ -1,6 +1,6 @@
-import { h, icon, domainOf } from '../lib/util.js?v=2.8.23';
-import { EntityPicker } from './entity_picker.js?v=2.8.23';
-import { CustomDropdown } from './custom_dropdown.js?v=2.8.23';
+import { h, icon, domainOf } from '../lib/util.js';
+import { EntityPicker } from './entity_picker.js';
+import { CustomDropdown } from './custom_dropdown.js';
 
 export const DEVICE_CATEGORIES = [
   { id: 'leuchte', name: 'Leuchte', icon: 'mdi:lightbulb', color: '#ffc107', desc: 'Lampen, Spots & LED-Streifen' },
@@ -882,13 +882,13 @@ export class DeviceWizard {
         h('div', {},
           h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Gruppen-Name:'),
           nameInput),
-        h('div', {},
+        h('div', { style: { position: 'relative', zIndex: '30' } },
           h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Raum:'),
           areaDd.el),
-        h('div', {},
+        h('div', { style: { position: 'relative', zIndex: '20' } },
           h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Kategorie:'),
           catDd.el),
-        h('div', {},
+        h('div', { style: { position: 'relative', zIndex: '10' } },
           countHeader,
           tagsContainer,
           addDropdownWrap)),

@@ -1,23 +1,9 @@
 // Room detail subview: dedicated granular control page for a single room.
 import {
   h, icon, domainOf, numeric, isActive, isUnavailable, entityIcon, setSliderVal,
-} from '../lib/util.js?v=2.8.23';
-import { Tile, GroupTile } from './tile.js?v=2.8.23';
-import { effectiveCategory, applySmartTileLayout } from './room.js?v=2.8.23';
-
-const GROUPS = [
-  { key: 'light', icon: 'mdi:lightbulb', label: 'Alle Lichter', color: '#ffc107' },
-  { key: 'cover', icon: 'mdi:window-shutter', label: 'Alle Jalousien', color: '#9c27b0' },
-  { key: 'switch', icon: 'mdi:power-plug', label: 'Alle Geräte & Steckdosen', color: '#2196f3' },
-];
-
-function average(hass, ids) {
-  const values = ids.map((id) => numeric(hass.states[id])).filter((v) => v !== null);
-  if (!values.length) return null;
-  const unit = ids.map((id) => hass.states[id]?.attributes?.unit_of_measurement).find(Boolean) || '';
-  const avg = values.reduce((a, b) => a + b, 0) / values.length;
-  return `${avg.toFixed(1).replace(/\.0$/, '')}${unit ? ` ${unit}` : ''}`.replace(' %', '%').replace(' °', '°');
-}
+} from '../lib/util.js';
+import { Tile, GroupTile } from './tile.js';
+import { effectiveCategory, applySmartTileLayout, GROUPS, average } from './room.js';
 
 export class RoomDetailView {
   constructor(roomSpec, ctx, onBack) {

@@ -1,18 +1,18 @@
 // Room component: collapsible "expander" card with area header (sensors, alerts, group controls) and tiles.
 import {
   h, icon, domainOf, isActive, numeric, effectiveCategory,
-} from '../lib/util.js?v=2.8.23';
-import { Tile, GroupTile } from './tile.js?v=2.8.23';
+} from '../lib/util.js';
+import { Tile, GroupTile } from './tile.js';
 
 export { effectiveCategory };
 
-const GROUPS = [
+export const GROUPS = [
   { key: 'light', icon: 'mdi:lightbulb', label: 'Alle Lichter', color: '#ffc107' },
   { key: 'switch', icon: 'mdi:power-plug', label: 'Alle Geräte & Steckdosen', color: '#2196f3' },
   { key: 'cover', icon: 'mdi:window-shutter', label: 'Alle Jalousien', color: '#9c27b0' },
 ];
 
-function average(hass, ids) {
+export function average(hass, ids) {
   const values = ids.map((id) => numeric(hass.states[id])).filter((v) => v !== null);
   if (!values.length) return null;
   const unit = ids.map((id) => hass.states[id]?.attributes?.unit_of_measurement).find(Boolean) || '';

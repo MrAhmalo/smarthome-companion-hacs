@@ -11,6 +11,7 @@ __pycache__/
 env/
 venv/
 dist/
+!custom_components/smarthome_companion_hacs/frontend/dist/
 build/
 *.egg-info/
 

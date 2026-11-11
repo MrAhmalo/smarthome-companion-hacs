@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartHome Companion OS - Local Live Preview & Workbench</title>
+  <style>
+    :root {
+      --primary-background-color: #111111;
+      --primary-text-color: #e6e6e6;
+      --secondary-text-color: #9b9b9b;
+      --card-background-color: #1c1c1c;
+      --ha-card-background: #1c1c1c;
+      --primary-color: #03a9f4;
+      --state-active-color: #ffc107;
+      --ha-font-family-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #0a0a0a;
+      color: #fff;
+      font-family: var(--ha-font-family-body);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    #dev-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 99999;
+      background: #18181b;
+      border-bottom: 2px solid #00bcd4;
+      padding: 8px 16px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      box-shadow: 0 4px 20px rgba(0,0,0,.5);
+      font-size: 13px;
+    }
+    #dev-toolbar select, #dev-toolbar button {
+      background: #27272a;
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.15);
+      padding: 5px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: background .15s, border-color .15s;
+    }
+    #dev-toolbar select:hover, #dev-toolbar button:hover {
+      background: #3f3f46;
+      border-color: #00bcd4;
+    }
+    #dev-toolbar button.active {
+      background: rgba(0, 188, 212, 0.25);
+      border-color: #00bcd4;
+      color: #00bcd4;
+    }
+    .badge-live {
+      background: #10b981;
+      color: #000;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    #viewport-container {
+      width: 100%;
+      margin: 0 auto;
+      flex: 1;
+      transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      box-sizing: border-box;
+      background: var(--primary-background-color);
+    }
+    #viewport-container.boxed {
+      margin: 20px auto;
+      border-radius: 16px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.8);
+      border: 1px solid rgba(255,255,255,0.1);
+      overflow: hidden;
+    }
+  </style>
+  <script type="module" src="./ha-icon-mock.js"></script>
+</head>
+<body>
+  <div id="dev-toolbar">
+    <span class="badge-live">Live Mock</span>
+    <strong>Companion Workbench</strong>
+
+    <label style="display:flex; align-items:center; gap:6px;">
+      <span>Viewport:</span>
+      <select id="sel-viewport">
+        <option value="100%">100% Fluid Desktop</option>
+        <option value="1280px">1280x800 Tablet</option>
+        <option value="1024px">1024x600 Kiosk (Pi)</option>
+        <option value="800px">800x480 Kiosk Mini</option>
+        <option value="390px">390x844 Mobile</option>
+      </select>
+    </label>
+
+    <label style="display:flex; align-items:center; gap:6px;">
+      <span>Szenario:</span>
+      <select id="sel-scenario">
+        <option value="default">Standard (Reale Lichter/Geräte)</option>
+        <option value="all_on">Alle Lampen Ein (100%)</option>
+        <option value="all_off">Alle Lampen Aus</option>
+        <option value="warning_frost">Wetterwarnung: FROST</option>
+        <option value="warning_cleared">Wetterwarnung: Keine</option>
+      </select>
+    </label>
+
+    <button id="btn-edit-mode" title="Bearbeitungsmodus umschalten">✏️ Edit Mode</button>
+    <button id="btn-open-wizard" title="Geräte-Wizard öffnen">➕ Wizard</button>
+    <button id="btn-open-settings" title="Einstellungen öffnen">⚙️ Settings</button>
+    <button id="btn-open-julian" title="Detailansicht Zimmer Julian öffnen">👁️ Raum Julian</button>
+    <button id="btn-open-warning" title="DWD Wetterwarnung Unterseite öffnen">⚠️ DWD Warnung</button>
+  </div>
+
+  <div id="viewport-container">
+    <companion-dashboard-panel id="dashboard-panel"></companion-dashboard-panel>
+  </div>
+
+  <script type="module">
+    import '../companion-dashboard.js';
+    import { MockHass } from './mock-hass.js';
+
+    const panel = document.getElementById('dashboard-panel');
+    const container = document.getElementById('viewport-container');
+    const mockHass = new MockHass(panel);
+
+    // Initial injection
+    panel.hass = mockHass;
+    window.panel = panel;
+    window.mockHass = mockHass;
+
+    // Viewport Controller
+    const selViewport = document.getElementById('sel-viewport');
+    selViewport.addEventListener('change', (e) => {
+      const w = e.target.value;
+      container.style.width = w;
+      if (w === '100%') {
+        container.classList.remove('boxed');
+      } else {
+        container.classList.add('boxed');
+      }
+      panel.narrow = (w === '390px');
+    });
+
+    // Scenario Controller
+    const selScenario = document.getElementById('sel-scenario');
+    selScenario.addEventListener('change', (e) => {
+      mockHass.applyScenario(e.target.value);
+    });
+
+    // Quick Actions
+    const btnEdit = document.getElementById('btn-edit-mode');
+    btnEdit.addEventListener('click', () => {
+      panel._toggleEditMode();
+      btnEdit.classList.toggle('active', !!panel._editMode);
+    });
+
+    document.getElementById('btn-open-wizard').addEventListener('click', () => {
+      panel._openWizard();
+    });
+
+    document.getElementById('btn-open-settings').addEventListener('click', () => {
+      panel._openSettings();
+    });
+
+    document.getElementById('btn-open-julian').addEventListener('click', () => {
+      panel._openRoom('julian');
+    });
+
+    document.getElementById('btn-open-warning').addEventListener('click', () => {
+      panel._openWarningDetail();
+    });
+  </script>
+</body>
+</html>

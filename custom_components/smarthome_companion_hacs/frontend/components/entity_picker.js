@@ -1,5 +1,5 @@
 // Rich Entity Picker for Companion Dashboard (Shadow-DOM safe, instant autocomplete).
-import { h, icon, domainOf, entityIcon, stateLabel } from '../lib/util.js?v=2.8.23';
+import { h, icon, domainOf, entityIcon, stateLabel } from '../lib/util.js';
 
 const DOMAIN_LABELS_DE = {
   light: 'Lichter', switch: 'Schalter', sensor: 'Sensoren', binary_sensor: 'Binär',

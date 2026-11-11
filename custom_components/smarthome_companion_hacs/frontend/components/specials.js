@@ -1,7 +1,7 @@
 // Special cards: header badges, smoke alerts, weather warning, trash, persons, announcement, bottom navigation.
 import {
   h, icon, domainOf, entityIcon, isUnavailable, stateLabel, numeric, moreInfo, navigate, resolveColor, renderTrashBin,
-} from '../lib/util.js?v=2.8.23';
+} from '../lib/util.js';
 
 const allowed = (users, userId) => !users || users.length === 0 || users.includes(userId);
 

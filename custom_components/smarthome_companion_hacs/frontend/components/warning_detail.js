@@ -1,5 +1,5 @@
 // WarningDetailView: Dedicated weather warning subview for DWD / NINA alerts.
-import { h, icon, numeric } from '../lib/util.js?v=2.8.23';
+import { h, icon, numeric } from '../lib/util.js';
 
 const LVL_NAMES = [
   'Keine Warnung',

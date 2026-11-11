@@ -1,16 +1,16 @@
 // SmartHome Companion dashboard panel (sidebar entry "Übersicht").
 // Self-contained: no HACS cards required. The layout is resolved by the backend on every load,
 // so renamed entities / re-configured devices never leave dead tiles behind.
-import { STYLES } from './lib/styles.js?v=2.8.23';
-import { h, icon, debounce } from './lib/util.js?v=2.8.23';
-import { Room } from './components/room.js?v=2.8.23';
-import { RoomDetailView } from './components/room_detail.js?v=2.8.23';
-import { WarningDetailView } from './components/warning_detail.js?v=2.8.23';
+import { STYLES } from './lib/styles.js';
+import { h, icon, debounce } from './lib/util.js';
+import { Room } from './components/room.js';
+import { RoomDetailView } from './components/room_detail.js';
+import { WarningDetailView } from './components/warning_detail.js';
 import {
   Badges, SmokeAlerts, WarningCard, TrashCard, PersonCards, AnnounceCard, NavBar,
-} from './components/specials.js?v=2.8.23';
-import { Settings } from './components/settings.js?v=2.8.23';
-import { DeviceWizard } from './components/device_wizard.js?v=2.8.23';
+} from './components/specials.js';
+import { Settings } from './components/settings.js';
+import { DeviceWizard } from './components/device_wizard.js';
 
 class CompanionDashboardPanel extends HTMLElement {
   constructor() {
@@ -151,7 +151,7 @@ class CompanionDashboardPanel extends HTMLElement {
       this._ro?.disconnect();
       this._backBtn.hidden = false;
       this._menuBtn.hidden = true;
-      this._warningDetail = new WarningDetailView(config.warning, () => this._closeWarningDetail());
+      this._warningDetail = new WarningDetailView(config.warning || layout.warning || { entity_id: config.warning_entity }, () => this._closeWarningDetail());
       this._nav = new NavBar(config.nav);
       this._components = [this._warningDetail];
       this._content.replaceChildren(this._warningDetail.el, this._nav.el);

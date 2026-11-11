@@ -894,7 +894,8 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 }
 
 /* ── Custom Dropdown (No native browser <select>) ── */
-.custom-dropdown { position: relative; width: 100%; font-size: 13px; }
+.custom-dropdown { position: relative; width: 100%; font-size: 13px; z-index: 10; }
+.custom-dropdown:has([data-open]) { z-index: 999; }
 .cdd-box {
   display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 4px 12px;
   border-radius: 10px; border: 1px solid rgba(128,128,128,.3); background: var(--cd-card);
@@ -910,9 +911,9 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .cdd-chevron { flex: none; color: var(--cd-secondary); transition: transform .2s ease; }
 .cdd-box[data-open] .cdd-chevron { transform: rotate(180deg); }
 .cdd-menu {
-  position: absolute; z-index: 120; left: 0; right: 0; top: calc(100% + 4px);
-  background: var(--cd-card); border-radius: 12px; border: 1px solid rgba(128,128,128,.25);
-  box-shadow: 0 14px 40px rgba(0,0,0,.65); max-height: 280px; display: flex; flex-direction: column; overflow: hidden;
+  position: absolute; z-index: 1000; left: 0; right: 0; top: calc(100% + 4px);
+  background: #1c1c1f; border-radius: 12px; border: 1px solid rgba(255,255,255,.2);
+  box-shadow: 0 16px 48px rgba(0,0,0,.95); max-height: 280px; display: flex; flex-direction: column; overflow: hidden;
   animation: cddSlideDown .15s ease-out;
 }
 @keyframes cddSlideDown {
