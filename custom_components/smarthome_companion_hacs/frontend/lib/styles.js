@@ -677,21 +677,23 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   display: grid; place-items: center; color: var(--cd-accent); flex-shrink: 0;
 }
 .ip-input { flex: 1; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; outline: none; min-width: 0; }
-.ip-toggle {
-  width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent;
-  cursor: pointer; color: var(--cd-secondary); display: grid; place-items: center;
+.ip-clear, .ip-toggle {
+  width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent;
+  cursor: pointer; color: var(--cd-secondary); display: grid; place-items: center; flex-shrink: 0;
 }
-.ip-toggle:hover { background: var(--cd-tile-bg); color: #fff; }
+.ip-clear:hover, .ip-toggle:hover { background: var(--cd-tile-bg); color: #fff; }
+.ip-clear[hidden] { display: none; }
 .ip-dropdown {
   position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 90;
   border-radius: 14px; background: var(--cd-card); border: 1px solid rgba(128,128,128,.3);
   box-shadow: 0 12px 36px rgba(0,0,0,.6); max-height: 280px; display: flex; flex-direction: column; overflow: hidden;
 }
-.ip-search-row {
-  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+.ip-dropdown[hidden] { display: none; }
+.ip-status {
+  padding: 6px 10px; font-size: 11px; color: var(--cd-secondary);
   background: var(--cd-tile-bg); border-bottom: 1px solid rgba(128,128,128,.15);
+  display: flex; align-items: center; justify-content: space-between;
 }
-.ip-search-input { flex: 1; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; outline: none; }
 .ip-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px;
   padding: 8px; overflow-y: auto; max-height: 220px;

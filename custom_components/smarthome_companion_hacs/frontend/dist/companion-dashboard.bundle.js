@@ -682,21 +682,23 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   display: grid; place-items: center; color: var(--cd-accent); flex-shrink: 0;
 }
 .ip-input { flex: 1; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; outline: none; min-width: 0; }
-.ip-toggle {
-  width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent;
-  cursor: pointer; color: var(--cd-secondary); display: grid; place-items: center;
+.ip-clear, .ip-toggle {
+  width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent;
+  cursor: pointer; color: var(--cd-secondary); display: grid; place-items: center; flex-shrink: 0;
 }
-.ip-toggle:hover { background: var(--cd-tile-bg); color: #fff; }
+.ip-clear:hover, .ip-toggle:hover { background: var(--cd-tile-bg); color: #fff; }
+.ip-clear[hidden] { display: none; }
 .ip-dropdown {
   position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 90;
   border-radius: 14px; background: var(--cd-card); border: 1px solid rgba(128,128,128,.3);
   box-shadow: 0 12px 36px rgba(0,0,0,.6); max-height: 280px; display: flex; flex-direction: column; overflow: hidden;
 }
-.ip-search-row {
-  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+.ip-dropdown[hidden] { display: none; }
+.ip-status {
+  padding: 6px 10px; font-size: 11px; color: var(--cd-secondary);
   background: var(--cd-tile-bg); border-bottom: 1px solid rgba(128,128,128,.15);
+  display: flex; align-items: center; justify-content: space-between;
 }
-.ip-search-input { flex: 1; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; outline: none; }
 .ip-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px;
   padding: 8px; overflow-y: auto; max-height: 220px;
@@ -1898,41 +1900,153 @@ class CustomDropdown {
 
 
 // ─── START: components/icon_picker.js ───
-// Rich Icon Picker for Companion Dashboard (Shadow-DOM safe, instant visual search).
+// Rich Icon Picker for Companion Dashboard (HA-style single-input search across all MDI icons).
+let _mdiCatalog = null;
+let _mdiLoadPromise = null;
+
+function _buildBaseCatalog(hass) {
+  const seen = new Set();
+  const list = [];
+
+  for (const item of POPULAR_ICONS) {
+    const ic = typeof item === 'string' ? item : item?.icon;
+    if (!ic || seen.has(ic)) continue;
+    seen.add(ic);
+    const label = (typeof item === 'object' && item?.name) ? item.name : ic.replace(/^mdi:/, '');
+    const tags = (typeof item === 'object' && item?.cat) ? item.cat.toLowerCase() : '';
+    list.push({ icon: ic, label, search: `${ic} ${label} ${tags}`.toLowerCase() });
+  }
+
+  if (hass?.states) {
+    for (const st of Object.values(hass.states)) {
+      const ic = st?.attributes?.icon;
+      if (typeof ic === 'string' && ic.startsWith('mdi:') && !seen.has(ic)) {
+        seen.add(ic);
+        const slug = ic.slice(4);
+        list.push({ icon: ic, label: slug, search: ic.toLowerCase() });
+      }
+    }
+  }
+
+  return { seen, list };
+}
+
+async function _loadFullMdiCatalog(hass) {
+  if (_mdiCatalog) return _mdiCatalog;
+  if (_mdiLoadPromise) return _mdiLoadPromise;
+
+  _mdiLoadPromise = (async () => {
+    const { seen, list } = _buildBaseCatalog(hass);
+    try {
+      const resp = await fetch('/static/mdi/iconList.json', { credentials: 'same-origin' });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (Array.isArray(data)) {
+          for (const entry of data) {
+            const rawName = typeof entry === 'string' ? entry : entry?.name;
+            if (!rawName) continue;
+            const ic = rawName.startsWith('mdi:') ? rawName : `mdi:${rawName}`;
+            if (seen.has(ic)) continue;
+            seen.add(ic);
+            const slug = ic.slice(4);
+            const kw = Array.isArray(entry?.keywords) ? entry.keywords.join(' ') : '';
+            list.push({
+              icon: ic,
+              label: slug,
+              search: `${ic} ${kw}`.toLowerCase(),
+            });
+          }
+        }
+      }
+    } catch (_) {
+      // Offline / dev mock fallback: base catalog + HA state icons already loaded
+    }
+    _mdiCatalog = list;
+    return _mdiCatalog;
+  })();
+
+  return _mdiLoadPromise;
+}
 class IconPicker {
-  constructor({ hass, value = '', onChange, placeholder = 'mdi:...' }) {
+  constructor({ hass, value = '', onChange, placeholder = 'Icon suchen (z. B. Lampe, mdi:bed)...' }) {
     this.hass = hass;
     this.value = value || '';
     this.onChange = onChange;
     this.placeholder = placeholder;
     this.isOpen = false;
     this.searchQuery = '';
+    this._catalog = _mdiCatalog || _buildBaseCatalog(hass).list;
 
     this._onDocClick = (e) => {
       if (!e.composedPath().includes(this.el)) this._close();
     };
 
     this._build();
+
+    // Preload full HA MDI catalog in background
+    _loadFullMdiCatalog(this.hass).then((catalog) => {
+      this._catalog = catalog;
+      if (this.isOpen) this._renderGrid();
+    });
   }
 
   _build() {
-    this.previewIcon = h('div', { class: 'ip-preview', onClick: (e) => { e.stopPropagation(); this._toggle(); } });
+    this.previewIcon = h('div', {
+      class: 'ip-preview',
+      onClick: (e) => { e.stopPropagation(); this._toggle(); },
+    });
+
     this.textInput = h('input', {
       type: 'text',
       class: 'ip-input',
       value: this.value,
       placeholder: this.placeholder,
+      autocomplete: 'off',
+      spellcheck: 'false',
       onInput: (e) => {
         const raw = e.target.value.trim();
         this.value = raw;
         this.searchQuery = raw.replace(/^mdi:/i, '').toLowerCase();
         this._updatePreview();
+        this._updateClearBtn();
         if (!this.isOpen) this._open(false);
         else this._renderGrid();
         this.onChange?.(this.value);
       },
-      onFocus: () => this._open(false),
+      onFocus: () => {
+        if (!this.isOpen) {
+          this.searchQuery = '';
+          this._open(true);
+        }
+      },
+      onClick: (e) => {
+        e.stopPropagation();
+        if (!this.isOpen) {
+          this.searchQuery = '';
+          this._open(true);
+        }
+      },
     });
+
+    this.clearBtn = h('button', {
+      type: 'button',
+      class: 'ip-clear',
+      'aria-label': 'Eingabe löschen',
+      title: 'Löschen & alle Icons anzeigen',
+      hidden: !this.value,
+      onClick: (e) => {
+        e.stopPropagation();
+        this.value = '';
+        this.textInput.value = '';
+        this.searchQuery = '';
+        this._updatePreview();
+        this._updateClearBtn();
+        this.onChange?.('');
+        if (!this.isOpen) this._open(false);
+        else this._renderGrid();
+        this.textInput.focus();
+      },
+    }, icon('mdi:close'));
 
     this.toggleBtn = h('button', {
       type: 'button',
@@ -1941,29 +2055,25 @@ class IconPicker {
       onClick: (e) => { e.stopPropagation(); this._toggle(); },
     }, icon('mdi:chevron-down'));
 
-    this.box = h('div', { class: 'ip-box' }, this.previewIcon, this.textInput, this.toggleBtn);
+    this.box = h('div', { class: 'ip-box' }, this.previewIcon, this.textInput, this.clearBtn, this.toggleBtn);
 
-    this.searchInput = h('input', {
-      type: 'text',
-      class: 'ip-search-input',
-      placeholder: 'Icon suchen (z. B. Lampe, Jalousie, TV, Müll)...',
-      onInput: (e) => {
-        this.searchQuery = e.target.value.toLowerCase().trim();
-        this._renderGrid();
-      },
-    });
-    this.searchRow = h('div', { class: 'ip-search-row' }, icon('mdi:magnify'), this.searchInput);
+    this.statusEl = h('div', { class: 'ip-status' });
     this.grid = h('div', { class: 'ip-grid' });
-    this.dropdown = h('div', { class: 'ip-dropdown', hidden: true }, this.searchRow, this.grid);
+    this.dropdown = h('div', { class: 'ip-dropdown', hidden: true }, this.statusEl, this.grid);
 
     this.el = h('div', { class: 'icon-picker' }, this.box, this.dropdown);
     this._updatePreview();
+  }
+
+  _updateClearBtn() {
+    this.clearBtn.hidden = !this.textInput.value;
   }
 
   _setValue(val) {
     this.value = val;
     this.textInput.value = val;
     this._updatePreview();
+    this._updateClearBtn();
     this.onChange?.(val);
     this._close();
   }
@@ -1975,19 +2085,23 @@ class IconPicker {
 
   _toggle() {
     if (this.isOpen) this._close();
-    else this._open(true);
+    else {
+      this.searchQuery = '';
+      this._open(true);
+    }
   }
 
-  _open(focusSearch = true) {
+  _open(selectInput = false) {
     if (this.isOpen) return;
     this.isOpen = true;
     this.dropdown.hidden = false;
     this.box.dataset.open = '';
-    this.searchQuery = '';
-    this.searchInput.value = '';
     this._renderGrid();
     setTimeout(() => {
-      if (focusSearch) this.searchInput.focus();
+      if (selectInput) {
+        this.textInput.focus();
+        if (this.textInput.value) this.textInput.select();
+      }
       document.addEventListener('pointerdown', this._onDocClick);
     }, 10);
   }
@@ -2002,24 +2116,34 @@ class IconPicker {
 
   _renderGrid() {
     const q = this.searchQuery;
-    const filtered = POPULAR_ICONS.filter(([ic, label, tags]) => {
-      if (!q) return true;
-      return ic.toLowerCase().includes(q) || label.toLowerCase().includes(q) || (tags && tags.toLowerCase().includes(q));
-    });
+    const filtered = q
+      ? this._catalog.filter((entry) => entry.search.includes(q))
+      : this._catalog;
 
-    const items = filtered.map(([ic, label]) => {
-      const isSel = this.value === ic;
+    const maxVisible = 80;
+    const visible = filtered.slice(0, maxVisible);
+
+    if (q) {
+      this.statusEl.textContent = filtered.length > maxVisible
+        ? `${maxVisible} von ${filtered.length} Treffern – weiter tippen zum Eingrenzen`
+        : `${filtered.length} Treffer`;
+    } else {
+      this.statusEl.textContent = `${this._catalog.length} Icons verfügbar · Direkt oben tippen zum Suchen`;
+    }
+
+    const items = visible.map((entry) => {
+      const isSel = this.value === entry.icon;
       return h('button', {
         type: 'button',
         class: `ip-chip${isSel ? ' active' : ''}`,
-        title: `${label} (${ic})`,
-        onClick: (e) => { e.stopPropagation(); this._setValue(ic); },
-      }, icon(ic), h('span', { class: 'ip-chip-name' }, label));
+        title: `${entry.label} (${entry.icon})`,
+        onClick: (e) => { e.stopPropagation(); this._setValue(entry.icon); },
+      }, icon(entry.icon), h('span', { class: 'ip-chip-name' }, entry.label));
     });
 
-    if (q && !q.startsWith('mdi:')) {
+    if (q) {
       const customMdi = `mdi:${q.replace(/\s+/g, '-')}`;
-      if (!filtered.some(([ic]) => ic === customMdi)) {
+      if (!visible.some((entry) => entry.icon === customMdi)) {
         items.unshift(h('button', {
           type: 'button',
           class: 'ip-chip',
@@ -2030,7 +2154,7 @@ class IconPicker {
     }
 
     if (!items.length) {
-      this.grid.replaceChildren(h('div', { class: 'ip-empty' }, 'Kein Icon gefunden – direkt „mdi:name“ oben eingeben'));
+      this.grid.replaceChildren(h('div', { class: 'ip-empty' }, 'Kein Icon gefunden – direkt „mdi:name“ eingeben'));
       return;
     }
 
