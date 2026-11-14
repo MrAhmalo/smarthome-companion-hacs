@@ -147,7 +147,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .empty ha-icon { --mdc-icon-size: 48px; opacity: .5; }
 
 /* ── Room (expander) ── */
-.room-head { display: flex; align-items: center; gap: 12px; padding: 10px 12px; min-height: 60px; cursor: pointer; user-select: none; position: relative; touch-action: manipulation; }
+.room-head { display: flex; align-items: center; gap: 10px; padding: 10px; min-height: 40px; cursor: pointer; user-select: none; position: relative; touch-action: manipulation; }
 .room-icon {
   flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
   color: var(--cd-accent); background: rgba(3, 169, 244, 0.15);
@@ -162,7 +162,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .room-meta .alert { color: var(--cd-active); font-weight: 600; }
 .room-controls { display: flex; gap: 6px; flex-shrink: 0; }
 .ctrl-btn {
-  position: relative; width: 38px; height: 38px; border-radius: 14px; border: 0; cursor: pointer;
+  position: relative; width: 38px; height: 38px; border-radius: 50%; border: 0; cursor: pointer;
   display: grid; place-items: center; background: var(--cd-tile-bg); color: var(--cd-secondary);
   transition: transform .15s, background .15s, color .15s; touch-action: manipulation;
 }
@@ -170,22 +170,23 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   color: var(--group-color, var(--cd-active));
   background: color-mix(in srgb, var(--group-color, var(--cd-active)) 18%, transparent);
 }
-.ctrl-btn .count {
-  position: absolute; top: -3px; right: -3px; min-width: 16px; height: 16px; border-radius: 8px; padding: 0 4px;
-  background: var(--group-color, var(--cd-active)); color: #fff; font-size: 10px; font-weight: 700; display: grid; place-items: center;
+.chevron {
+  flex: none; width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--cd-tile-bg); color: var(--cd-secondary);
+  transition: transform .28s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.chevron { flex: none; color: var(--cd-secondary); transition: transform .28s ease; }
 .room[data-open] .chevron { transform: rotate(180deg); }
 .room[data-always] .chevron { display: none; }
 .room-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .3s ease; }
 .room[data-open] .room-body { grid-template-rows: 1fr; }
 .room-body-inner { overflow: hidden; min-height: 0; }
-.tile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 4px 8px 10px; }
+.tile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 2px 10px 10px; }
 
 /* ── Tiles ── */
 .tile {
   --tile-color: var(--cd-active);
-  display: grid; gap: 8px; padding: 8px 10px 8px 8px; min-width: 0; overflow: hidden; border-radius: var(--cd-tile-radius, 12px);
+  display: grid; gap: 8px; padding: 10px; min-width: 0; overflow: hidden; border-radius: var(--cd-tile-radius, 12px);
   background: var(--cd-tile-bg); transition: background .2s, opacity .2s;
   position: relative; touch-action: manipulation;
 }

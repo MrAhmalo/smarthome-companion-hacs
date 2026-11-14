@@ -50,7 +50,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if data.get("action") != "update":
                 return
             changes = data.get("changes") or {}
-            old_eid = changes.get("entity_id")
+            old_eid = data.get("old_entity_id") or changes.get("entity_id")
             new_eid = data.get("entity_id")
             if isinstance(old_eid, str) and isinstance(new_eid, str) and old_eid != new_eid:
                 hass.async_create_task(async_sync_renamed_entities(hass, store, {old_eid: new_eid}))

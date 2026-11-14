@@ -1657,7 +1657,7 @@ export class DeviceWizard {
             type: 'config/device_registry/update',
             device_id: d.id,
             name_by_user: this.customName || undefined,
-            area_id: this.selectedAreaId || undefined,
+            area_id: this.selectedAreaId || null,
           });
         } catch (err) {
           console.warn('[wizard] device rename failed', err);
@@ -1669,7 +1669,7 @@ export class DeviceWizard {
             const payload = {
               type: 'config/entity_registry/update',
               entity_id: ch.entity_id,
-              area_id: this.selectedAreaId || undefined,
+              area_id: this.selectedAreaId || null,
             };
             if (isMulti && ch.name) {
               payload.name = ch.name;
@@ -1733,7 +1733,7 @@ export class DeviceWizard {
         device_id: d.id,
         category: this.selectedCategory,
         custom_name: this.customName,
-        area_id: this.selectedAreaId || undefined,
+        area_id: this.selectedAreaId || '',
         icon: this.customIcon || undefined,
         entities: entitiesConfig,
       });

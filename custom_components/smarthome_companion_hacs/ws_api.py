@@ -114,8 +114,8 @@ async def handle_get_devices(hass, connection, msg):
     vol.Required("device_id"): str,
     vol.Required("category"): str,
     vol.Optional("entities", default={}): dict,
-    vol.Optional("custom_name"): str,
-    vol.Optional("area_id"): str,
+    vol.Optional("custom_name"): vol.Any(str, None),
+    vol.Optional("area_id"): vol.Any(str, None),
     vol.Optional("options", default={}): dict,
     vol.Optional("icon"): vol.Any(str, None),
 })
@@ -141,11 +141,17 @@ async def handle_configure_device(hass, connection, msg):
             entry = ent_reg.async_get(primary_id)
             if entry and entry.unique_id:
                 entities["primary_unique_id"] = entry.unique_id
-        
+
         sub_entities = entities.get("sub_entities")
         if isinstance(sub_entities, dict):
+            single_sub = len(sub_entities) == 1 and bool(custom_name)
             for sub_id, sub_data in sub_entities.items():
-                if isinstance(sub_data, dict) and not sub_data.get("unique_id"):
+                if not isinstance(sub_data, dict):
+                    continue
+                if single_sub:
+                    sub_data["custom_name"] = custom_name
+                    sub_data["name"] = custom_name
+                if not sub_data.get("unique_id"):
                     entry = ent_reg.async_get(sub_id) or ent_reg.async_get(sub_data.get("original_id", ""))
                     if entry and entry.unique_id:
                         sub_data["unique_id"] = entry.unique_id
@@ -158,8 +164,9 @@ async def handle_configure_device(hass, connection, msg):
                     if entry and entry.unique_id:
                         s_data["unique_id"] = entry.unique_id
 
-    # Save device config
+    # Save device config (capture previous device config first to catch prior renames)
     devices = store.get_devices()
+    prev_dev = devices.get(device_id)
     devices[device_id] = {
         "category": category,
         "configured_at": datetime.now().isoformat(),
@@ -218,14 +225,25 @@ async def handle_configure_device(hass, connection, msg):
     ent_reg = er.async_get(hass)
     area_reg = ar.async_get(hass)
 
-    def _try_rename_entry(entry, raw_name: str, expected_uid: str | None = None) -> None:
-        if not entry or not raw_name:
-            return
+    def _find_entry_by_uid(uid: str | None, fallback_id: str) -> object | None:
+        if not uid:
+            return None
+        dom = fallback_id.split(".", 1)[0] if "." in fallback_id else None
+        for e in ent_reg.entities.values():
+            if e.unique_id == uid and (dom is None or e.domain == dom):
+                return e
+        return None
+
+    def _try_rename_entry(entry, raw_name: str | None, expected_uid: str | None = None) -> str | None:
+        if not entry:
+            return None
+        old_eid = entry.entity_id
+        if not raw_name:
+            return old_eid
         clean_name = slugify_ha(raw_name)
         if not clean_name:
-            return
-        old_eid = entry.entity_id
-        effective_area = area_id or entry.area_id
+            return old_eid
+        effective_area = area_id if area_id is not None else entry.area_id
         area_slug = ""
         if effective_area:
             a_entry = area_reg.async_get_area(effective_area)
@@ -237,7 +255,7 @@ async def handle_configure_device(hass, connection, msg):
             clean_slug = clean_name
         target_eid = f"{entry.domain}.{clean_slug}"
         if old_eid == target_eid:
-            return
+            return old_eid
         existing = ent_reg.async_get(target_eid)
         uid_match = entry.unique_id or expected_uid
         if not existing or (uid_match and existing.unique_id == uid_match):
@@ -245,52 +263,100 @@ async def handle_configure_device(hass, connection, msg):
                 ent_reg.async_update_entity(old_eid, new_entity_id=target_eid)
                 renamed_map[old_eid] = target_eid
                 _LOGGER.info("Updated entity ID from %s to %s", old_eid, target_eid)
+                return target_eid
             except Exception as e:
                 _LOGGER.warning("Could not rename entity ID for %s: %s", old_eid, e)
+        return old_eid
+
+    def _record_prior_rename(old_id: str | None, new_id: str | None) -> None:
+        if old_id and new_id and old_id != new_id and ent_reg.async_get(old_id) is None:
+            renamed_map[old_id] = new_id
 
     sub_entities = entities.get("sub_entities") if isinstance(entities, dict) else None
     room_sensors = entities.get("room_sensors") if isinstance(entities, dict) else None
+    has_actuator = bool((isinstance(sub_entities, dict) and sub_entities) or primary)
 
-    def _find_entry_by_uid(uid: str | None, fallback_id: str) -> object | None:
-        if not uid:
-            return None
-        dom = fallback_id.split(".", 1)[0] if "." in fallback_id else None
-        for e in ent_reg.entities.values():
-            if e.unique_id == uid and (dom is None or e.domain == dom):
-                return e
-        return None
+    active_by_uid: dict[str, str] = {}
+    final_primary_eid: str | None = None
 
     if isinstance(sub_entities, dict) and sub_entities:
+        single_sub = len(sub_entities) == 1 and bool(custom_name)
         for sub_id, sub_data in list(sub_entities.items()):
             if not isinstance(sub_data, dict):
                 continue
-            sub_name = sub_data.get("custom_name") or sub_data.get("name") or custom_name
+            sub_name = (custom_name if single_sub else None) or sub_data.get("custom_name") or sub_data.get("name") or custom_name
+            uid = sub_data.get("unique_id")
             s_entry = (
                 ent_reg.async_get(sub_id)
                 or ent_reg.async_get(sub_data.get("original_id", ""))
-                or _find_entry_by_uid(sub_data.get("unique_id"), sub_id)
+                or _find_entry_by_uid(uid, sub_id)
             )
-            _try_rename_entry(s_entry, sub_name, sub_data.get("unique_id"))
+            final_eid = _try_rename_entry(s_entry, sub_name, uid)
+            if final_eid:
+                _record_prior_rename(sub_id, final_eid)
+                _record_prior_rename(sub_data.get("original_id"), final_eid)
+                if uid:
+                    active_by_uid[uid] = final_eid
+                if sub_id == primary or not final_primary_eid:
+                    final_primary_eid = final_eid
     elif custom_name and primary:
-        p_entry = ent_reg.async_get(primary) or _find_entry_by_uid(
-            entities.get("primary_unique_id") if isinstance(entities, dict) else None, primary
-        )
-        _try_rename_entry(p_entry, custom_name, entities.get("primary_unique_id") if isinstance(entities, dict) else None)
-    elif custom_name and isinstance(room_sensors, dict) and room_sensors:
+        p_uid = entities.get("primary_unique_id") if isinstance(entities, dict) else None
+        p_entry = ent_reg.async_get(primary) or _find_entry_by_uid(p_uid, primary)
+        final_primary_eid = _try_rename_entry(p_entry, custom_name, p_uid)
+        if final_primary_eid:
+            _record_prior_rename(primary, final_primary_eid)
+            _record_prior_rename(entities.get("primary_original_id") if isinstance(entities, dict) else None, final_primary_eid)
+            if p_uid:
+                active_by_uid[p_uid] = final_primary_eid
+
+    if custom_name and isinstance(room_sensors, dict) and room_sensors:
         enabled_sensors = [
             (s_id, s_data)
             for s_id, s_data in room_sensors.items()
             if isinstance(s_data, dict) and s_data.get("enabled", True)
         ]
         for s_id, s_data in enabled_sensors:
+            uid = s_data.get("unique_id")
             rs_entry = (
                 ent_reg.async_get(s_id)
                 or ent_reg.async_get(s_data.get("original_id", ""))
-                or _find_entry_by_uid(s_data.get("unique_id"), s_id)
+                or _find_entry_by_uid(uid, s_id)
             )
             s_type = str(s_data.get("type") or "").strip()
-            rs_name = f"{custom_name}_{s_type}" if (len(enabled_sensors) > 1 and s_type) else custom_name
-            _try_rename_entry(rs_entry, rs_name, s_data.get("unique_id"))
+            if has_actuator:
+                if not s_type or s_type == "other":
+                    continue
+                rs_name = f"{custom_name}_{s_type}"
+            else:
+                rs_name = f"{custom_name}_{s_type}" if (len(enabled_sensors) > 1 and s_type) else custom_name
+            final_rs_eid = _try_rename_entry(rs_entry, rs_name, uid)
+            if final_rs_eid:
+                _record_prior_rename(s_id, final_rs_eid)
+                _record_prior_rename(s_data.get("original_id"), final_rs_eid)
+                if uid:
+                    active_by_uid[uid] = final_rs_eid
+
+    # Catch any entity ID changes compared to previous stored config of this device
+    if isinstance(prev_dev, dict):
+        prev_ents = prev_dev.get("entities") or {}
+        if isinstance(prev_ents, dict):
+            prev_primary = prev_ents.get("primary")
+            prev_p_uid = prev_ents.get("primary_unique_id")
+            if prev_primary:
+                target = active_by_uid.get(prev_p_uid) if prev_p_uid else None
+                _record_prior_rename(prev_primary, target or final_primary_eid)
+            prev_subs = prev_ents.get("sub_entities")
+            if isinstance(prev_subs, dict):
+                for p_sid, p_sdata in prev_subs.items():
+                    p_uid = p_sdata.get("unique_id") if isinstance(p_sdata, dict) else None
+                    target = active_by_uid.get(p_uid) if p_uid else (final_primary_eid if len(prev_subs) == 1 else None)
+                    _record_prior_rename(p_sid, target)
+            prev_rs = prev_ents.get("room_sensors")
+            if isinstance(prev_rs, dict):
+                for p_rsid, p_rsdata in prev_rs.items():
+                    p_uid = p_rsdata.get("unique_id") if isinstance(p_rsdata, dict) else None
+                    if p_uid and p_uid in active_by_uid:
+                        _record_prior_rename(p_rsid, active_by_uid[p_uid])
 
     if renamed_map:
         await async_sync_renamed_entities(hass, store, renamed_map)

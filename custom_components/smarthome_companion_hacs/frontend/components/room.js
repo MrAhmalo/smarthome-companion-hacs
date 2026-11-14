@@ -279,13 +279,12 @@ export class Room {
       })
       .filter((g) => g.ids.length > 0)
       .map((g) => {
-        const countEl = h('span', { class: 'count', hidden: true });
         const btn = h('button', {
           class: 'ctrl-btn', 'aria-label': g.label,
           style: { '--group-color': g.color },
           onClick: (e) => { e.stopPropagation(); this._toggleGroup(g); },
-        }, icon(g.icon), countEl);
-        return { ...g, btn, countEl };
+        }, icon(g.icon));
+        return { ...g, btn };
       });
 
     // Room detail view button (sub-menu navigation)
@@ -314,11 +313,11 @@ export class Room {
         }
       },
     },
-    h('div', { class: 'room-icon' }, icon(spec.icon)),
-    h('div', { class: 'room-title' }, h('div', { class: 'room-name' }, spec.name), this.metaEl),
-    this.controlsEl,
-    icon('mdi:chevron-down', 'chevron'),
-    editBorder(17));
+      h('div', { class: 'room-icon' }, icon(spec.icon)),
+      h('div', { class: 'room-title' }, h('div', { class: 'room-name' }, spec.name), this.metaEl),
+      this.controlsEl,
+      icon('mdi:chevron-down', 'chevron'),
+      editBorder(17));
 
     // Capture clicks anywhere on the room header in Edit Mode (except chevron expand/collapse)
     this.head.addEventListener('click', (e) => {
@@ -399,8 +398,6 @@ export class Room {
         ? states.filter((s) => s.state !== 'closed').length
         : states.filter((s) => isActive(s)).length;
       g.btn.toggleAttribute('data-on', count > 0);
-      g.countEl.hidden = count === 0;
-      g.countEl.textContent = String(count);
     }
 
     // Header meta: temperature, humidity, alerts

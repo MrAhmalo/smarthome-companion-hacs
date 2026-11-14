@@ -19,13 +19,14 @@ def slugify_ha(text: str) -> str:
 
 
 def _build_entity_id_pattern(id_map: dict[str, str]) -> re.Pattern[str] | None:
-    """Compile a single-pass boundary-safe regex matching any entity ID in id_map."""
+    """Compile a single-pass boundary-safe case-insensitive regex matching any entity ID in id_map."""
     keys = sorted((k for k in id_map if k), key=len, reverse=True)
     if not keys:
         return None
     alternation = "|".join(re.escape(k) for k in keys)
     return re.compile(
-        rf"(?:(?<=states\.)|(?<![a-zA-Z0-9_.]))(?:{alternation})(?![a-zA-Z0-9_]|(?:\.ya?ml\b))"
+        rf"(?:(?<=states\.)|(?<![a-zA-Z0-9_.]))(?:{alternation})(?![a-zA-Z0-9_]|(?:\.ya?ml\b))",
+        re.IGNORECASE,
     )
 
 
@@ -37,12 +38,14 @@ def replace_entity_ids_in_text(
     """Replace entity IDs in raw text (preserving YAML comments, quotes, !input/!secret tags)."""
     if not text or not id_map:
         return text, False
-    if not any(old_eid in text for old_eid in id_map):
+    lower_map = {k.lower(): v for k, v in id_map.items() if k}
+    text_lower = text.lower()
+    if not any(old_eid in text_lower for old_eid in lower_map):
         return text, False
     compiled = pattern or _build_entity_id_pattern(id_map)
     if compiled is None:
         return text, False
-    replaced, count = compiled.subn(lambda m: id_map[m.group(0)], text)
+    replaced, count = compiled.subn(lambda m: lower_map[m.group(0).lower()], text)
     return (replaced, True) if count > 0 and replaced != text else (text, False)
 
 
@@ -116,8 +119,28 @@ def _iter_yaml_files(directory: Path) -> list[Path]:
     return sorted(files)
 
 
+_INCLUDE_RE = re.compile(
+    r"^\s*([a-zA-Z0-9_ -]+)?\s*:\s*!include(?:_dir_(?:list|named|merge_list|merge_named))?\s+([^\s#]+)",
+    re.MULTILINE,
+)
+
+
+def _category_for_key(key: str) -> str:
+    k = key.strip().lower()
+    if k.startswith("automation"):
+        return "automation"
+    if k.startswith("script"):
+        return "script"
+    if k.startswith("scene"):
+        return "scene"
+    if k.startswith("template"):
+        return "template"
+    return "all"
+
+
 def _collect_yaml_targets(config_dir: Path) -> list[tuple[Path, str]]:
     """Collect Home Assistant YAML config files mapped to their reload category."""
+    resolved_root = config_dir.resolve()
     targets: list[tuple[Path, str]] = [
         (config_dir / "automations.yaml", "automation"),
         (config_dir / "scripts.yaml", "script"),
@@ -126,27 +149,58 @@ def _collect_yaml_targets(config_dir: Path) -> list[tuple[Path, str]]:
 
     dir_specs = [
         (config_dir / "automations", "automation"),
+        (config_dir / "automation", "automation"),
         (config_dir / "scripts", "script"),
+        (config_dir / "script", "script"),
         (config_dir / "scenes", "scene"),
+        (config_dir / "scene", "scene"),
         (config_dir / "blueprints" / "automation", "automation"),
         (config_dir / "blueprints" / "script", "script"),
         (config_dir / "blueprints" / "template", "template"),
         (config_dir / "packages", "all"),
     ]
-    seen: set[Path] = {p for p, _ in targets}
+    seen: set[Path] = {p.resolve() for p, _ in targets}
+
+    def _add_file(path: Path, category: str) -> None:
+        try:
+            rp = path.resolve()
+            rp.relative_to(resolved_root)
+        except ValueError:
+            return
+        if not path.is_file() or path.suffix.lower() not in (".yaml", ".yml"):
+            return
+        if any(part.startswith(".") for part in rp.relative_to(resolved_root).parts):
+            return
+        if rp not in seen:
+            seen.add(rp)
+            targets.append((path, category))
 
     for folder, category in dir_specs:
         for file_path in _iter_yaml_files(folder):
-            if file_path not in seen:
-                seen.add(file_path)
-                targets.append((file_path, category))
+            _add_file(file_path, category)
+
+    # Parse !include* directives from configuration.yaml (and configuration.yaml itself)
+    main_cfg = config_dir / "configuration.yaml"
+    if main_cfg.is_file():
+        try:
+            cfg_text = main_cfg.read_text(encoding="utf-8")
+            for m in _INCLUDE_RE.finditer(cfg_text):
+                inc_cat = _category_for_key(m.group(1) or "")
+                rel = m.group(2).strip().strip("'\"")
+                inc_path = config_dir / rel
+                if inc_path.is_dir():
+                    for file_path in _iter_yaml_files(inc_path):
+                        _add_file(file_path, inc_cat)
+                elif inc_path.is_file():
+                    _add_file(inc_path, inc_cat)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Could not inspect configuration.yaml includes: %s", err)
+        _add_file(main_cfg, "all")
 
     # Any custom blueprint directories directly under blueprints/
     blueprints_root = config_dir / "blueprints"
     for file_path in _iter_yaml_files(blueprints_root):
-        if file_path not in seen:
-            seen.add(file_path)
-            targets.append((file_path, "all"))
+        _add_file(file_path, "all")
 
     return targets
 
@@ -178,7 +232,7 @@ async def _reload_domain_if_available(hass, domain: str) -> None:
     """Reload a Home Assistant YAML domain if its reload service is registered."""
     try:
         if hass.services.has_service(domain, "reload"):
-            await hass.services.async_call(domain, "reload", blocking=False)
+            await hass.services.async_call(domain, "reload", blocking=True)
     except Exception as err:  # noqa: BLE001
         _LOGGER.warning("Could not reload %s after entity rename: %s", domain, err)
 
@@ -192,9 +246,11 @@ async def async_sync_renamed_entities(hass, store, id_map: dict[str, str]) -> bo
     domain_data = hass.data.setdefault(DOMAIN, {})
     lock = domain_data.setdefault("entity_sync_lock", asyncio.Lock())
 
+    store_changed = False
+    updated_by_category: dict[str, list[str]] = {}
+
     async with lock:
         pattern = _build_entity_id_pattern(clean_map)
-        store_changed = False
         for section in ("devices", "groups", "dashboard", "blinds", "irrigation", "adaptive_light", "simulation"):
             cur = store.data.get(section)
             if cur is not None:
@@ -210,22 +266,22 @@ async def async_sync_renamed_entities(hass, store, id_map: dict[str, str]) -> bo
 
         config_dir = Path(hass.config.path())
         updated_by_category = await hass.async_add_executor_job(_sync_yaml_configs_sync, config_dir, clean_map)
-        yaml_changed = bool(updated_by_category)
 
-        if yaml_changed:
-            _LOGGER.info(
-                "Updated HA YAML files for renamed entities %s: %s",
-                clean_map,
-                updated_by_category,
-            )
-            reload_all = "all" in updated_by_category
-            if reload_all or "automation" in updated_by_category:
-                await _reload_domain_if_available(hass, "automation")
-            if reload_all or "script" in updated_by_category:
-                await _reload_domain_if_available(hass, "script")
-            if reload_all or "scene" in updated_by_category:
-                await _reload_domain_if_available(hass, "scene")
-            if reload_all or "template" in updated_by_category:
-                await _reload_domain_if_available(hass, "template")
+    yaml_changed = bool(updated_by_category)
+    if yaml_changed:
+        _LOGGER.info(
+            "Updated HA YAML files for renamed entities %s: %s",
+            clean_map,
+            updated_by_category,
+        )
+        reload_all = "all" in updated_by_category
+        if reload_all or "automation" in updated_by_category:
+            await _reload_domain_if_available(hass, "automation")
+        if reload_all or "script" in updated_by_category:
+            await _reload_domain_if_available(hass, "script")
+        if reload_all or "scene" in updated_by_category:
+            await _reload_domain_if_available(hass, "scene")
+        if reload_all or "template" in updated_by_category:
+            await _reload_domain_if_available(hass, "template")
 
-        return store_changed or yaml_changed
+    return store_changed or yaml_changed
