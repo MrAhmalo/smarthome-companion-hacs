@@ -61,6 +61,10 @@ class CompanionDashboardPanel extends HTMLElement {
     this._roomModal = null;
     this._whatsNew?.destroy?.();
     this._whatsNew = null;
+    if (this._whatsNewTimer) {
+      clearTimeout(this._whatsNewTimer);
+      this._whatsNewTimer = null;
+    }
     this._wizard?.destroy?.();
     this._wizard = null;
     this._settings?.destroy?.();
@@ -451,17 +455,22 @@ class CompanionDashboardPanel extends HTMLElement {
   }
 
   _maybeShowWhatsNew() {
-    if (this._whatsNew || this._wizard || this._settings || this._roomModal) return;
+    if (this._whatsNew || this._whatsNewTimer || this._wizard || this._settings || this._roomModal) return;
     const userId = this._hass?.user?.id || this._data?.user?.id;
     if (!shouldShowWhatsNew(userId)) return;
-    recordWhatsNewShown(userId);
-    this._whatsNew = new WhatsNewModal({
-      onDismiss: () => {
-        recordWhatsNewDismissed(userId);
-        this._whatsNew = null;
-      },
-    });
-    this.shadowRoot.append(this._whatsNew.el);
+    this._whatsNewTimer = setTimeout(() => {
+      this._whatsNewTimer = null;
+      if (!this.isConnected || this._whatsNew || this._wizard || this._settings || this._roomModal) return;
+      if (!shouldShowWhatsNew(userId)) return;
+      recordWhatsNewShown(userId);
+      this._whatsNew = new WhatsNewModal({
+        onDismiss: () => {
+          recordWhatsNewDismissed(userId);
+          this._whatsNew = null;
+        },
+      });
+      this.shadowRoot.append(this._whatsNew.el);
+    }, 250);
   }
 
   _toast(text, error = false) {
