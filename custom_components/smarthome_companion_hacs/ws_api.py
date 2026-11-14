@@ -372,6 +372,7 @@ async def handle_save_group(hass, connection, msg):
                     try:
                         ent_reg.async_update_entity(current_eid, new_entity_id=target_eid, original_name=None)
                         _LOGGER.info("Synchronized group entity ID: %s -> %s", current_eid, target_eid)
+                        await async_sync_renamed_entities(hass, store, {current_eid: target_eid})
                     except Exception as err:
                         _LOGGER.warning("Could not rename group entity %s: %s", current_eid, err)
 
