@@ -8,6 +8,9 @@
     "http",
     "panel_custom"
   ],
+  "after_dependencies": [
+    "lovelace"
+  ],
   "codeowners": [
     "@MrAhmalo"
   ],

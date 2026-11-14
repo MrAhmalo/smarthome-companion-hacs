@@ -229,18 +229,45 @@ async def handle_configure_device(hass, connection, msg):
                 )
                 _sync_entity_labels(hass, sub_data["energy"], [f"{sub_cat}_energy"])
 
-    # Update device name / area in HA registry
+    # Update device / entity name and area in HA registry
+    is_virtual_entity = str(device_id).startswith("entity:")
     dev_reg = dr.async_get(hass)
-    try:
-        updates = {}
-        if custom_name:
-            updates["name_by_user"] = custom_name
-        if area_id is not None:
-            updates["area_id"] = area_id if area_id else None
-        if updates:
-            dev_reg.async_update_device(device_id, **updates)
-    except Exception as e:
-        _LOGGER.warning("Could not update device registry for %s: %s", device_id, e)
+    if is_virtual_entity:
+        if primary:
+            try:
+                v_updates = {}
+                if custom_name:
+                    v_updates["name"] = custom_name
+                if area_id is not None:
+                    v_updates["area_id"] = area_id if area_id else None
+                if v_updates:
+                    ent_reg.async_update_entity(primary, **v_updates)
+            except Exception as e:
+                _LOGGER.warning("Could not update virtual entity registry for %s: %s", primary, e)
+    else:
+        try:
+            updates = {}
+            if custom_name:
+                updates["name_by_user"] = custom_name
+            if area_id is not None:
+                updates["area_id"] = area_id if area_id else None
+            if updates:
+                dev_reg.async_update_device(device_id, **updates)
+        except Exception as e:
+            _LOGGER.warning("Could not update device registry for %s: %s", device_id, e)
+
+    # Apply per-channel room overrides when specified on multi-channel devices
+    if isinstance(sub_entities_for_labels, dict):
+        for sub_eid, sub_data in sub_entities_for_labels.items():
+            if not isinstance(sub_data, dict) or not sub_data.get("enabled", True):
+                continue
+            if "area_id" in sub_data:
+                ch_area = sub_data.get("area_id") or None
+                try:
+                    if ent_reg.async_get(sub_eid) is not None:
+                        ent_reg.async_update_entity(sub_eid, area_id=ch_area)
+                except Exception as e:
+                    _LOGGER.warning("Could not update area for channel %s: %s", sub_eid, e)
 
     # Sync primary, channel, room-sensor, and ALL remaining sub-entity IDs of this device
     renamed_map = sync_device_entity_ids(

@@ -27,6 +27,7 @@ FILES_IN_ORDER = [
     "components/specials.js",
     "components/settings.js",
     "components/room_modals.js",
+    "components/whats_new_modal.js",
     "components/device_wizard.js",
     "companion-dashboard.js",
 ]

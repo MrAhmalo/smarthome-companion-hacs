@@ -27,10 +27,12 @@ export class Tile {
     this.rawDomain = domainOf(spec.entity_id);
     const cat = effectiveCategory(spec);
     // Effective domain overrides raw domain for UI purposes
-    this.domain = (cat === 'light' || cat === 'cover' || cat === 'media_player' || cat === 'climate' || cat === 'valve' || cat === 'pumpe' || cat === 'motion' || cat === 'sensor' || cat === 'outlet' || cat === 'switch')
+    this.domain = (cat === 'rauchmelder' || cat === 'light' || cat === 'cover' || cat === 'media_player' || cat === 'climate' || cat === 'valve' || cat === 'pumpe' || cat === 'motion' || cat === 'sensor' || cat === 'outlet' || cat === 'switch')
       ? cat : this.rawDomain;
-    this.kind = ['cover', 'media_player', 'climate', 'sensor', 'binary_sensor', 'motion'].includes(this.domain)
-      ? (this.domain === 'motion' ? 'sensor' : this.domain) : 'toggle';
+    this.kind = this.domain === 'rauchmelder'
+      ? 'smoke'
+      : ['cover', 'media_player', 'climate', 'sensor', 'binary_sensor', 'motion'].includes(this.domain)
+        ? (this.domain === 'motion' ? 'sensor' : this.domain) : 'toggle';
     this.hass = null;
     this._st = undefined;
     this._pw = undefined;
@@ -183,7 +185,7 @@ export class Tile {
       return;
     }
     if (!this.hass) return;
-    if (this.kind === 'sensor' || this.kind === 'binary_sensor' || this.domain === 'sensor' || this.domain === 'motion' || !isToggleable(this.entityId)) {
+    if (this.kind === 'sensor' || this.kind === 'binary_sensor' || this.kind === 'smoke' || this.domain === 'sensor' || this.domain === 'motion' || this.domain === 'rauchmelder' || !isToggleable(this.entityId)) {
       moreInfo(this.el, this.entityId);
     } else {
       toggleEntity(this.hass, this.entityId);
@@ -199,6 +201,7 @@ export class Tile {
       case 'climate': return !!st && st.state !== 'off' && !isUnavailable(st);
       case 'media_player': return !!st && !['off', 'standby', 'idle', 'unavailable', 'unknown'].includes(st.state);
       case 'sensor': return false;
+      case 'rauchmelder': return !!st && ['on', 'detected', 'smoke'].includes(st.state);
       case 'motion': return !!st && (st.state === 'on' || st.state === 'detected' || st.state === 'motion');
       case 'valve': return !!st && (st.state === 'on' || st.state === 'open');
       case 'pumpe': return !!st && st.state === 'on';
@@ -223,7 +226,10 @@ export class Tile {
         this._optimisticUntil = 0;
       }
     }
-    const stateKey = `${st?.state}|${st?.attributes?.brightness}|${st?.attributes?.current_position}|${st?.attributes?.rgb_color}|${st?.last_updated}|${pw?.state}|${this._optimisticOn}`;
+    const subSensorSig = Array.isArray(this.spec.sub_sensors)
+      ? this.spec.sub_sensors.map((s) => `${s.entity_id}:${hass.states[s.entity_id]?.state}`).join(',')
+      : '';
+    const stateKey = `${st?.state}|${st?.attributes?.brightness}|${st?.attributes?.current_position}|${st?.attributes?.rgb_color}|${st?.last_updated}|${pw?.state}|${this._optimisticOn}|${this.spec.icon}|${this.spec.category}|${subSensorSig}`;
     if (this._rendered && this._stateKey === stateKey) return;
     this._rendered = true;
     this._stateKey = stateKey;
@@ -233,8 +239,11 @@ export class Tile {
     const attrs = st?.attributes || {};
     const unavailable = isUnavailable(st);
     const active = this._optimisticOn !== null ? this._optimisticOn : this._active(st);
+    const isSmoke = this.domain === 'rauchmelder' || attrs.device_class === 'smoke';
     this.el.toggleAttribute('data-unavailable', unavailable);
     this.el.dataset.active = String(active);
+    this.el.classList.toggle('smoke', isSmoke);
+    this.el.toggleAttribute('data-alarm', isSmoke && active);
 
     // Name
     this.nameEl.textContent = this.spec.name || attrs.friendly_name || this.entityId;
@@ -245,7 +254,7 @@ export class Tile {
       : st;
     this.iconEl.setAttribute('icon', entityIcon(this.entityId, effectiveSt, this.spec.icon, this.spec.category));
     let color = '';
-    if (active) {
+    if (active || isSmoke) {
       color = getEntityColor(this.entityId, effectiveSt, this.spec.category, this.spec.color);
     }
     if (color) this.el.style.setProperty('--tile-color', color); else this.el.style.removeProperty('--tile-color');
@@ -262,6 +271,24 @@ export class Tile {
   }
 
   _stateText(hass, st, pw, active) {
+    if (this.spec.category === 'bodenmessgeraet' && Array.isArray(this.spec.sub_sensors) && this.spec.sub_sensors.length > 0) {
+      const orderWeight = { moisture: 0, soil_moisture: 0, humidity: 0, temperature: 1 };
+      const sorted = [...this.spec.sub_sensors].sort((a, b) => (orderWeight[a.type] ?? 5) - (orderWeight[b.type] ?? 5));
+      const parts = [];
+      for (const s of sorted) {
+        const sst = hass.states[s.entity_id];
+        if (!sst || isUnavailable(sst)) continue;
+        const unit = sst.attributes?.unit_of_measurement;
+        const num = numeric(sst);
+        if (num !== null) {
+          const formatted = Number.isInteger(num) ? String(num) : num.toFixed(1).replace(/\.0$/, '');
+          parts.push(unit ? `${formatted} ${unit}`.replace(' °', '°') : formatted);
+        } else {
+          parts.push(stateLabel(hass, sst, null));
+        }
+      }
+      if (parts.length > 0) return parts.join(' · ');
+    }
     if (!st) return 'Nicht gefunden';
     const attrs = st.attributes || {};
     let text = stateLabel(hass, st, this.spec.category);
@@ -386,7 +413,7 @@ export class GroupTile {
   _build() {
     const isLeuchte = this.category === 'leuchte';
     const defaultIcon = isLeuchte ? 'mdi:lightbulb-group-outline' : 'mdi:power-plug-off';
-    this.iconEl = icon(this.spec.icon ? `${this.spec.icon}-outline` : defaultIcon);
+    this.iconEl = icon(this.spec.icon || defaultIcon);
 
     this.iconBtn = h('button', {
       class: 'tile-icon group-icon-btn',
@@ -394,6 +421,11 @@ export class GroupTile {
       title: 'Schalten',
       onClick: (e) => {
         e.stopPropagation();
+        if (this.ctx?.isEditMode?.()) {
+          if (this.spec.device_id && !this.spec.group_id) this.ctx.onOpenDevice?.(this.spec.device_id);
+          else this.ctx.onOpenGroup?.(this.spec.group_id);
+          return;
+        }
         this._toggleMaster();
       },
     }, this.iconEl);
@@ -406,7 +438,8 @@ export class GroupTile {
       onClick: (e) => {
         e.stopPropagation();
         if (this.ctx?.isEditMode?.()) {
-          this.ctx.onOpenGroup?.(this.spec.group_id);
+          if (this.spec.device_id && !this.spec.group_id) this.ctx.onOpenDevice?.(this.spec.device_id);
+          else this.ctx.onOpenGroup?.(this.spec.group_id);
           return;
         }
         this._toggleMaster();
@@ -456,7 +489,8 @@ export class GroupTile {
       onClick: (e) => {
         if (e.target.closest('button')) return;
         if (this.ctx?.isEditMode?.()) {
-          this.ctx.onOpenGroup?.(this.spec.group_id);
+          if (this.spec.device_id && !this.spec.group_id) this.ctx.onOpenDevice?.(this.spec.device_id);
+          else this.ctx.onOpenGroup?.(this.spec.group_id);
           return;
         }
         this._toggleMaster();
@@ -599,7 +633,7 @@ export class GroupTile {
       this.iconEl.setAttribute('icon', this.spec.icon || (this.category === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug'));
     } else {
       this.el.style.removeProperty('--tile-color');
-      const offIcon = this.spec.icon ? `${this.spec.icon}-outline` : (this.category === 'leuchte' ? 'mdi:lightbulb-group-outline' : 'mdi:power-plug-off');
+      const offIcon = this.spec.icon || (this.category === 'leuchte' ? 'mdi:lightbulb-group-outline' : 'mdi:power-plug-off');
       this.iconEl.setAttribute('icon', offIcon);
     }
 

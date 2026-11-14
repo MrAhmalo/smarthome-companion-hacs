@@ -1221,10 +1221,14 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   border-radius: 50%; background: #fff; transition: transform .2s cubic-bezier(.4, 0, .2, 1);
   box-shadow: 0 2px 4px rgba(0,0,0,.3);
 }
-.feature-card[data-active] .switch-ui {
+.feature-card[data-active] .switch-ui,
+.channel-head[data-active] .switch-ui,
+.switch-ui[data-active] {
   background: var(--feat-color, var(--cd-accent));
 }
-.feature-card[data-active] .switch-ui::after {
+.feature-card[data-active] .switch-ui::after,
+.channel-head[data-active] .switch-ui::after,
+.switch-ui[data-active]::after {
   transform: translateX(20px);
 }
 
@@ -1507,4 +1511,254 @@ details.adv-options summary {
 .sensor-choice-info { flex: 1; min-width: 0; }
 .sensor-choice-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sensor-choice-id { font-size: 11px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Smoke Detector Tile (Normal OK & Alarm State) ── */
+.tile.smoke[data-active="false"] .tile-state { color: #22c55e; font-weight: 500; }
+.tile.smoke[data-alarm] {
+  background: rgba(239, 68, 68, 0.24);
+  border: 2px solid #ef4444;
+  animation: cd-flash 1s infinite alternate;
+}
+.tile.smoke[data-alarm] .tile-icon {
+  background: rgba(239, 68, 68, 0.32);
+  color: #fff;
+  animation: cd-shake .35s infinite;
+}
+.tile.smoke[data-alarm] .tile-state {
+  color: #fecaca;
+  font-weight: 700;
+}
+
+/* ── Pending Multi-Channel & Placement Styles ── */
+.badge-tag.pending-channels {
+  background: rgba(245, 158, 11, 0.16);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+.channel-card[data-disabled="true"] {
+  opacity: 0.62;
+}
+
+/* ── Apple-style "Neu in deinem Smart Home" Welcome Modal ── */
+.overlay.wn-overlay {
+  z-index: 1100;
+  animation: wnOverlayFade .2s ease-out;
+}
+@keyframes wnOverlayFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.wn-dialog {
+  width: min(490px, 100%);
+  max-height: min(640px, calc(100dvh - 32px - var(--safe-top) - var(--safe-bottom)));
+  background: var(--cd-card);
+  color: var(--primary-text-color, #e6e6e6);
+  border-radius: 26px;
+  border: 1px solid rgba(128, 128, 128, 0.22);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.48);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  animation: wnSheetDesktop .32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.wn-grabber {
+  display: none;
+  width: 38px;
+  height: 5px;
+  border-radius: 99px;
+  background: rgba(128, 128, 128, 0.35);
+  margin: 10px auto 0;
+  flex: none;
+}
+.wn-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--cd-tile-bg);
+  color: var(--cd-secondary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 2;
+  touch-action: manipulation;
+  transition: background .15s, color .15s, transform .1s;
+}
+.wn-close-btn ha-icon { --mdc-icon-size: 20px; }
+@media (hover: hover) {
+  .wn-close-btn:hover {
+    color: var(--primary-text-color, inherit);
+    background: rgba(128, 128, 128, 0.2);
+  }
+}
+.wn-close-btn:active { transform: scale(0.92); }
+.wn-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 28px 30px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.wn-hero {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.wn-app-badge {
+  width: 60px;
+  height: 60px;
+  border-radius: 17px;
+  background: linear-gradient(145deg, var(--cd-accent, #03a9f4) 0%, color-mix(in srgb, var(--cd-accent, #03a9f4) 72%, #000) 100%);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--cd-accent, #03a9f4) 34%, transparent);
+  margin-bottom: 4px;
+}
+.wn-app-badge ha-icon { --mdc-icon-size: 32px; }
+.wn-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.18;
+  letter-spacing: -0.025em;
+  color: var(--primary-text-color, inherit);
+}
+.wn-subtitle {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--cd-secondary);
+  max-width: 36ch;
+}
+.wn-features {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+.wn-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.wn-item-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  margin-top: 1px;
+  background: var(--wn-item-bg, var(--cd-tile-bg));
+  color: var(--wn-item-color, var(--cd-accent));
+}
+.wn-item-icon ha-icon { --mdc-icon-size: 21px; }
+.wn-item-text {
+  flex: 1;
+  min-width: 0;
+}
+.wn-item-title {
+  margin: 0 0 2px;
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--primary-text-color, inherit);
+}
+.wn-item-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--cd-secondary);
+}
+.wn-foot {
+  flex: none;
+  padding: 14px 30px 24px;
+  border-top: 1px solid rgba(128, 128, 128, 0.16);
+  background: var(--cd-card);
+}
+.wn-cta {
+  width: 100%;
+  min-height: 48px;
+  height: 48px;
+  border-radius: 14px;
+  border: 0;
+  background: var(--cd-accent, #03a9f4);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--cd-accent, #03a9f4) 30%, transparent);
+  transition: transform .12s, filter .15s;
+}
+@media (hover: hover) {
+  .wn-cta:hover { filter: brightness(1.06); }
+}
+.wn-cta:active { transform: scale(0.98); }
+@keyframes wnSheetDesktop {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes wnSheetMobile {
+  from { opacity: 0; transform: translateY(42px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 650px) {
+  .overlay.wn-overlay {
+    align-items: flex-end;
+    justify-content: center;
+    padding: max(20px, var(--safe-top)) 0 0;
+  }
+  .wn-dialog {
+    width: 100%;
+    max-height: calc(100dvh - max(20px, var(--safe-top)));
+    border-radius: 26px 26px 0 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-right: 0;
+    animation: wnSheetMobile .32s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .wn-grabber { display: block; }
+  .wn-close-btn { top: 12px; right: max(12px, var(--safe-right)); }
+  .wn-scroll {
+    padding: 12px calc(20px + var(--safe-right)) 14px calc(20px + var(--safe-left));
+    gap: 16px;
+  }
+  .wn-app-badge { width: 52px; height: 52px; border-radius: 15px; }
+  .wn-app-badge ha-icon { --mdc-icon-size: 28px; }
+  .wn-title { font-size: 21px; }
+  .wn-subtitle { font-size: 13px; }
+  .wn-features { gap: 13px; }
+  .wn-item-icon { width: 36px; height: 36px; border-radius: 10px; }
+  .wn-item-icon ha-icon { --mdc-icon-size: 19px; }
+  .wn-item-title { font-size: 14px; }
+  .wn-item-desc { font-size: 12.5px; }
+  .wn-foot {
+    padding: 12px calc(20px + var(--safe-right)) calc(18px + var(--safe-bottom)) calc(20px + var(--safe-left));
+  }
+}
+@media (max-height: 560px) {
+  .wn-app-badge { width: 44px; height: 44px; border-radius: 13px; margin-bottom: 0; }
+  .wn-app-badge ha-icon { --mdc-icon-size: 24px; }
+  .wn-scroll { padding-top: 14px; gap: 12px; }
+  .wn-title { font-size: 19px; }
+  .wn-features { gap: 10px; }
+}
 `;

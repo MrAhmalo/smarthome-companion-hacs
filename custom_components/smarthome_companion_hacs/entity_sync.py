@@ -179,16 +179,35 @@ def sync_device_entity_ids(
     if not isinstance(entities_cfg, dict):
         entities_cfg = {}
 
+    is_virtual_entity = device is None and str(device_id).startswith("entity:")
+    virtual_entry = None
+    if is_virtual_entity:
+        v_raw = str(device_id)[len("entity:") :]
+        v_primary = entities_cfg.get("primary") or v_raw
+        virtual_entry = ent_reg.async_get(v_primary) or ent_reg.async_get(v_raw)
+        if virtual_entry is None and entities_cfg.get("primary_unique_id"):
+            dom_hint = v_primary.split(".", 1)[0] if "." in v_primary else None
+            for e in ent_reg.entities.values():
+                if e.unique_id == entities_cfg["primary_unique_id"] and (dom_hint is None or e.domain == dom_hint):
+                    virtual_entry = e
+                    break
+
     custom_name = (
         (device_cfg.get("custom_name") if isinstance(device_cfg, dict) else None)
         or (device.name_by_user if device else None)
         or (device.name if device else None)
+        or (virtual_entry.name if virtual_entry else None)
+        or (virtual_entry.original_name if virtual_entry else None)
         or ""
     )
     if not custom_name:
         return {}
 
-    effective_area_id = area_id if area_id is not None else (device.area_id if device else None)
+    effective_area_id = (
+        area_id
+        if area_id is not None
+        else (device.area_id if device else (virtual_entry.area_id if virtual_entry else None))
+    )
     area_slug = ""
     if effective_area_id:
         a_entry = area_reg.async_get_area(effective_area_id)
@@ -199,10 +218,13 @@ def sync_device_entity_ids(
     if not device_base_slug:
         return {}
 
-    device_entries = [
-        e for e in ent_reg.entities.values()
-        if getattr(e, "device_id", None) == device_id
-    ]
+    if is_virtual_entity:
+        device_entries = [virtual_entry] if virtual_entry else []
+    else:
+        device_entries = [
+            e for e in ent_reg.entities.values()
+            if getattr(e, "device_id", None) == device_id
+        ]
 
     # Collect known prefixes BEFORE mutating entity_registry so sub-entity suffix extraction stays accurate
     target_prefixes: set[str] = {device_base_slug, slugify_ha(custom_name)}
@@ -329,18 +351,30 @@ def sync_device_entity_ids(
 
     # 1. Primary / multi-channel actuators
     if isinstance(sub_entities, dict) and sub_entities:
-        single_sub = len(sub_entities) == 1 and bool(custom_name)
+        enabled_sub_count = sum(1 for sd in sub_entities.values() if isinstance(sd, dict) and sd.get("enabled", True))
+        single_sub = enabled_sub_count == 1 and len(sub_entities) == 1 and bool(custom_name)
         for sub_id, sub_data in list(sub_entities.items()):
             if not isinstance(sub_data, dict):
                 continue
-            sub_name = (custom_name if single_sub else None) or sub_data.get("custom_name") or sub_data.get("name") or custom_name
             uid = sub_data.get("unique_id")
             s_entry = (
                 ent_reg.async_get(sub_id)
                 or ent_reg.async_get(sub_data.get("original_id", ""))
                 or _find_entry_by_uid(uid, sub_id)
             )
-            target_slug = _build_base_slug(sub_name, area_slug)
+            if not sub_data.get("enabled", True):
+                if s_entry:
+                    handled_entry_ids.add(id(s_entry))
+                    handled_eids.add(s_entry.entity_id)
+                handled_eids.add(sub_id)
+                continue
+            sub_name = (custom_name if single_sub else None) or sub_data.get("custom_name") or sub_data.get("name") or custom_name
+            ch_area_id = sub_data.get("area_id") or effective_area_id
+            ch_area_slug = area_slug
+            if ch_area_id and ch_area_id != effective_area_id:
+                ch_a_entry = area_reg.async_get_area(ch_area_id)
+                ch_area_slug = slugify_ha(ch_a_entry.name) if ch_a_entry else ""
+            target_slug = _build_base_slug(sub_name, ch_area_slug)
             final_eid = _rename_entry(s_entry, target_slug)
             if final_eid:
                 _record_prior_rename(sub_id, final_eid)

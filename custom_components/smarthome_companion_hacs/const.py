@@ -54,6 +54,11 @@ DEFAULT_CATEGORIES = {
         "color": "#E91E63",
         "display_name": "Bewegungsmelder",
     },
+    "rauchmelder": {
+        "icon": "mdi:smoke-detector",
+        "color": "#EF4444",
+        "display_name": "Rauchmelder",
+    },
     "bodenmessgeraet": {
         "icon": "mdi:sprout",
         "color": "#4CAF50",

@@ -10,6 +10,7 @@ export const DEVICE_CATEGORIES = [
   { id: 'klima', name: 'Klima', icon: 'mdi:thermometer', color: '#ff9800', desc: 'Thermostate & Klima' },
   { id: 'fernseher', name: 'Fernseher', icon: 'mdi:television', color: '#03a9f4', desc: 'TVs & Mediaplayer' },
   { id: 'bewegungsmelder', name: 'Bewegungsmelder', icon: 'mdi:motion-sensor', color: '#e91e63', desc: 'Präsenz & Bewegung' },
+  { id: 'rauchmelder', name: 'Rauchmelder', icon: 'mdi:smoke-detector', color: '#ef4444', desc: 'Rauch & Brandmelder' },
   { id: 'bodenmessgeraet', name: 'Bodenmessgerät', icon: 'mdi:sprout', color: '#4caf50', desc: 'Bodenfeuchte & Pflanzen' },
   { id: 'raummessgeraet', name: 'Raummessgerät', icon: 'mdi:thermometer-lines', color: '#ff5722', desc: 'Temperatur & Klima' },
 ];
@@ -18,13 +19,61 @@ const CONTROLLABLE_DOMAINS = new Set([
   'light', 'switch', 'cover', 'valve', 'climate', 'media_player', 'fan',
 ]);
 
+/** Returns true if an entity belongs to SmartHome Companion's own internal integration. */
+export function isOwnIntegrationEntity(e) {
+  if (!e) return false;
+  if (e.platform === 'smarthome_companion_hacs') return true;
+  if (typeof e.unique_id === 'string' && e.unique_id.startsWith('smarthome_companion_')) return true;
+  return false;
+}
+
+/** Returns true if a device belongs to SmartHome Companion's own internal entities/groups. */
+export function isOwnIntegrationDevice(d, entities = []) {
+  if (!d) return false;
+  if (d.manufacturer === 'SmartHome Companion') return true;
+  if (Array.isArray(d.identifiers) && d.identifiers.some((pair) => Array.isArray(pair) && pair[0] === 'smarthome_companion_hacs')) {
+    return true;
+  }
+  const devEnts = entities.filter((e) => e.device_id === d.id);
+  if (devEnts.length > 0 && devEnts.every(isOwnIntegrationEntity)) return true;
+  return false;
+}
+
+/**
+ * Compute actuator channels of a configured device that were explicitly left
+ * unconfigured (enabled === false) or newly added in HA since setup.
+ */
+export function getPendingChannelsForDevice(device, entities, configuredCfg) {
+  if (!configuredCfg || !device) return [];
+  if (device.isVirtualEntity) return [];
+  const devEntities = entities.filter((e) => e.device_id === device.id && !e.disabled_by && !e.hidden_by);
+  const controllable = devEntities.filter(isControllableActuator);
+  if (!controllable.length) return [];
+
+  const subs = configuredCfg.entities?.sub_entities;
+  if (subs && typeof subs === 'object' && Object.keys(subs).length > 0) {
+    const subsList = Object.entries(subs);
+    return controllable.filter((e) => {
+      let entry = subs[e.entity_id];
+      if (!entry && e.unique_id) {
+        const found = subsList.find(([, s]) => s && s.unique_id === e.unique_id);
+        entry = found ? found[1] : null;
+      }
+      if (!entry) return controllable.length > 1;
+      return entry.enabled === false;
+    });
+  }
+  return [];
+}
+
 /**
  * Filter out configuration, diagnostic, and internal utility switches.
  * Only genuine controllable actuators are treated as device channels.
  */
 export function isControllableActuator(e) {
   if (!e || !e.entity_id) return false;
-  if (e.disabled_by) return false;
+  if (e.disabled_by || e.hidden_by) return false;
+  if (isOwnIntegrationEntity(e)) return false;
   if (e.entity_category === 'config' || e.entity_category === 'diagnostic') return false;
 
   const domain = domainOf(e.entity_id);
@@ -109,11 +158,16 @@ export function createWizardDeviceElements({
   onCardClick,
 }) {
   const name = device.name_by_user || device.name || 'Gerät';
-  const mfg = [device.manufacturer, device.model].filter(Boolean).join(' · ');
+  const mfg = device.isVirtualEntity
+    ? `Zigbee / Lichtgruppe · ${device.entity_id}`
+    : [device.manufacturer, device.model].filter(Boolean).join(' · ');
   const isConfigured = !!configuredCfg;
 
-  const devEntities = entities.filter((e) => e.device_id === device.id && !e.disabled_by);
+  const devEntities = device.isVirtualEntity
+    ? entities.filter((e) => e.entity_id === device.entity_id && !e.disabled_by)
+    : entities.filter((e) => e.device_id === device.id && !e.disabled_by && !e.hidden_by && !isOwnIntegrationEntity(e));
   const controllable = devEntities.filter(isControllableActuator);
+  const pendingChannels = isConfigured ? getPendingChannelsForDevice(device, entities, configuredCfg) : [];
 
   const chk = h('button', {
     class: 'sel-checkbox',
@@ -131,6 +185,13 @@ export function createWizardDeviceElements({
       class: 'badge-tag category',
       style: { '--badge-cat-color': catColor },
     }, icon(cat?.icon || 'mdi:check-circle'), cat?.name || configuredCfg.category));
+    if (pendingChannels.length > 0) {
+      badges.push(h('span', {
+        class: 'badge-tag pending-channels',
+      }, icon('mdi:alert-circle-outline'), `${pendingChannels.length} ${pendingChannels.length === 1 ? 'Kanal' : 'Kanäle'} offen`));
+    }
+  } else if (device.isVirtualEntity) {
+    badges.push(h('span', { class: 'badge-tag' }, icon('mdi:lightbulb-group-outline'), 'Lichtgruppe'));
   } else if (controllable.length > 1) {
     badges.push(h('button', {
       class: 'btn-channels-toggle',
@@ -146,11 +207,11 @@ export function createWizardDeviceElements({
     ? [
       h('button', {
         type: 'button',
-        class: 'btn secondary small',
-        title: 'Gerät bearbeiten',
+        class: `btn ${pendingChannels.length > 0 ? 'primary' : 'secondary'} small`,
+        title: pendingChannels.length > 0 ? 'Offene Kanäle einrichten' : 'Gerät bearbeiten',
         'aria-label': 'Bearbeiten',
         onClick: (e) => { e.stopPropagation(); onConfigure?.(); },
-      }, icon('mdi:pencil'), h('span', {}, 'Bearbeiten')),
+      }, icon('mdi:pencil'), h('span', {}, pendingChannels.length > 0 ? 'Kanäle einrichten' : 'Bearbeiten')),
       h('button', {
         type: 'button',
         class: 'icon-btn danger',
@@ -175,7 +236,7 @@ export function createWizardDeviceElements({
     onClick: () => (onCardClick || onConfigure)?.(),
   },
   chk,
-  h('div', { class: 'd-icon' }, icon('mdi:devices')),
+  h('div', { class: 'd-icon' }, icon(device.isVirtualEntity ? 'mdi:lightbulb-group-outline' : 'mdi:devices')),
   h('div', { class: 'd-info' },
     h('div', { class: 'd-name' }, name),
     h('div', { class: 'd-meta' }, mfg ? h('span', { class: 'd-mfg' }, mfg) : null, ...badges)),

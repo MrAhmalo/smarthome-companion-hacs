@@ -105,6 +105,7 @@ export const DOMAIN_COLORS = {
   wasserventil: '#00bcd4', // Cyan
   pumpe: '#03a9f4', // Hellblau / Wasser
   bewegungsmelder: '#e91e63', // Pink
+  rauchmelder: '#ef4444', // Signalrot
   bodenmessgeraet: '#4caf50', // Grün
   raummessgeraet: '#ff5722', // Deep Orange
   lock: '#4caf50',
@@ -114,6 +115,7 @@ export const DOMAIN_COLORS = {
 export function effectiveCategory(t) {
   if (!t) return '';
   const cat = t.category || t.spec?.category;
+  if (cat === 'rauchmelder' || cat === 'smoke') return 'rauchmelder';
   if (cat === 'leuchte' || cat === 'light') return 'light';
   if (cat === 'jalousie' || cat === 'cover') return 'cover';
   if (cat === 'steckdose' || cat === 'outlet') return 'outlet';
@@ -151,6 +153,9 @@ export function getEntityColor(entityId, st, category, specColor) {
   if (cat === 'wasserventil' || cat === 'valve') return DOMAIN_COLORS.wasserventil;
   if (cat === 'pumpe') return DOMAIN_COLORS.pumpe;
   if (cat === 'bewegungsmelder') return DOMAIN_COLORS.bewegungsmelder;
+  if (cat === 'rauchmelder' || st?.attributes?.device_class === 'smoke') {
+    return ['on', 'detected', 'smoke'].includes(st?.state) ? '#ef4444' : '#22c55e';
+  }
   if (cat === 'bodenmessgeraet') return DOMAIN_COLORS.bodenmessgeraet;
   if (cat === 'raummessgeraet') return DOMAIN_COLORS.raummessgeraet;
   if (cat === 'schalter' || cat === 'switch') return DOMAIN_COLORS.switch;
@@ -297,6 +302,9 @@ export function stateLabel(hass, st, category) {
   if (category === 'bewegungsmelder') {
     return (st.state === 'on') ? 'Bewegung' : 'Keine Bewegung';
   }
+  if (category === 'rauchmelder' || st.attributes?.device_class === 'smoke') {
+    return ['on', 'detected', 'smoke'].includes(st.state) ? 'RAUCH ERKANNT!' : 'OK · Kein Rauch';
+  }
   try {
     if (typeof hass.formatEntityState === 'function') return hass.formatEntityState(st);
   } catch (_) { /* fall through */ }
@@ -325,8 +333,9 @@ const COVER_ICON = {
   awning: ['mdi:awning-outline', 'mdi:awning-outline'],
 };
 
-/** Best-effort icon for an entity (category > custom icon > entity icon > domain default). */
+/** Best-effort icon for an entity (custom icon > category > entity icon > domain default). */
 export function entityIcon(entityId, st, custom, category) {
+  if (custom) return custom;
   const on = isActive(st);
   const dc = st?.attributes?.device_class;
   if (category === 'leuchte') return on ? 'mdi:lightbulb' : 'mdi:lightbulb-outline';
@@ -341,10 +350,11 @@ export function entityIcon(entityId, st, custom, category) {
   if (category === 'pumpe') return 'mdi:pump';
   if (category === 'wasserventil') return on ? 'mdi:valve-open' : 'mdi:valve-closed';
   if (category === 'bewegungsmelder') return 'mdi:motion-sensor';
+  if (category === 'rauchmelder' || dc === 'smoke') {
+    return ['on', 'detected', 'smoke'].includes(st?.state) ? 'mdi:smoke-detector-alert' : 'mdi:smoke-detector';
+  }
   if (category === 'bodenmessgeraet') return 'mdi:sprout';
   if (category === 'raummessgeraet') return 'mdi:thermometer-lines';
-
-  if (custom) return custom;
 
   if (st?.attributes?.icon) return st.attributes.icon;
   const domain = domainOf(entityId);

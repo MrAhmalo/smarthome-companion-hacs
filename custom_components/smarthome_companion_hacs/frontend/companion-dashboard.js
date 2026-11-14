@@ -11,6 +11,9 @@ import {
 } from './components/specials.js';
 import { Settings } from './components/settings.js';
 import { RoomEditModal } from './components/room_modals.js';
+import {
+  WhatsNewModal, shouldShowWhatsNew, recordWhatsNewShown, recordWhatsNewDismissed,
+} from './components/whats_new_modal.js';
 import { DeviceWizard } from './components/device_wizard.js';
 
 class CompanionDashboardPanel extends HTMLElement {
@@ -56,6 +59,8 @@ class CompanionDashboardPanel extends HTMLElement {
     this._ro = null;
     this._roomModal?.destroy?.();
     this._roomModal = null;
+    this._whatsNew?.destroy?.();
+    this._whatsNew = null;
     this._wizard?.destroy?.();
     this._wizard = null;
     this._settings?.destroy?.();
@@ -125,6 +130,10 @@ class CompanionDashboardPanel extends HTMLElement {
       this._wizardBtn.hidden = !res.user?.is_admin;
       this._editBtn.hidden = !res.user?.is_admin;
       this._render();
+      if (!this._whatsNewChecked) {
+        this._whatsNewChecked = true;
+        this._maybeShowWhatsNew();
+      }
     } catch (err) {
       this._error = err;
       this._renderError(err);
@@ -441,6 +450,20 @@ class CompanionDashboardPanel extends HTMLElement {
     }
   }
 
+  _maybeShowWhatsNew() {
+    if (this._whatsNew || this._wizard || this._settings || this._roomModal) return;
+    const userId = this._hass?.user?.id || this._data?.user?.id;
+    if (!shouldShowWhatsNew(userId)) return;
+    recordWhatsNewShown(userId);
+    this._whatsNew = new WhatsNewModal({
+      onDismiss: () => {
+        recordWhatsNewDismissed(userId);
+        this._whatsNew = null;
+      },
+    });
+    this.shadowRoot.append(this._whatsNew.el);
+  }
+
   _toast(text, error = false) {
     showToast(this.shadowRoot, text, { error });
   }
@@ -448,4 +471,59 @@ class CompanionDashboardPanel extends HTMLElement {
 
 if (!customElements.get('companion-dashboard-panel')) {
   customElements.define('companion-dashboard-panel', CompanionDashboardPanel);
+}
+
+class CompanionDashboardCard extends HTMLElement {
+  constructor() {
+    super();
+    this._config = {};
+    this._panel = null;
+    this._hass = null;
+  }
+
+  connectedCallback() {
+    this.style.display = 'block';
+    this.style.width = '100%';
+    this.style.height = '100%';
+  }
+
+  setConfig(config) {
+    this._config = config || {};
+    if (this._panel) {
+      this._panel.panel = { config: { ...this._config, is_lovelace_card: true } };
+    }
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._panel) {
+      this._panel = document.createElement('companion-dashboard-panel');
+      this._panel.panel = { config: { ...this._config, is_lovelace_card: true } };
+      this.replaceChildren(this._panel);
+    }
+    this._panel.hass = hass;
+  }
+
+  getCardSize() {
+    return 12;
+  }
+
+  getGridOptions() {
+    return { columns: 'full', rows: 'auto' };
+  }
+}
+
+if (!customElements.get('companion-dashboard-card')) {
+  customElements.define('companion-dashboard-card', CompanionDashboardCard);
+}
+
+if (typeof window !== 'undefined') {
+  window.customCards = window.customCards || [];
+  if (!window.customCards.some((c) => c.type === 'companion-dashboard-card')) {
+    window.customCards.push({
+      type: 'companion-dashboard-card',
+      name: 'SmartHome Companion Übersicht',
+      description: 'Vollständiges SmartHome Companion Dashboard als Lovelace-Ansicht.',
+    });
+  }
 }

@@ -58,16 +58,26 @@ export class Settings {
     return picker;
   }
 
-  destroy() {
+  _destroyPickers() {
     for (const p of (this._pickers || [])) {
       try { p?.destroy?.(); } catch {}
     }
     this._pickers = [];
   }
 
+  destroy() {
+    this._destroyPickers();
+    if (this._onKeyDown) {
+      document.removeEventListener('keydown', this._onKeyDown);
+      this._onKeyDown = null;
+    }
+    this.el?.remove();
+    this.el = null;
+  }
+
   _close() {
     this.destroy();
-    this.onClose();
+    this.onClose?.();
   }
 
   _build() {
@@ -81,6 +91,10 @@ export class Settings {
         this.tabBar, this.body,
         h('div', { class: 'dialog-foot' },
           h('button', { class: 'btn', onClick: () => this._close() }, 'Abbrechen'), this.saveBtn)));
+    this._onKeyDown = (e) => {
+      if (e.key === 'Escape') this._close();
+    };
+    document.addEventListener('keydown', this._onKeyDown);
     this._renderTabs();
     this._renderBody();
   }
@@ -94,7 +108,7 @@ export class Settings {
 
   _renderBody(keepScroll = false) {
     const top = this.body.scrollTop;
-    this.destroy();
+    this._destroyPickers();
     const render = this.tabs.find(([id]) => id === this.tab)[2];
     this.body.replaceChildren(...render());
     if (keepScroll) this.body.scrollTop = top;

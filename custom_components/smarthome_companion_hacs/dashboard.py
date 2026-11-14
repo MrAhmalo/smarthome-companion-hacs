@@ -11,6 +11,7 @@ device up again can never leave a dead tile behind:
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 from pathlib import Path
@@ -21,6 +22,8 @@ import voluptuous as vol
 from homeassistant.components import frontend, panel_custom, websocket_api
 # pyrefly: ignore [missing-import]
 from homeassistant.components.http import StaticPathConfig
+# pyrefly: ignore [missing-import]
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 # pyrefly: ignore [missing-import]
 from homeassistant.core import callback
 # pyrefly: ignore [missing-import]
@@ -50,6 +53,7 @@ _WATCHED_EVENTS = (
 # Sort weight of device categories inside a room (lower = further up).
 # Strict priority: 1. Jalousien (Rollläden), 2. Medien (TV / Apple TV), 3. Der Rest (Lichter, Schalter, etc.)
 _CATEGORY_WEIGHT = {
+    "rauchmelder": 0,
     "jalousie": 0,
     "cover": 0,
     "fernseher": 1,
@@ -284,9 +288,11 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
     seen_entities: set[str] = set()
 
     def add_tile(area_id, tile):
-        if tile["entity_id"] in seen_entities:
-            return
-        seen_entities.add(tile["entity_id"])
+        eid = tile.get("entity_id")
+        if eid:
+            if eid in seen_entities:
+                return
+            seen_entities.add(eid)
         tile["hidden"] = tile["key"] in hidden_tiles
         tile["users"] = tile_users.get(tile["key"], [])
         if not edit:
@@ -294,10 +300,15 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                 return
         tiles_by_area.setdefault(valid_area(area_id) or NO_AREA_ID, []).append(tile)
 
-    def make_tile(key, entry, entity_id, name, category, icon, device, power=None, energy=None, force_own_row=False):
+    def make_tile(
+        key, entry, entity_id, name, category, icon, device,
+        power=None, energy=None, force_own_row=False, area_override=None, sub_sensors=None,
+    ):
         cat = categories.get(category, {}) if category else {}
-        area_id = valid_area((entry.area_id if entry else None) or (device.area_id if device else None))
-        return area_id, {
+        area_id = valid_area(area_override) or valid_area(
+            (entry.area_id if entry else None) or (device.area_id if device else None)
+        )
+        tile_obj = {
             "key": key,
             "device_id": device.id if device else (key.split(":")[0] if ":" in key else None),
             "entity_id": entity_id,
@@ -309,6 +320,9 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
             "energy": energy,
             "force_own_row": bool(force_own_row),
         }
+        if sub_sensors:
+            tile_obj["sub_sensors"] = sub_sensors
+        return area_id, tile_obj
 
     def resolve_aux(entity_id):
         """Power/energy helper sensors: keep only ones that still exist."""
@@ -318,18 +332,22 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
 
     # ── Devices configured in the Companion device manager ──
     for device_id, cfg in store.get_devices().items():
-        device = dev_reg.async_get(device_id)
-        if device is None:
+        is_virtual = str(device_id).startswith("entity:")
+        device = None if is_virtual else dev_reg.async_get(device_id)
+        if not is_virtual and device is None:
             continue  # device was deleted in HA
         ents = cfg.get("entities") or {}
         subs = ents.get("sub_entities") or {}
         category = cfg.get("category")
-        device_name = cfg.get("custom_name") or device.name_by_user or device.name or ""
+        options = cfg.get("options") or {}
+        device_name = cfg.get("custom_name") or (device.name_by_user if device else None) or (device.name if device else None) or ""
+        soil_placement = options.get("sensor_placement", "tile") if category == "bodenmessgeraet" else "room"
+        emitted_primary_tile = False
 
         if isinstance(subs, dict) and subs:
             valid_subs = []
             for sub_key, sub in subs.items():
-                if not isinstance(sub, dict):
+                if not isinstance(sub, dict) or not sub.get("enabled", True):
                     continue
                 entry = _resolve_entry(ent_reg, by_uid, sub_key, sub.get("unique_id"), sub.get("original_id"))
                 if entry is not None:
@@ -348,65 +366,123 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                     continue
                 valid_subs.append((sub_key, sub, entry, entity_id))
 
+            child_pairs = []
             for sub_key, sub, entry, entity_id in valid_subs:
                 uid = sub.get("unique_id") or entity_id
                 name = sub.get("custom_name") or sub.get("name") or device_name
                 if len(valid_subs) == 1 and not sub.get("custom_name"):
                     name = device_name or name
-                sub_force = bool(sub.get("force_own_row", (cfg.get("options") or {}).get("force_own_row", False)))
+                sub_force = bool(sub.get("force_own_row", options.get("force_own_row", False)))
                 area_id, tile = make_tile(
                     f"{device_id}:{uid}", entry, entity_id, name, sub.get("category") or category,
                     sub.get("icon") or cfg.get("icon"), device,
                     resolve_aux(sub.get("power")), resolve_aux(sub.get("energy")),
                     force_own_row=sub_force,
+                    area_override=sub.get("area_id"),
                 )
-                add_tile(area_id, tile)
-        else:
+                child_pairs.append((area_id, tile))
+
+            if options.get("display_mode") == "bundled" and len(child_pairs) >= 2:
+                bundled_area = valid_area(device.area_id if device else None) or child_pairs[0][0]
+                bundled_cat = category or (child_pairs[0][1].get("category")) or "schalter"
+                cat_info = categories.get(bundled_cat, {})
+                for _, ch_tile in child_pairs:
+                    seen_entities.add(ch_tile["entity_id"])
+                add_tile(bundled_area, {
+                    "key": f"bundled:{device_id}",
+                    "device_id": device_id,
+                    "is_group": True,
+                    "name": device_name or child_pairs[0][1].get("name") or "Gerät",
+                    "category": bundled_cat,
+                    "icon": _clean_icon(cfg.get("icon")) or cat_info.get("icon"),
+                    "color": cat_info.get("color"),
+                    "entity_ids": [ct["entity_id"] for _, ct in child_pairs],
+                    "children": [ct for _, ct in child_pairs],
+                    "force_own_row": True,
+                })
+                emitted_primary_tile = True
+            else:
+                for area_id, tile in child_pairs:
+                    add_tile(area_id, tile)
+                    emitted_primary_tile = True
+        elif ents.get("primary") and not (category == "bodenmessgeraet" and soil_placement == "room"):
             primary = ents.get("primary")
-            if not primary:
-                continue
             entry = _resolve_entry(ent_reg, by_uid, primary, ents.get("primary_unique_id"))
-            if entry is not None:
-                if entry.disabled_by:
-                    continue
+            if entry is not None and not entry.disabled_by:
                 entity_id = entry.entity_id
-            elif hass.states.get(primary):
+            elif entry is None and hass.states.get(primary):
                 entity_id = primary
             else:
-                continue
-            uid = ents.get("primary_unique_id") or entity_id
-            dev_force = bool((cfg.get("options") or {}).get("force_own_row", False))
-            area_id, tile = make_tile(
-                f"{device_id}:{uid}", entry, entity_id, device_name, category, cfg.get("icon"),
-                device, resolve_aux(ents.get("power")), resolve_aux(ents.get("energy")),
-                force_own_row=dev_force,
-            )
-            add_tile(area_id, tile)
+                entity_id = None
+            if entity_id:
+                uid = ents.get("primary_unique_id") or entity_id
+                dev_force = bool(options.get("force_own_row", False))
+                sub_sensors = []
+                if category == "bodenmessgeraet":
+                    room_sensors_map = ents.get("room_sensors") or {}
+                    if isinstance(room_sensors_map, dict):
+                        for s_key, s_cfg in room_sensors_map.items():
+                            if not isinstance(s_cfg, dict) or not s_cfg.get("enabled", True):
+                                continue
+                            s_entry = _resolve_entry(ent_reg, by_uid, s_key, s_cfg.get("unique_id"), s_cfg.get("original_id"))
+                            s_eid = s_entry.entity_id if (s_entry and not s_entry.disabled_by) else (s_key if s_entry is None and hass.states.get(s_key) else None)
+                            if s_eid:
+                                sub_sensors.append({"entity_id": s_eid, "type": s_cfg.get("type") or "other"})
+                area_id, tile = make_tile(
+                    f"{device_id}:{uid}", entry, entity_id, device_name or (entry.name or entry.original_name if entry else ""),
+                    category, cfg.get("icon"), device,
+                    resolve_aux(ents.get("power")), resolve_aux(ents.get("energy")),
+                    force_own_row=dev_force,
+                    sub_sensors=sub_sensors or None,
+                )
+                tile["device_id"] = device_id
+                add_tile(area_id, tile)
+                emitted_primary_tile = True
 
         # Explicitly configured room sensors on this device
         room_sensors = ents.get("room_sensors") or {}
-        if isinstance(room_sensors, dict):
+        if isinstance(room_sensors, dict) and room_sensors:
+            resolved_sensors = []
             for s_key, s_cfg in room_sensors.items():
                 if not isinstance(s_cfg, dict) or not s_cfg.get("enabled", True):
                     continue
                 s_type = s_cfg.get("type")
-                if s_type not in ("temperature", "humidity", "motion", "moisture"):
+                if not s_type:
                     continue
                 s_entry = _resolve_entry(
                     ent_reg, by_uid, s_key, s_cfg.get("unique_id"), s_cfg.get("original_id")
                 )
                 if s_entry is not None:
-                    if s_entry.disabled_by:
+                    if s_entry.disabled_by or getattr(s_entry, "entity_category", None) in ("config", "diagnostic"):
                         continue
                     s_eid = s_entry.entity_id
                 elif hass.states.get(s_key):
                     s_eid = s_key
                 else:
                     continue
-                s_area = valid_area((s_entry.area_id if s_entry else None) or (device.area_id if device else None)) or NO_AREA_ID
-                bucket = configured_sensors.setdefault(s_area, {}).setdefault(s_type, [])
-                if s_eid not in bucket:
-                    bucket.append(s_eid)
+                resolved_sensors.append((s_eid, s_type, s_entry))
+
+            if category == "bodenmessgeraet" and soil_placement == "tile":
+                if not emitted_primary_tile and resolved_sensors:
+                    pref_entry = next(((eid, tp, ent) for eid, tp, ent in resolved_sensors if tp == "moisture"), resolved_sensors[0])
+                    p_eid, _, p_ent = pref_entry
+                    dev_force = bool(options.get("force_own_row", False))
+                    area_id, tile = make_tile(
+                        f"{device_id}:{p_eid}", p_ent, p_eid, device_name or "Bodenmessgerät",
+                        "bodenmessgeraet", cfg.get("icon"), device,
+                        force_own_row=dev_force,
+                        sub_sensors=[{"entity_id": eid, "type": tp} for eid, tp, _ in resolved_sensors],
+                    )
+                    tile["device_id"] = device_id
+                    add_tile(area_id, tile)
+            else:
+                for s_eid, s_type, s_entry in resolved_sensors:
+                    if s_type not in ("temperature", "humidity", "motion", "moisture"):
+                        continue
+                    s_area = valid_area((s_entry.area_id if s_entry else None) or (device.area_id if device else None)) or NO_AREA_ID
+                    bucket = configured_sensors.setdefault(s_area, {}).setdefault(s_type, [])
+                    if s_eid not in bucket:
+                        bucket.append(s_eid)
 
     # ── Extra tiles (helpers, scripts … that have no device) ──
     for extra in config.get("extra_tiles", []):
@@ -859,8 +935,125 @@ def handle_dashboard_subscribe(hass, connection, msg):
 # PANEL REGISTRATION
 # ═══════════════════════════════════════════════
 
+def _frontend_asset_version(file_path: Path) -> str:
+    """Return VERSION plus a short content digest for cache busting."""
+    try:
+        digest = hashlib.sha256(file_path.read_bytes()).hexdigest()[:10]
+        return f"{VERSION}-{digest}"
+    except OSError:
+        return VERSION
+
+
+async def _async_ensure_lovelace_dashboard(hass, module_url: str) -> bool:
+    """Register JS resource + Lovelace storage dashboard so HA lists Übersicht under Einstellungen -> Dashboards."""
+    try:
+        from homeassistant.components.lovelace import dashboard as ll_dashboard
+    except ImportError:
+        return False
+
+    lovelace_data = hass.data.get("lovelace")
+    if lovelace_data is None:
+        return False
+
+    # 1. Ensure custom card JS module URL is registered (extra_js + lovelace resources collection)
+    try:
+        frontend.add_extra_js_url(hass, module_url)
+    except Exception:  # noqa: BLE001
+        pass
+
+    resources = getattr(lovelace_data, "resources", None) if not isinstance(lovelace_data, dict) else lovelace_data.get("resources")
+    if resources is not None:
+        try:
+            if hasattr(resources, "loaded") and not resources.loaded and hasattr(resources, "async_load"):
+                await resources.async_load()
+            if hasattr(resources, "async_items") and hasattr(resources, "async_create_item"):
+                existing_res = next(
+                    (
+                        item for item in resources.async_items()
+                        if str(item.get("url", "")).startswith(f"{STATIC_URL}/")
+                    ),
+                    None,
+                )
+                if existing_res is None:
+                    await resources.async_create_item({"res_type": "module", "url": module_url})
+                elif existing_res.get("url") != module_url and hasattr(resources, "async_update_item"):
+                    await resources.async_update_item(existing_res["id"], {"res_type": "module", "url": module_url})
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Skipping lovelace resources update: %s", err)
+
+    # 2. Create/ensure Lovelace storage dashboard entry in .storage/lovelace_dashboards
+    try:
+        dash_col = ll_dashboard.DashboardsCollection(hass)
+        await dash_col.async_load()
+        item = next(
+            (i for i in dash_col.async_items() if i.get("url_path") == PANEL_URL),
+            None,
+        )
+        if item is None:
+            item = await dash_col.async_create_item({
+                "allow_single_word": True,
+                "url_path": PANEL_URL,
+                "title": "Übersicht",
+                "icon": "mdi:view-dashboard",
+                "require_admin": False,
+                "show_in_sidebar": True,
+            })
+
+        dashboards = getattr(lovelace_data, "dashboards", None) if not isinstance(lovelace_data, dict) else lovelace_data.get("dashboards")
+        if not isinstance(dashboards, dict):
+            return False
+
+        ll_storage = dashboards.get(PANEL_URL)
+        if ll_storage is None:
+            ll_storage = ll_dashboard.LovelaceStorage(hass, item)
+            dashboards[PANEL_URL] = ll_storage
+
+        # Seed the initial panel view with our custom card only if no saved Lovelace config exists yet
+        has_config = False
+        try:
+            existing_cfg = await ll_storage.async_load(False)
+            has_config = isinstance(existing_cfg, dict) and bool(existing_cfg.get("views"))
+        except Exception:  # noqa: BLE001
+            has_config = False
+
+        if not has_config:
+            await ll_storage.async_save({
+                "views": [
+                    {
+                        "type": "panel",
+                        "title": "Übersicht",
+                        "path": "overview",
+                        "cards": [
+                            {"type": "custom:companion-dashboard-card"},
+                        ],
+                    }
+                ]
+            })
+
+        try:
+            frontend.async_remove_panel(hass, PANEL_URL, warn_if_unknown=False)
+        except Exception:  # noqa: BLE001
+            pass
+
+        frontend.async_register_built_in_panel(
+            hass,
+            "lovelace",
+            frontend_url_path=PANEL_URL,
+            sidebar_title=item.get("title", "Übersicht"),
+            sidebar_icon=item.get("icon", "mdi:view-dashboard"),
+            require_admin=bool(item.get("require_admin", False)),
+            config={"mode": "storage"},
+            update=True,
+        )
+        _LOGGER.info("Companion Lovelace dashboard registered at /%s", PANEL_URL)
+        return True
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning("Could not register Lovelace storage dashboard: %s", err)
+        return False
+
+
 async def async_register_dashboard_panel(hass):
-    """Serve the frontend bundle and add the sidebar entry."""
+    """Serve the frontend bundle and register Companion Dashboard in HA Dashboards & sidebar."""
     frontend_dir = Path(__file__).parent / "frontend"
     try:
         await hass.http.async_register_static_paths(
@@ -868,11 +1061,6 @@ async def async_register_dashboard_panel(hass):
         )
     except RuntimeError:
         pass  # already registered (config entry reload)
-
-    try:
-        frontend.async_remove_panel(hass, PANEL_URL, warn_if_unknown=False)
-    except Exception:  # noqa: BLE001
-        pass
 
     dev_server = os.environ.get("COMPANION_DEV_SERVER")
     if not dev_server and DOMAIN in hass.data and "store" in hass.data[DOMAIN]:
@@ -889,9 +1077,30 @@ async def async_register_dashboard_panel(hass):
     else:
         bundle_file = Path(__file__).parent / "frontend" / "dist" / "companion-dashboard.bundle.js"
         if bundle_file.exists():
-            module_url = f"{STATIC_URL}/dist/companion-dashboard.bundle.js?v={VERSION}"
+            module_url = f"{STATIC_URL}/dist/companion-dashboard.bundle.js?v={_frontend_asset_version(bundle_file)}"
         else:
-            module_url = f"{STATIC_URL}/companion-dashboard.js?v={VERSION}"
+            entry_file = Path(__file__).parent / "frontend" / "companion-dashboard.js"
+            module_url = f"{STATIC_URL}/companion-dashboard.js?v={_frontend_asset_version(entry_file)}"
+
+    if await _async_ensure_lovelace_dashboard(hass, module_url):
+        return
+
+    # Defer Lovelace dashboard registration until HA finishes starting up if lovelace hasn't loaded yet
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    domain_data["_module_url"] = module_url
+    if not domain_data.get("_lovelace_boot_listener"):
+        domain_data["_lovelace_boot_listener"] = True
+
+        async def _on_ha_started(_event):
+            url = hass.data.get(DOMAIN, {}).get("_module_url") or module_url
+            await _async_ensure_lovelace_dashboard(hass, url)
+
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_ha_started)
+
+    try:
+        frontend.async_remove_panel(hass, PANEL_URL, warn_if_unknown=False)
+    except Exception:  # noqa: BLE001
+        pass
 
     await panel_custom.async_register_panel(
         hass,
@@ -904,7 +1113,7 @@ async def async_register_dashboard_panel(hass):
         require_admin=False,
         config={},
     )
-    _LOGGER.info("Companion dashboard panel registered at /%s", PANEL_URL)
+    _LOGGER.info("Companion fallback custom panel registered at /%s", PANEL_URL)
 
 
 def async_remove_dashboard_panel(hass):

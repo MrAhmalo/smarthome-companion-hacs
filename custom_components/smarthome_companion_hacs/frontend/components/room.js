@@ -418,10 +418,15 @@ export class Room {
       const v = String(st.state || '').toLowerCase();
       return isActive(st) || ['on', 'home', 'detected', 'occupied', 'true'].includes(v);
     };
+    const moistIds = sensors.moisture || [];
+    const numericMoistIds = moistIds.filter((id) => numeric(hass.states[id]) !== null);
+    const binaryMoistIds = moistIds.filter((id) => numeric(hass.states[id]) === null);
+    const moistAvg = numericMoistIds.length ? average(hass, numericMoistIds) : null;
+    if (moistAvg) chips.push(h('span', {}, icon('mdi:sprout'), moistAvg));
     if ((sensors.motion || []).some(isSensorOn)) {
       chips.push(h('span', { class: 'alert' }, icon('mdi:motion-sensor'), 'Bewegung'));
     }
-    if ((sensors.moisture || []).some(isSensorOn)) {
+    if (binaryMoistIds.some(isSensorOn)) {
       chips.push(h('span', { class: 'alert' }, icon('mdi:water-alert'), 'Feuchtigkeit'));
     }
     const key = chips.map((c) => c.textContent).join('|');
