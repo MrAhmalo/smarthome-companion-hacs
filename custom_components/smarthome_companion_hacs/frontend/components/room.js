@@ -157,12 +157,6 @@ export class GroupedCoverTile {
       'data-active': 'true',
     }, h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns));
 
-    this.el.addEventListener('pointerdown', (e) => {
-      if (this.ctx?.isEditMode?.()) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }, true);
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
         e.stopPropagation();
@@ -324,6 +318,15 @@ export class Room {
     h('div', { class: 'room-title' }, h('div', { class: 'room-name' }, spec.name), this.metaEl),
     this.controlsEl,
     icon('mdi:chevron-down', 'chevron'));
+
+    // Capture clicks anywhere on the room header in Edit Mode (including group controls)
+    this.head.addEventListener('click', (e) => {
+      if (this.ctx?.isEditMode?.()) {
+        e.stopPropagation();
+        e.preventDefault();
+        this.ctx.onEditRoom?.(this.spec);
+      }
+    }, true);
 
     this.grid = h('div', { class: 'tile-grid' }, this.tiles.map((t) => t.el));
     this.el = h('div', { class: 'card room' },

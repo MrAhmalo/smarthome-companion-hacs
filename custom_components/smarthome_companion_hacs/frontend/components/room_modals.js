@@ -157,23 +157,23 @@ export class SensorConflictModal {
       onClick: () => this._submit(),
     }, icon('mdi:check'), 'Auswahl übernehmen');
 
-    this.el = h('div', { class: 'wizard-backdrop' },
-      h('div', { class: 'wizard-modal', style: { maxWidth: '580px' } },
-        h('div', { class: 'wiz-head' },
-          h('div', { class: 'wiz-head-title' },
-            icon('mdi:tune-variant'),
-            `Mehrere Sensoren in „${this.areaName}“`)),
-        h('div', { class: 'wiz-body' },
-          h('div', { class: 'hint', style: { marginBottom: '14px' } },
+    this.el = h('div', { class: 'overlay', style: { zIndex: '1010' } },
+      h('div', { class: 'dialog room-modal-dialog' },
+        h('div', { class: 'dialog-head' },
+          icon('mdi:tune-variant'),
+          h('h2', {}, `Mehrere Sensoren in „${this.areaName}“`)),
+        h('div', { class: 'dialog-body' },
+          h('div', { class: 'hint', style: { marginBottom: '10px' } },
             'In diesem Raum sind mehrere Sensoren desselben Typs vorhanden. Wähle aus, ob ein einzelner Sensor exklusiv oder ein Durchschnitt ausgewählter Sensoren angezeigt werden soll.'),
           ...blocks),
-        h('div', { class: 'wiz-foot' },
-          h('button', {
-            type: 'button',
-            class: 'btn',
-            onClick: () => { this.el.remove(); this.onCancel?.(); },
-          }, 'Standard (Alle)'),
-          this.saveBtn)));
+        h('div', { class: 'dialog-foot', style: { justifyContent: 'flex-end' } },
+          h('div', { class: 'dialog-foot-actions' },
+            h('button', {
+              type: 'button',
+              class: 'btn',
+              onClick: () => { this.el.remove(); this.onCancel?.(); },
+            }, 'Standard (Alle)'),
+            this.saveBtn))));
   }
 
   async _submit() {
@@ -255,26 +255,27 @@ export class RoomEditModal {
     }, icon('mdi:content-save'), 'Speichern');
 
     this.el = h('div', {
-      class: 'wizard-backdrop',
+      class: 'overlay',
+      style: { zIndex: '1010' },
       onClick: (e) => { if (e.target === this.el) this._close(); },
     },
-    h('div', { class: 'wizard-modal', style: { maxWidth: '580px' } },
-      h('div', { class: 'wiz-head' },
-        h('div', { class: 'wiz-head-title' },
-          icon(this.selectedIcon),
-          `Raum bearbeiten: ${this.roomSpec.name}`),
+    h('div', { class: 'dialog room-modal-dialog' },
+      h('div', { class: 'dialog-head' },
+        icon(this.selectedIcon),
+        h('h2', {}, `Raum bearbeiten: ${this.roomSpec.name}`),
         h('button', {
           type: 'button', class: 'icon-btn', 'aria-label': 'Schließen',
           onClick: () => this._close(),
         }, icon('mdi:close'))),
-      h('div', { class: 'wiz-body' },
+      h('div', { class: 'dialog-body' },
         h('div', { class: 'section-title' }, 'Raum-Icon'),
-        h('div', { class: 'field', style: { marginBottom: '18px' } }, this.iconDropdown.el),
+        h('div', { class: 'field', style: { marginBottom: '10px', zIndex: '20' } }, this.iconDropdown.el),
         h('div', { class: 'section-title' }, 'Raumsensoren & Durchschnitt'),
         ...sensorBlocks),
-      h('div', { class: 'wiz-foot' },
-        h('button', { type: 'button', class: 'btn', onClick: () => this._close() }, 'Abbrechen'),
-        this.saveBtn)));
+      h('div', { class: 'dialog-foot', style: { justifyContent: 'flex-end' } },
+        h('div', { class: 'dialog-foot-actions' },
+          h('button', { type: 'button', class: 'btn', onClick: () => this._close() }, 'Abbrechen'),
+          this.saveBtn))));
   }
 
   _close() {

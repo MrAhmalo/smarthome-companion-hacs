@@ -350,16 +350,19 @@ class CompanionDashboardPanel extends HTMLElement {
   // ── room edit modal ──
   _openRoomEdit(roomSpec) {
     if (!this._hass || !roomSpec) return;
-    const modal = new RoomEditModal({
+    this._roomModal?.el.remove();
+    this._roomModal = new RoomEditModal({
       hass: this._hass,
       roomSpec,
+      onClose: () => { this._roomModal = null; },
       onSaved: () => {
+        this._roomModal = null;
         if (this._editMode) this._toggleEditMode();
         this._load();
         this._toast('Raum gespeichert');
       },
     });
-    this._root.append(modal.el);
+    this.shadowRoot.append(this._roomModal.el);
   }
 
   // ── device wizard ──

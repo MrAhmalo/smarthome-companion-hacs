@@ -65,12 +65,6 @@ export class Tile {
       h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns),
       this.feature);
 
-    this.el.addEventListener('pointerdown', (e) => {
-      if (this.ctx?.isEditMode?.()) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }, true);
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
         e.stopPropagation();
@@ -375,19 +369,21 @@ export class GroupTile {
     this.nameEl = h('div', { class: 'tile-name' }, this.spec.name);
     this.stateEl = h('div', { class: 'tile-state' }, 'Aus');
 
+    const openGroupMoreInfo = () => {
+      const targetEntity = this.spec.entity_id || this.entityIds[0];
+      if (targetEntity) moreInfo(this.el, targetEntity);
+    };
+
     this.info = h('div', {
       class: 'tile-info',
-      title: this.isSubGroup ? 'Schalten' : 'Ausklappen / Zuklappen',
-      onClick: () => {
+      title: 'Details öffnen',
+      onClick: (e) => {
+        e.stopPropagation();
         if (this.ctx?.isEditMode?.()) {
           this.ctx.onOpenGroup?.(this.spec.group_id);
           return;
         }
-        if (this.isSubGroup) {
-          this._toggleMaster();
-        } else {
-          this._toggleOpen();
-        }
+        openGroupMoreInfo();
       },
     }, this.nameEl, this.stateEl);
 
@@ -396,8 +392,10 @@ export class GroupTile {
     } else {
       this.chevron = icon('mdi:chevron-down');
       this.btnChevron = h('button', {
+        type: 'button',
         class: 'mini-btn chevron-btn',
-        'aria-label': 'Ausklappen',
+        'aria-label': 'Gruppe ausklappen',
+        'aria-expanded': 'false',
         title: 'Unterlampen anzeigen',
         onClick: (e) => {
           e.stopPropagation();
@@ -424,7 +422,17 @@ export class GroupTile {
     });
     this.feature.append(this.slider);
 
-    const mainRow = h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns);
+    const mainRow = h('div', {
+      class: 'tile-main',
+      onClick: (e) => {
+        if (e.target.closest('button')) return;
+        if (this.ctx?.isEditMode?.()) {
+          this.ctx.onOpenGroup?.(this.spec.group_id);
+          return;
+        }
+        openGroupMoreInfo();
+      },
+    }, this.iconBtn, this.info, this.btns);
 
     if (this.isSubGroup) {
       this.el = h('div', {
@@ -442,21 +450,17 @@ export class GroupTile {
         this.children.forEach((c) => c.setWide?.(false));
       }
       this.subGrid = h('div', { class: 'group-sub-grid' }, ...this.children.map((c) => c.el));
-      this.subContainer = h('div', { class: 'group-sub-container', hidden: true }, this.subGrid);
+      this.subContainer = h('div', { class: 'group-sub-container' }, this.subGrid);
+      this.subInner = h('div', { class: 'group-sub-inner' }, this.subContainer);
+      this.subBody = h('div', { class: 'group-sub-body' }, this.subInner);
       this.el = h('div', {
         class: 'tile group wide',
         'data-key': this.spec.key,
         'data-group': 'true',
-      }, mainRow, this.feature, this.subContainer);
+      }, mainRow, this.feature, this.subBody);
     }
 
     // Edit Mode click interception
-    this.el.addEventListener('pointerdown', (e) => {
-      if (this.ctx?.isEditMode?.()) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }, true);
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
         e.stopPropagation();
@@ -470,10 +474,7 @@ export class GroupTile {
     if (this.isSubGroup) return;
     this._open = !this._open;
     this.el.toggleAttribute('data-open', this._open);
-    this.subContainer.hidden = !this._open;
-    if (this.chevron) {
-      this.chevron.setAttribute('icon', this._open ? 'mdi:chevron-up' : 'mdi:chevron-down');
-    }
+    this.btnChevron?.setAttribute('aria-expanded', String(this._open));
   }
 
   _toggleMaster() {

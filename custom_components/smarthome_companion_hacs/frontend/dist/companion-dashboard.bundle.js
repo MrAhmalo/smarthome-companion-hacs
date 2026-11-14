@@ -22,9 +22,9 @@ const STYLES = `
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 ha-icon { --mdc-icon-size: 22px; display: inline-flex; }
-button { font: inherit; color: inherit; }
+button { font: inherit; color: inherit; touch-action: manipulation; }
 
-.page { max-width: 1680px; margin: 0 auto; padding: 0 16px 110px; }
+.page { max-width: 1680px; margin: 0 auto; padding: 0 16px 110px; overflow-x: hidden; }
 
 /* ── Toolbar / header ── */
 .toolbar { display: flex; align-items: center; gap: 8px; height: 56px; padding: 0 4px; }
@@ -33,7 +33,9 @@ button { font: inherit; color: inherit; }
   width: 44px; height: 44px; border-radius: 50%; border: 0; background: transparent; cursor: pointer;
   display: grid; place-items: center; color: var(--primary-text-color, #fff);
 }
-.icon-btn:hover { background: var(--cd-tile-bg); }
+@media (hover: hover) {
+  .icon-btn:hover { background: var(--cd-tile-bg); }
+}
 .icon-btn.edit-btn-active,
 .icon-btn[data-active] {
   background: var(--cd-accent, #0284c7) !important;
@@ -70,29 +72,34 @@ button { font: inherit; color: inherit; }
 .page[data-edit-mode] .room-head {
   cursor: pointer !important;
   position: relative !important;
-  outline: 2px dashed var(--cd-accent) !important;
-  outline-offset: -2px;
 }
-.page[data-edit-mode] .tile:hover,
-.page[data-edit-mode] .cover-detail-row:hover,
-.page[data-edit-mode] .room-head:hover {
-  outline-color: #fff !important;
-  box-shadow: 0 0 14px color-mix(in srgb, var(--cd-accent) 45%, transparent) !important;
-}
-.page[data-edit-mode] .tile::after,
-.page[data-edit-mode] .cover-detail-row::after {
-  content: '✏️';
+.page[data-edit-mode] .tile::before,
+.page[data-edit-mode] .cover-detail-row::before {
+  content: '';
   position: absolute;
-  top: 6px;
-  right: 8px;
-  font-size: 12px;
-  line-height: 1;
-  padding: 3px 5px;
-  border-radius: 6px;
-  background: rgba(0,0,0,0.7);
-  border: 1px solid var(--cd-accent);
+  inset: 2px;
+  border: 2px dashed var(--cd-accent);
+  border-radius: calc(var(--cd-tile-radius, 12px) - 2px);
   pointer-events: none;
-  z-index: 10;
+  z-index: 2;
+  box-sizing: border-box;
+}
+.page[data-edit-mode] .room-head::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 2px dashed var(--cd-accent);
+  border-radius: calc(var(--cd-radius) - 3px);
+  pointer-events: none;
+  z-index: 2;
+  box-sizing: border-box;
+}
+@media (hover: hover) {
+  .page[data-edit-mode] .tile:hover::before,
+  .page[data-edit-mode] .cover-detail-row:hover::before,
+  .page[data-edit-mode] .room-head:hover::before {
+    border-color: #fff;
+  }
 }
 .device-room-section { margin-top: 16px; }
 .device-room-section:first-child { margin-top: 4px; }
@@ -139,7 +146,7 @@ button { font: inherit; color: inherit; }
 .empty ha-icon { --mdc-icon-size: 48px; opacity: .5; }
 
 /* ── Room (expander) ── */
-.room-head { display: flex; align-items: center; gap: 12px; padding: 10px 12px; min-height: 60px; cursor: pointer; user-select: none; }
+.room-head { display: flex; align-items: center; gap: 12px; padding: 10px 12px; min-height: 60px; cursor: pointer; user-select: none; position: relative; touch-action: manipulation; }
 .room-icon {
   flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
   color: var(--cd-accent); background: rgba(3, 169, 244, 0.15);
@@ -156,7 +163,7 @@ button { font: inherit; color: inherit; }
 .ctrl-btn {
   position: relative; width: 38px; height: 38px; border-radius: 14px; border: 0; cursor: pointer;
   display: grid; place-items: center; background: var(--cd-tile-bg); color: var(--cd-secondary);
-  transition: transform .15s, background .15s, color .15s;
+  transition: transform .15s, background .15s, color .15s; touch-action: manipulation;
 }
 .ctrl-btn[data-on] {
   color: var(--group-color, var(--cd-active));
@@ -172,15 +179,16 @@ button { font: inherit; color: inherit; }
 .room-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .3s ease; }
 .room[data-open] .room-body { grid-template-rows: 1fr; }
 .room-body-inner { overflow: hidden; min-height: 0; }
-.tile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 8px 10px; }
+.tile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 4px 8px 10px; }
 
 /* ── Tiles ── */
 .tile {
   --tile-color: var(--cd-active);
   display: grid; gap: 8px; padding: 8px 10px 8px 8px; min-width: 0; overflow: hidden; border-radius: var(--cd-tile-radius, 12px);
   background: var(--cd-tile-bg); transition: background .2s, opacity .2s;
+  position: relative; touch-action: manipulation;
 }
-.tile:not(:has(.tile-feature:not([hidden]))):not(:has(.group-sub-container)) {
+.tile:not(:has(.tile-feature:not([hidden]))):not(:has(.group-sub-body)) {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -188,7 +196,7 @@ button { font: inherit; color: inherit; }
   height: 100%;
   box-sizing: border-box;
 }
-.tile:not(:has(.tile-feature:not([hidden]))):not(:has(.group-sub-container)) .tile-main {
+.tile:not(:has(.tile-feature:not([hidden]))):not(:has(.group-sub-body)) .tile-main {
   width: 100%;
 }
 .tile.wide { grid-column: span 2; }
@@ -198,8 +206,12 @@ button { font: inherit; color: inherit; }
 /* ── Hierarchical Group Tile ── */
 .tile.group {
   position: relative;
+  gap: 0;
   transition: background .2s, border-color .2s;
   box-shadow: none;
+}
+.tile.group .tile-feature:not([hidden]) {
+  margin-top: 8px;
 }
 .tile.group[data-open] {
   background: var(--cd-tile-bg);
@@ -211,12 +223,28 @@ button { font: inherit; color: inherit; }
   border: 1px solid rgba(255, 255, 255, 0.08);
   grid-column: span 1;
 }
-.tile.group.subgroup:hover {
-  background: rgba(255, 255, 255, 0.08);
+@media (hover: hover) {
+  .tile.group.subgroup:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
 }
 .group-icon-btn { position: relative; }
+.group-sub-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows .3s ease, opacity .25s ease;
+}
+.tile.group[data-open] .group-sub-body {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.group-sub-inner {
+  overflow: hidden;
+  min-height: 0;
+}
 .group-sub-container {
-  width: 100%; padding: 8px 0 0 0; margin-top: 6px;
+  width: 100%; padding: 8px 0 0 0; margin-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: transparent;
   border-radius: 0;
@@ -224,8 +252,9 @@ button { font: inherit; color: inherit; }
 .group-sub-grid {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0;
 }
-.chevron-btn { transition: transform .25s ease; }
-.tile[data-open] .chevron-btn { transform: rotate(180deg); }
+.chevron-btn { flex-shrink: 0; }
+.chevron-btn ha-icon { transition: transform .28s ease; }
+.tile.group[data-open] .chevron-btn ha-icon { transform: rotate(180deg); }
 
 /* ── Multi-select & Action Bar ── */
 .sel-checkbox {
@@ -264,7 +293,8 @@ button { font: inherit; color: inherit; }
 .tile-state { font-size: 12px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile-btns { display: flex; gap: 4px; flex: none; }
 .mini-btn {
-  width: 34px; height: 34px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center;
+  width: 38px; height: 38px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center;
+  flex-shrink: 0; touch-action: manipulation;
   background: rgba(128, 128, 128, 0.2); background: color-mix(in srgb, var(--primary-text-color, #fff) 10%, transparent);
 }
 .mini-btn:disabled { opacity: .35; cursor: default; }
@@ -1070,22 +1100,50 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
   background: rgba(244, 67, 54, 0.22);
 }
 
-/* ── Group Creation Modal Dialog ── */
-.group-modal-dialog {
-  width: min(520px, 94vw) !important;
+/* ── Group & Room Modal Dialogs ── */
+.group-modal-dialog,
+.room-modal-dialog {
+  width: min(560px, calc(100vw - 24px)) !important;
   height: auto !important;
   min-height: auto !important;
-  max-height: 90vh !important;
+  max-height: min(90vh, calc(100dvh - 32px)) !important;
   overflow: visible !important;
+}
+.group-modal-dialog .dialog-body,
+.room-modal-dialog .dialog-body {
+  min-height: auto !important;
+  padding: 16px 20px 20px !important;
 }
 .group-modal-dialog .dialog-body {
-  min-height: auto !important;
-  padding: 16px 20px !important;
   overflow: visible !important;
 }
+.room-modal-dialog .dialog-body {
+  max-height: calc(100dvh - 180px);
+  overflow-y: auto !important;
+}
+.room-modal-dialog .cdd-menu {
+  max-height: min(220px, 38dvh);
+}
 
-/* ── Mobile Dialog & Selection Bar Responsive ── */
+/* ── Mobile Dialog, Touch & Selection Bar Responsive ── */
 @media (max-width: 650px) {
+  .page { padding: 0 10px 104px; }
+  .edit-mode-banner { padding: 10px 12px; gap: 10px; }
+  .edit-mode-banner-info span { white-space: normal; line-height: 1.3; }
+  .edit-mode-banner-btn { padding: 8px 14px; min-height: 36px; }
+  .room-head { padding: 10px; gap: 8px; }
+  .room-controls { gap: 4px; }
+  .tile-main { gap: 8px; }
+  .chevron-btn { width: 42px; height: 42px; }
+  .btn { min-height: 42px; touch-action: manipulation; }
+
+  .cdd-menu, .ep-dropdown, .ip-dropdown {
+    max-height: min(240px, 40dvh);
+  }
+  .cp-dropdown {
+    right: 0; left: auto; max-width: calc(100vw - 32px);
+  }
+
   .btn-label-desktop { display: none !important; }
   .btn-label-mobile { display: inline !important; }
 
@@ -1114,20 +1172,23 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
   .overlay {
     padding: 0 !important;
   }
-  .dialog:not(.group-modal-dialog) {
+  .dialog:not(.group-modal-dialog):not(.room-modal-dialog) {
     width: 100vw !important;
     height: 100vh !important;
+    height: 100dvh !important;
     min-height: 100vh !important;
+    min-height: 100dvh !important;
     max-height: 100vh !important;
+    max-height: 100dvh !important;
     border-radius: 0 !important;
     border: 0 !important;
   }
-  .dialog:not(.group-modal-dialog) .dialog-body {
+  .dialog:not(.group-modal-dialog):not(.room-modal-dialog) .dialog-body {
     padding: 14px 14px 70px !important;
     min-height: 0 !important;
   }
-  .dialog:not(.group-modal-dialog) .dialog-foot {
-    padding: 10px 14px !important;
+  .dialog .dialog-foot {
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
   }
   .device-list {
     max-height: none !important;
@@ -1156,11 +1217,11 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
 }
 .sensor-mode-tab {
   display: flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 8px 10px; border-radius: 10px;
+  padding: 10px 10px; min-height: 40px; border-radius: 10px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.04); color: var(--cd-secondary);
   font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
-  transition: all .15s;
+  transition: all .15s; touch-action: manipulation;
 }
 .sensor-mode-tab.active {
   background: color-mix(in srgb, var(--cd-accent) 18%, transparent);
@@ -1171,12 +1232,14 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
 }
 .sensor-choice-row {
   display: flex; align-items: center; gap: 10px;
-  padding: 9px 12px; border-radius: 10px;
+  padding: 10px 12px; min-height: 46px; border-radius: 10px;
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.03);
-  cursor: pointer; transition: border-color .15s, background .15s;
+  cursor: pointer; transition: border-color .15s, background .15s; touch-action: manipulation;
 }
-.sensor-choice-row:hover { border-color: rgba(255,255,255,0.25); }
+@media (hover: hover) {
+  .sensor-choice-row:hover { border-color: rgba(255,255,255,0.25); }
+}
 .sensor-choice-row.selected {
   border-color: var(--cd-accent);
   background: color-mix(in srgb, var(--cd-accent) 12%, transparent);
@@ -2558,12 +2621,6 @@ class Tile {
       h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns),
       this.feature);
 
-    this.el.addEventListener('pointerdown', (e) => {
-      if (this.ctx?.isEditMode?.()) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }, true);
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
         e.stopPropagation();
@@ -2868,19 +2925,21 @@ class GroupTile {
     this.nameEl = h('div', { class: 'tile-name' }, this.spec.name);
     this.stateEl = h('div', { class: 'tile-state' }, 'Aus');
 
+    const openGroupMoreInfo = () => {
+      const targetEntity = this.spec.entity_id || this.entityIds[0];
+      if (targetEntity) moreInfo(this.el, targetEntity);
+    };
+
     this.info = h('div', {
       class: 'tile-info',
-      title: this.isSubGroup ? 'Schalten' : 'Ausklappen / Zuklappen',
-      onClick: () => {
+      title: 'Details öffnen',
+      onClick: (e) => {
+        e.stopPropagation();
         if (this.ctx?.isEditMode?.()) {
           this.ctx.onOpenGroup?.(this.spec.group_id);
           return;
         }
-        if (this.isSubGroup) {
-          this._toggleMaster();
-        } else {
-          this._toggleOpen();
-        }
+        openGroupMoreInfo();
       },
     }, this.nameEl, this.stateEl);
 
@@ -2889,8 +2948,10 @@ class GroupTile {
     } else {
       this.chevron = icon('mdi:chevron-down');
       this.btnChevron = h('button', {
+        type: 'button',
         class: 'mini-btn chevron-btn',
-        'aria-label': 'Ausklappen',
+        'aria-label': 'Gruppe ausklappen',
+        'aria-expanded': 'false',
         title: 'Unterlampen anzeigen',
         onClick: (e) => {
           e.stopPropagation();
@@ -2917,7 +2978,17 @@ class GroupTile {
     });
     this.feature.append(this.slider);
 
-    const mainRow = h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns);
+    const mainRow = h('div', {
+      class: 'tile-main',
+      onClick: (e) => {
+        if (e.target.closest('button')) return;
+        if (this.ctx?.isEditMode?.()) {
+          this.ctx.onOpenGroup?.(this.spec.group_id);
+          return;
+        }
+        openGroupMoreInfo();
+      },
+    }, this.iconBtn, this.info, this.btns);
 
     if (this.isSubGroup) {
       this.el = h('div', {
@@ -2935,21 +3006,17 @@ class GroupTile {
         this.children.forEach((c) => c.setWide?.(false));
       }
       this.subGrid = h('div', { class: 'group-sub-grid' }, ...this.children.map((c) => c.el));
-      this.subContainer = h('div', { class: 'group-sub-container', hidden: true }, this.subGrid);
+      this.subContainer = h('div', { class: 'group-sub-container' }, this.subGrid);
+      this.subInner = h('div', { class: 'group-sub-inner' }, this.subContainer);
+      this.subBody = h('div', { class: 'group-sub-body' }, this.subInner);
       this.el = h('div', {
         class: 'tile group wide',
         'data-key': this.spec.key,
         'data-group': 'true',
-      }, mainRow, this.feature, this.subContainer);
+      }, mainRow, this.feature, this.subBody);
     }
 
     // Edit Mode click interception
-    this.el.addEventListener('pointerdown', (e) => {
-      if (this.ctx?.isEditMode?.()) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }, true);
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
         e.stopPropagation();
@@ -2963,10 +3030,7 @@ class GroupTile {
     if (this.isSubGroup) return;
     this._open = !this._open;
     this.el.toggleAttribute('data-open', this._open);
-    this.subContainer.hidden = !this._open;
-    if (this.chevron) {
-      this.chevron.setAttribute('icon', this._open ? 'mdi:chevron-up' : 'mdi:chevron-down');
-    }
+    this.btnChevron?.setAttribute('aria-expanded', String(this._open));
   }
 
   _toggleMaster() {
@@ -3200,12 +3264,6 @@ class GroupedCoverTile {
       'data-active': 'true',
     }, h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns));
 
-    this.el.addEventListener('pointerdown', (e) => {
-      if (this.ctx?.isEditMode?.()) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }, true);
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
         e.stopPropagation();
@@ -3366,6 +3424,15 @@ class Room {
     h('div', { class: 'room-title' }, h('div', { class: 'room-name' }, spec.name), this.metaEl),
     this.controlsEl,
     icon('mdi:chevron-down', 'chevron'));
+
+    // Capture clicks anywhere on the room header in Edit Mode (including group controls)
+    this.head.addEventListener('click', (e) => {
+      if (this.ctx?.isEditMode?.()) {
+        e.stopPropagation();
+        e.preventDefault();
+        this.ctx.onEditRoom?.(this.spec);
+      }
+    }, true);
 
     this.grid = h('div', { class: 'tile-grid' }, this.tiles.map((t) => t.el));
     this.el = h('div', { class: 'card room' },
@@ -4988,23 +5055,23 @@ class SensorConflictModal {
       onClick: () => this._submit(),
     }, icon('mdi:check'), 'Auswahl übernehmen');
 
-    this.el = h('div', { class: 'wizard-backdrop' },
-      h('div', { class: 'wizard-modal', style: { maxWidth: '580px' } },
-        h('div', { class: 'wiz-head' },
-          h('div', { class: 'wiz-head-title' },
-            icon('mdi:tune-variant'),
-            `Mehrere Sensoren in „${this.areaName}“`)),
-        h('div', { class: 'wiz-body' },
-          h('div', { class: 'hint', style: { marginBottom: '14px' } },
+    this.el = h('div', { class: 'overlay', style: { zIndex: '1010' } },
+      h('div', { class: 'dialog room-modal-dialog' },
+        h('div', { class: 'dialog-head' },
+          icon('mdi:tune-variant'),
+          h('h2', {}, `Mehrere Sensoren in „${this.areaName}“`)),
+        h('div', { class: 'dialog-body' },
+          h('div', { class: 'hint', style: { marginBottom: '10px' } },
             'In diesem Raum sind mehrere Sensoren desselben Typs vorhanden. Wähle aus, ob ein einzelner Sensor exklusiv oder ein Durchschnitt ausgewählter Sensoren angezeigt werden soll.'),
           ...blocks),
-        h('div', { class: 'wiz-foot' },
-          h('button', {
-            type: 'button',
-            class: 'btn',
-            onClick: () => { this.el.remove(); this.onCancel?.(); },
-          }, 'Standard (Alle)'),
-          this.saveBtn)));
+        h('div', { class: 'dialog-foot', style: { justifyContent: 'flex-end' } },
+          h('div', { class: 'dialog-foot-actions' },
+            h('button', {
+              type: 'button',
+              class: 'btn',
+              onClick: () => { this.el.remove(); this.onCancel?.(); },
+            }, 'Standard (Alle)'),
+            this.saveBtn))));
   }
 
   async _submit() {
@@ -5086,26 +5153,27 @@ class RoomEditModal {
     }, icon('mdi:content-save'), 'Speichern');
 
     this.el = h('div', {
-      class: 'wizard-backdrop',
+      class: 'overlay',
+      style: { zIndex: '1010' },
       onClick: (e) => { if (e.target === this.el) this._close(); },
     },
-    h('div', { class: 'wizard-modal', style: { maxWidth: '580px' } },
-      h('div', { class: 'wiz-head' },
-        h('div', { class: 'wiz-head-title' },
-          icon(this.selectedIcon),
-          `Raum bearbeiten: ${this.roomSpec.name}`),
+    h('div', { class: 'dialog room-modal-dialog' },
+      h('div', { class: 'dialog-head' },
+        icon(this.selectedIcon),
+        h('h2', {}, `Raum bearbeiten: ${this.roomSpec.name}`),
         h('button', {
           type: 'button', class: 'icon-btn', 'aria-label': 'Schließen',
           onClick: () => this._close(),
         }, icon('mdi:close'))),
-      h('div', { class: 'wiz-body' },
+      h('div', { class: 'dialog-body' },
         h('div', { class: 'section-title' }, 'Raum-Icon'),
-        h('div', { class: 'field', style: { marginBottom: '18px' } }, this.iconDropdown.el),
+        h('div', { class: 'field', style: { marginBottom: '10px', zIndex: '20' } }, this.iconDropdown.el),
         h('div', { class: 'section-title' }, 'Raumsensoren & Durchschnitt'),
         ...sensorBlocks),
-      h('div', { class: 'wiz-foot' },
-        h('button', { type: 'button', class: 'btn', onClick: () => this._close() }, 'Abbrechen'),
-        this.saveBtn)));
+      h('div', { class: 'dialog-foot', style: { justifyContent: 'flex-end' } },
+        h('div', { class: 'dialog-foot-actions' },
+          h('button', { type: 'button', class: 'btn', onClick: () => this._close() }, 'Abbrechen'),
+          this.saveBtn))));
   }
 
   _close() {
@@ -7241,16 +7309,19 @@ class CompanionDashboardPanel extends HTMLElement {
   // ── room edit modal ──
   _openRoomEdit(roomSpec) {
     if (!this._hass || !roomSpec) return;
-    const modal = new RoomEditModal({
+    this._roomModal?.el.remove();
+    this._roomModal = new RoomEditModal({
       hass: this._hass,
       roomSpec,
+      onClose: () => { this._roomModal = null; },
       onSaved: () => {
+        this._roomModal = null;
         if (this._editMode) this._toggleEditMode();
         this._load();
         this._toast('Raum gespeichert');
       },
     });
-    this._root.append(modal.el);
+    this.shadowRoot.append(this._roomModal.el);
   }
 
   // ── device wizard ──

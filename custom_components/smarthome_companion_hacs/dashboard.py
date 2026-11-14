@@ -524,10 +524,12 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                 first = child_specs[0]
                 area_id = first.get("area_id")
 
+            group_entry = by_uid.get(("light", f"smarthome_companion_group_light_{gid}"))
             return {
                 "key": f"group:{gid}",
                 "is_group": True,
                 "group_id": gid,
+                "entity_id": group_entry.entity_id if group_entry else None,
                 "name": g.get("name") or "Gruppe",
                 "category": g_cat,
                 "icon": g.get("icon") or "mdi:lightbulb-group",
