@@ -1,7 +1,7 @@
 // Tile component: one entity as a HA-tile-like card (lights, switches, covers, climate, media, sensors).
 import {
   h, icon, editBorder, domainOf, entityIcon, isActive, isUnavailable, stateLabel, numeric, moreInfo, toggleEntity,
-  isToggleable, resolveColor, effectiveCategory, getEntityColor, setSliderVal,
+  isToggleable, resolveColor, effectiveCategory, getEntityColor, setSliderVal, parseChannelKey,
 } from '../lib/util.js';
 
 const COLOR_MODES = ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'];
@@ -23,7 +23,7 @@ export class Tile {
     this.spec = spec;
     this.ctx = ctx;
     this.entityId = spec.entity_id;
-    this.deviceId = spec.device_id || (spec.key && spec.key.includes(':') && !spec.key.startsWith('e:') && !spec.key.startsWith('l:') ? spec.key.split(':')[0] : null) || spec.entity_id;
+    this.deviceId = spec.device_id || parseChannelKey(spec.key).deviceId || spec.entity_id;
     this.rawDomain = domainOf(spec.entity_id);
     const cat = effectiveCategory(spec);
     // Effective domain overrides raw domain for UI purposes
@@ -136,10 +136,11 @@ export class Tile {
       type: 'range', class: 'slider', min: '1', max: '100', step: '1', 'aria-label': 'Helligkeit',
       style: { touchAction: 'none' },
     });
-    // Prevent vertical page scroll during slider touch interaction
+    // Prevent vertical page scroll & parent toggle during slider interaction
     this.slider.addEventListener('pointerdown', (e) => e.stopPropagation());
     this.slider.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
     this.slider.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
+    this.slider.addEventListener('click', (e) => e.stopPropagation());
     this.slider.addEventListener('input', () => {
       this._dragging = true;
       setSliderVal(this.slider, this.slider.value);
@@ -383,7 +384,7 @@ export class GroupTile {
     this.iconBtn = h('button', {
       class: 'tile-icon group-icon-btn',
       'aria-label': `${this.spec.name} Schalten`,
-      title: 'Alle ein-/ausschalten',
+      title: 'Schalten',
       onClick: (e) => {
         e.stopPropagation();
         this._toggleMaster();
@@ -414,7 +415,7 @@ export class GroupTile {
         class: 'mini-btn chevron-btn',
         'aria-label': 'Gruppe ausklappen',
         'aria-expanded': 'false',
-        title: 'Unterlampen anzeigen',
+        title: 'Unterlampen',
         onClick: (e) => {
           e.stopPropagation();
           this._toggleOpen();
@@ -430,6 +431,9 @@ export class GroupTile {
       style: { touchAction: 'none' },
     });
     this.slider.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.slider.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+    this.slider.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
+    this.slider.addEventListener('click', (e) => e.stopPropagation());
     this.slider.addEventListener('input', () => {
       this._dragging = true;
       setSliderVal(this.slider, this.slider.value);

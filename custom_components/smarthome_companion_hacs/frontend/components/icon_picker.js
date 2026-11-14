@@ -1,5 +1,5 @@
 // Rich Icon Picker for Companion Dashboard (HA-style single-input search across all MDI icons).
-import { h, icon, POPULAR_ICONS } from '../lib/util.js';
+import { h, icon, POPULAR_ICONS, positionFloatingMenu } from '../lib/util.js';
 
 let _mdiCatalog = null;
 let _mdiLoadPromise = null;
@@ -89,7 +89,7 @@ function _buildPriorityEntries(priorityIcons) {
 }
 
 export class IconPicker {
-  constructor({ hass, value = '', onChange, placeholder = 'Icon suchen (z. B. Lampe, mdi:bed)...', priorityIcons = null }) {
+  constructor({ hass, value = '', onChange, placeholder = 'Icon suchen', priorityIcons = null }) {
     this.hass = hass;
     this.value = value || '';
     this.onChange = onChange;
@@ -102,7 +102,8 @@ export class IconPicker {
     this._renderedCount = 0;
 
     this._onDocClick = (e) => {
-      if (!e.composedPath().includes(this.el)) this._close();
+      const path = e.composedPath?.() || [];
+      if (!path.includes(this.el) && !path.includes(this.dropdown)) this._close();
     };
 
     this._build();
@@ -147,7 +148,7 @@ export class IconPicker {
         e.stopPropagation();
         if (!this.isOpen) {
           this.searchQuery = '';
-          this._open(true);
+          this._open(false);
         }
       },
     });
@@ -155,8 +156,8 @@ export class IconPicker {
     this.clearBtn = h('button', {
       type: 'button',
       class: 'ip-clear',
-      'aria-label': 'Eingabe löschen',
-      title: 'Löschen & alle Icons anzeigen',
+      'aria-label': 'Löschen',
+      title: 'Löschen',
       hidden: !this.value,
       onClick: (e) => {
         e.stopPropagation();
@@ -168,7 +169,7 @@ export class IconPicker {
         this.onChange?.('');
         if (!this.isOpen) this._open(false);
         else this._renderGrid();
-        this.textInput.focus();
+        if (window.matchMedia?.('(pointer: fine)').matches) this.textInput.focus();
       },
     }, icon('mdi:close'));
 
@@ -223,8 +224,14 @@ export class IconPicker {
     this.dropdown.hidden = false;
     this.box.dataset.open = '';
     this._renderGrid();
+    this._portalCleanup?.();
+    this._portalCleanup = positionFloatingMenu(this.box, this.dropdown, {
+      minWidth: 260,
+      maxHeight: 280,
+      matchWidth: true,
+    });
     setTimeout(() => {
-      if (selectInput) {
+      if (selectInput && window.matchMedia?.('(pointer: fine)').matches) {
         this.textInput.focus();
         if (this.textInput.value) this.textInput.select();
       }
@@ -235,6 +242,8 @@ export class IconPicker {
   _close() {
     if (!this.isOpen) return;
     this.isOpen = false;
+    this._portalCleanup?.();
+    this._portalCleanup = null;
     this.dropdown.hidden = true;
     delete this.box.dataset.open;
     document.removeEventListener('pointerdown', this._onDocClick);
@@ -242,6 +251,8 @@ export class IconPicker {
 
   destroy() {
     this._close();
+    this._portalCleanup?.();
+    this._portalCleanup = null;
     document.removeEventListener('pointerdown', this._onDocClick);
   }
 
@@ -314,7 +325,7 @@ export class IconPicker {
         );
         return;
       }
-      this.grid.replaceChildren(h('div', { class: 'ip-empty' }, 'Keine Icons verfügbar'));
+      this.grid.replaceChildren(h('div', { class: 'ip-empty' }, 'Keine Icons'));
       return;
     }
 

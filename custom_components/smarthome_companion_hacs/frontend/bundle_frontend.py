@@ -19,6 +19,7 @@ FILES_IN_ORDER = [
     "components/custom_dropdown.js",
     "components/icon_picker.js",
     "components/entity_picker.js",
+    "components/device_list.js",
     "components/tile.js",
     "components/room.js",
     "components/room_detail.js",

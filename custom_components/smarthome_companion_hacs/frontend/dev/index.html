@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -25,6 +25,7 @@
       color: #fff;
       font-family: var(--ha-font-family-body);
       min-height: 100vh;
+      min-height: 100dvh;
       display: flex;
       flex-direction: column;
     }
@@ -34,7 +35,7 @@
       z-index: 99999;
       background: #18181b;
       border-bottom: 2px solid #00bcd4;
-      padding: 8px 16px;
+      padding: calc(8px + env(safe-area-inset-top, 0px)) calc(12px + env(safe-area-inset-right, 0px)) 8px calc(12px + env(safe-area-inset-left, 0px));
       display: flex;
       gap: 12px;
       align-items: center;
@@ -101,8 +102,10 @@
         <option value="100%">100% Fluid Desktop</option>
         <option value="1280px">1280x800 Tablet</option>
         <option value="1024px">1024x600 Kiosk (Pi)</option>
+        <option value="768px">768x1024 iPad</option>
         <option value="800px">800x480 Kiosk Mini</option>
-        <option value="390px">390x844 Mobile</option>
+        <option value="390px">390x844 iPhone</option>
+        <option value="360px">360x780 Android</option>
       </select>
     </label>
 
@@ -119,11 +122,11 @@
       </select>
     </label>
 
-    <button id="btn-edit-mode" title="Bearbeitungsmodus umschalten">✏️ Edit Mode</button>
-    <button id="btn-open-wizard" title="Geräte-Wizard öffnen">➕ Wizard</button>
-    <button id="btn-open-settings" title="Einstellungen öffnen">⚙️ Settings</button>
-    <button id="btn-open-julian" title="Detailansicht Zimmer Julian öffnen">👁️ Raum Julian</button>
-    <button id="btn-open-warning" title="DWD Wetterwarnung Unterseite öffnen">⚠️ DWD Warnung</button>
+    <button id="btn-edit-mode" title="Bearbeitungsmodus umschalten">Edit Mode</button>
+    <button id="btn-open-wizard" title="Geräte-Wizard öffnen">Wizard</button>
+    <button id="btn-open-settings" title="Einstellungen öffnen">Settings</button>
+    <button id="btn-open-julian" title="Detailansicht Zimmer Julian öffnen">Raum Julian</button>
+    <button id="btn-open-warning" title="DWD Wetterwarnung Unterseite öffnen">DWD Warnung</button>
   </div>
 
   <div id="viewport-container">
@@ -155,7 +158,7 @@
       } else {
         container.classList.add('boxed');
       }
-      panel.narrow = (w === '390px');
+      panel.narrow = (w === '390px' || w === '360px');
     });
 
     // Scenario Controller

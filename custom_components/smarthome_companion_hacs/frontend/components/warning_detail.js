@@ -82,15 +82,15 @@ export class WarningDetailView {
     if (key === this._renderedKey) return;
     this._renderedKey = key;
 
-    this.countBadge.textContent = count === 1 ? '1 aktive Warnung' : `${count} aktive Warnungen`;
+    this.countBadge.textContent = count === 1 ? '1 Warnung' : `${count} Warnungen`;
     this.countBadge.style.color = count > 0 ? '#ff9800' : 'var(--primary-text-color, #fff)';
 
     if (count <= 0) {
       this.listEl.replaceChildren(
         h('div', { class: 'warning-empty' },
           h('div', { class: 'icon' }, icon('mdi:shield-check')),
-          h('div', { class: 'title' }, 'Keine aktuellen Warnungen'),
-          h('div', { class: 'sub' }, `Für ${regionName} liegen derzeit keine amtlichen Wetterwarnungen vor.`))
+          h('div', { class: 'title' }, 'Keine Warnungen'),
+          h('div', { class: 'sub' }, `${regionName}: Keine Meldungen`))
       );
       return;
     }

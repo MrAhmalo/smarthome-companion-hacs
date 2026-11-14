@@ -1,9 +1,9 @@
-import { h, icon, COLOR_NAMES, resolveColor, renderTrashBin } from '../lib/util.js';
+import { h, icon, COLOR_NAMES, resolveColor, renderTrashBin, showToast, showConfirmDialog, preserveScroll } from '../lib/util.js';
 import { EntityPicker } from './entity_picker.js';
 import { IconPicker } from './icon_picker.js';
 import { ColorPicker } from './color_picker.js';
 import { CustomDropdown } from './custom_dropdown.js';
-import { DEVICE_CATEGORIES } from './device_wizard.js';
+import { DEVICE_CATEGORIES, createGroupCard, createDeviceRoomSection } from './device_list.js';
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 
@@ -53,17 +53,34 @@ export class Settings {
   }
 
   // ═══════════ Shell ═══════════
+  _track(picker) {
+    (this._pickers ||= []).push(picker);
+    return picker;
+  }
+
+  destroy() {
+    for (const p of (this._pickers || [])) {
+      try { p?.destroy?.(); } catch {}
+    }
+    this._pickers = [];
+  }
+
+  _close() {
+    this.destroy();
+    this.onClose();
+  }
+
   _build() {
     this.body = h('div', { class: 'dialog-body' });
     this.tabBar = h('div', { class: 'tabs' });
     this.saveBtn = h('button', { class: 'btn primary', onClick: () => this._save() }, icon('mdi:content-save'), 'Speichern');
-    this.el = h('div', { class: 'overlay', onClick: (e) => { if (e.target === this.el) this.onClose(); } },
-      h('div', { class: 'dialog', role: 'dialog', 'aria-label': 'Dashboard-Einstellungen' },
-        h('div', { class: 'dialog-head' }, h('h2', {}, 'Dashboard einrichten'),
-          h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: () => this.onClose() }, icon('mdi:close'))),
+    this.el = h('div', { class: 'overlay', onClick: (e) => { if (e.target === this.el) this._close(); } },
+      h('div', { class: 'dialog', role: 'dialog', 'aria-label': 'Einstellungen' },
+        h('div', { class: 'dialog-head' }, h('h2', {}, 'Einstellungen'),
+          h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: () => this._close() }, icon('mdi:close'))),
         this.tabBar, this.body,
         h('div', { class: 'dialog-foot' },
-          h('button', { class: 'btn', onClick: () => this.onClose() }, 'Abbrechen'), this.saveBtn)));
+          h('button', { class: 'btn', onClick: () => this._close() }, 'Abbrechen'), this.saveBtn)));
     this._renderTabs();
     this._renderBody();
   }
@@ -77,6 +94,7 @@ export class Settings {
 
   _renderBody(keepScroll = false) {
     const top = this.body.scrollTop;
+    this.destroy();
     const render = this.tabs.find(([id]) => id === this.tab)[2];
     this.body.replaceChildren(...render());
     if (keepScroll) this.body.scrollTop = top;
@@ -99,6 +117,7 @@ export class Settings {
     try {
       const res = await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
       if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
+      this.destroy();
       this.onSaved();
     } catch (err) {
       this.saveBtn.disabled = false;
@@ -124,27 +143,27 @@ export class Settings {
   }
 
   _entity(obj, key, label, opts = {}) {
-    const picker = new EntityPicker({
+    const picker = this._track(new EntityPicker({
       hass: this.hass,
       value: obj[key] || '',
-      placeholder: opts.placeholder || 'Entität suchen...',
+      placeholder: opts.placeholder || 'Entität suchen',
       domain: opts.domain,
       filter: opts.filter,
       onChange: (val) => {
         if (val) obj[key] = val;
         else delete obj[key];
       },
-    });
+    }));
     return this._field(label, picker.el);
   }
 
   _select(obj, key, label, options, fallback = options[0][0]) {
     const val = obj[key] ?? fallback;
-    const cdd = new CustomDropdown({
+    const cdd = this._track(new CustomDropdown({
       options: options.map(([v, l]) => ({ value: v, label: l })),
       value: val,
       onChange: (v) => { obj[key] = v; },
-    });
+    }));
     return this._field(label, cdd.el);
   }
 
@@ -177,19 +196,19 @@ export class Settings {
   }
 
   _color(obj, key, label) {
-    const picker = new ColorPicker({
+    const picker = this._track(new ColorPicker({
       value: obj[key] || '',
       label,
       onChange: (val) => {
         if (val) obj[key] = val;
         else delete obj[key];
       },
-    });
+    }));
     return this._field(label, picker.el);
   }
 
   _icon(obj, key, label, placeholder = 'mdi:...') {
-    const picker = new IconPicker({
+    const picker = this._track(new IconPicker({
       hass: this.hass,
       value: obj[key] || '',
       placeholder,
@@ -197,7 +216,7 @@ export class Settings {
         if (val) obj[key] = val;
         else delete obj[key];
       },
-    });
+    }));
     return this._field(label, picker.el);
   }
 
@@ -232,9 +251,9 @@ export class Settings {
     return [
       this._title('Begrüßung'),
       h('div', { class: 'fields' }, this._entity(this.draft, 'greeting_entity', 'Begrüßungs-Sensor (optional)')),
-      this._hint('• Leer = automatische Begrüßung (Tageszeit + Name)\n• Sensor-Status wird als Begrüßung angezeigt'),
+      this._hint('• Leer = Standard-Begrüßung\n• Sensorwert ersetzt Begrüßung'),
       this._title('Badges'),
-      this._hint('• Kleine Status-Kacheln unter der Begrüßung\n• Sichtbarkeit per Regel steuerbar'),
+      this._hint('• Status-Badges unter Begrüßung\n• Sichtbarkeit nach Regel'),
       this._list(this.draft.badges, {
         rowTitle: (b) => b.name || b.entity_id || 'Neues Badge',
         make: () => ({ entity_id: '', show_state: true, tap: 'more-info', visible_when: 'always' }),
@@ -246,10 +265,10 @@ export class Settings {
           this._check(b, 'show_name', 'Name anzeigen'),
           this._check(b, 'show_state', 'Status anzeigen'),
           this._select(b, 'tap', 'Bei Tipp', TAP_OPTIONS),
-          this._text(b, 'path', 'Pfad (bei „Seite öffnen“)', { placeholder: '/lovelace/solar' }),
-          this._text(b, 'service', 'Dienst (bei „Dienst ausführen“)', { placeholder: 'input_boolean.turn_on' }),
+          this._text(b, 'path', 'Pfad („Seite“)', { placeholder: '/lovelace/solar' }),
+          this._text(b, 'service', 'Dienst („Dienst“)', { placeholder: 'input_boolean.turn_on' }),
           this._select(b, 'visible_when', 'Sichtbar', VISIBLE_OPTIONS, 'always'),
-          this._text(b, 'visible_value', 'Vergleichswert', { placeholder: '0  /  unavailable, off' }),
+          this._text(b, 'visible_value', 'Vergleichswert', { placeholder: '0 / unavailable, off' }),
         ],
         addLabel: 'Badge hinzufügen',
       }),
@@ -268,13 +287,13 @@ export class Settings {
         this._entity(d.warning, 'entity_id', 'Warnstufen-Sensor'),
         this._text(d.warning, 'headline_attribute', 'Attribut für Überschrift', { placeholder: 'warning_1_headline' }),
         this._text(d.warning, 'path', 'Pfad bei Tipp', { placeholder: '/dashboard-warnungen/dash-warnungen' })),
-      this._hint('• Anzeige ab Warnstufe > 0\n• Rauchmelder-Alarm automatisch aktiv (alle Rauchmelder)'),
+      this._hint('• Anzeige ab Warnstufe > 0\n• Rauchmelder immer aktiv'),
       this._title('Ankündigung'),
       h('div', { class: 'fields' },
         this._entity(d.announce, 'entity_id', 'Skript / Entität'),
         this._text(d.announce, 'name', 'Anzeigename'),
         this._icon(d.announce, 'icon', 'Icon'),
-        this._entity(d.announce, 'chips_visible_entity', 'Chips nur sichtbar wenn verfügbar (z. B. Drucker)')),
+        this._entity(d.announce, 'chips_visible_entity', 'Chip-Verfügbarkeit (Sensor)')),
       this._list(d.announce.chips, {
         rowTitle: (c) => c.entity_id || 'Chip',
         make: () => ({ entity_id: '', icon: '' }),
@@ -282,7 +301,7 @@ export class Settings {
         addLabel: 'Chip hinzufügen',
       }),
       this._title('Personen'),
-      this._hint('• Anzeige nur bei Status „Zuhause“\n• Nur für gewählte Benutzer sichtbar'),
+      this._hint('• Anzeige nur „Zuhause“\n• Pro Benutzer filterbar'),
       this._list(d.persons, {
         rowTitle: (p) => p.entity_id || 'Person',
         make: () => ({ entity_id: '', users: [] }),
@@ -302,13 +321,13 @@ export class Settings {
       h('div', { class: 'fields' },
         this._csv(d.trash, 'calendar_entities', 'Kalender (kommagetrennt)', 'calendar.muellplan'),
         this._text(d.trash, 'next_days', 'Vorschau (Tage)', { type: 'number' })),
-      this._hint('• Terminname enthält Muster → Tonne\n• Standard = Hochwertiges 3D-Vektor-Design (Gelb, Blau, Braun, Grau usw.)\n• Eigenes Bild nur optional erforderlich'),
+      this._hint('• Muster im Terminnamen → Tonne\n• Standard: 3D-Vektortonne\n• Eigenes Bild optional'),
       this._list(d.trash.patterns, {
         rowTitle: (p) => p.pattern || 'Tonne',
         make: () => ({ pattern: '', icon: 'mdi:trash-can-outline', color: 'grey', picture: '' }),
         fields: (p) => {
           const previewWrap = h('div', { class: 'trash-preview-box' }, renderTrashBin(p.color || 'grey', 42));
-          const colorField = new ColorPicker({
+          const colorField = this._track(new ColorPicker({
             value: p.color || 'grey',
             label: 'Farbe',
             allowAuto: false,
@@ -316,9 +335,9 @@ export class Settings {
               p.color = val || 'grey';
               previewWrap.replaceChildren(renderTrashBin(p.color, 42));
             },
-          });
+          }));
           return [
-            this._text(p, 'pattern', 'Muster im Terminnamen (z. B. Leichtverpackungen)'),
+            this._text(p, 'pattern', 'Termin-Muster'),
             this._field('Farbe', colorField.el),
             this._icon(p, 'icon', 'Fallback-Icon'),
             this._text(p, 'picture', 'Eigenes Bild (optional)', { placeholder: '/local/custom-icons/...' }),
@@ -334,7 +353,7 @@ export class Settings {
     this.draft.nav ||= [];
     return [
       this._title('Untere Leiste'),
-      this._hint('• Schnellzugriff-Buttons am unteren Rand\n• Pfad = beliebige HA-Seite'),
+      this._hint('• Untere Schnellzugriff-Leiste\n• Beliebiger HA-Pfad'),
       this._list(this.draft.nav, {
         rowTitle: (n) => n.name || n.path || 'Button',
         make: () => ({ name: '', icon: 'mdi:home', path: '' }),
@@ -350,7 +369,7 @@ export class Settings {
   _tabRooms() {
     const move = (arr, i, dir) => { const j = i + dir; if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; this._renderBody(true); };
     return [
-      this._hint('• Reihenfolge der Räume und Kacheln\n• Ausblenden pro Kachel\n• Sichtbarkeit pro Raum/Kachel für Benutzer'),
+      this._hint('• Raum- & Kachel-Reihenfolge\n• Kacheln ein-/ausblenden\n• Benutzer-Sichtbarkeit'),
       ...this.rooms.map((room, ri) => {
         const rc = (this.draft.rooms[room.area_id] ||= {});
         rc.expanded_users ||= [];
@@ -374,7 +393,7 @@ export class Settings {
               this._miniBtn(t.hidden ? 'mdi:eye-off' : 'mdi:eye', t.hidden ? 'Einblenden' : 'Ausblenden', false,
                 () => { t.hidden = !t.hidden; this._renderBody(true); })),
             ),
-            h('div', { class: 'hint', style: { marginTop: '8px' } }, 'Benutzer-Sichtbarkeit einzelner Kacheln:'),
+            h('div', { class: 'hint', style: { marginTop: '8px' } }, 'Sichtbarkeit pro Kachel:'),
             ...room.tiles.map((t) => h('details', { class: 'sub' },
               h('summary', {}, `${t.name || t.entity_id}${t.users.length ? ` · ${t.users.length} Benutzer` : ''}`),
               this._usersField(t.users, 'Sichtbar für')))));
@@ -384,10 +403,10 @@ export class Settings {
 
   _tabExtra() {
     this.draft.extra_tiles ||= [];
-    const areaOptions = [['', 'Automatisch (Raum der Entität)'], ...this.areas.map((a) => [a.area_id, a.name])];
+    const areaOptions = [['', 'Automatisch'], ...this.areas.map((a) => [a.area_id, a.name])];
     return [
       this._title('Zusatz-Kacheln'),
-      this._hint('• Entitäten ohne Gerät (Helfer, Skripte, Klima …)\n• Werden einem Raum zugewiesen\n• Bleiben bei Umbenennung verknüpft (eindeutige ID)'),
+      this._hint('• Entitäten ohne Gerät (Helfer, Skripte, Klima)\n• Raumzuweisung per ID'),
       this._list(this.draft.extra_tiles, {
         rowTitle: (e) => e.name || e.entity_id || 'Neue Kachel',
         make: () => ({ entity_id: '', area_id: '' }),
@@ -412,8 +431,8 @@ export class Settings {
       h('button', { class: 'btn', type: 'button', onClick: () => { presets.push([255, 160, 60]); render(); } }, icon('mdi:plus'), 'Farbe'));
     render();
     return [
-      this._title('Farb-Voreinstellungen für Lichter'),
-      this._hint('• Erscheinen bei farbfähigen Lichtern\n• Tipp = Farbe setzen'),
+      this._title('Licht-Farbpresets'),
+      this._hint('• Auswahl bei Farblampen\n• Tipp = Farbe setzen'),
       wrap,
     ];
   }
@@ -423,8 +442,8 @@ export class Settings {
     const wrap = h('div', { class: 'settings-devices-tab' });
     this._renderDevicesTab(wrap);
     return [
-      this._title('Geräteverwaltung'),
-      this._hint('• Alle für das Companion Dashboard eingerichteten Geräte im Überblick\n• Gerätename, Raum und Kategorie bearbeiten\n• Einrichtung aufheben oder neue Geräte hinzufügen'),
+      this._title('Geräte'),
+      this._hint('• Eingerichtete Geräte & Gruppen\n• Name, Raum, Kategorie editierbar'),
       wrap,
     ];
   }
@@ -443,18 +462,18 @@ export class Settings {
       const areaMap = new Map((areas || []).map((a) => [a.area_id, a.name]));
 
       const configuredIds = Object.keys(configuredMap);
-      if (!configuredIds.length) {
+      if (!configuredIds.length && !Object.keys(groupsMap).length) {
         wrap.replaceChildren(
           h('div', { class: 'empty' },
             icon('mdi:devices'),
-            h('div', { style: { fontWeight: '600', margin: '8px 0 4px' } }, 'Noch keine Geräte eingerichtet'),
-            h('div', { class: 'hint' }, 'Richte dein erstes Gerät über den Einrichtungsassistenten ein.'),
+            h('div', { style: { fontWeight: '600', margin: '8px 0 4px' } }, 'Keine Geräte eingerichtet'),
+            h('div', { class: 'hint' }, 'Erstes Gerät über Assistent einrichten'),
             h('div', { style: { marginTop: '14px' } },
               h('button', {
                 class: 'btn primary',
                 type: 'button',
                 onClick: () => this.onOpenDevice?.(null),
-              }, icon('mdi:plus-circle-outline'), 'Neues Gerät einrichten')))
+              }, icon('mdi:plus-circle-outline'), 'Gerät einrichten')))
         );
         return;
       }
@@ -473,8 +492,14 @@ export class Settings {
           return !searchQ || name.includes(searchQ) || area.includes(searchQ) || mfg.includes(searchQ) || model.includes(searchQ);
         });
 
-        if (!filtered.length) {
-          listEl.replaceChildren(h('div', { class: 'empty' }, icon('mdi:magnify'), h('div', {}, 'Keine passenden Geräte gefunden')));
+        const filteredGroups = Object.values(groupsMap).filter((g) => {
+          const gName = (g.name || '').toLowerCase();
+          const area = (areaMap.get(g.area_id) || '').toLowerCase();
+          return !searchQ || gName.includes(searchQ) || area.includes(searchQ);
+        });
+
+        if (!filtered.length && !filteredGroups.length) {
+          listEl.replaceChildren(h('div', { class: 'empty' }, icon('mdi:magnify'), h('div', {}, 'Keine Treffer')));
           return;
         }
 
@@ -487,8 +512,8 @@ export class Settings {
           groups.get(areaName).push(id);
         }
 
-        // Include rooms from groups
-        for (const g of Object.values(groupsMap)) {
+        // Include rooms from matching groups
+        for (const g of filteredGroups) {
           const areaName = areaMap.get(g.area_id) || 'Ohne Raum';
           if (!groups.has(areaName)) groups.set(areaName, []);
         }
@@ -507,49 +532,33 @@ export class Settings {
             return nameA.localeCompare(nameB);
           });
 
-          // Groups in this room
-          const roomGroups = Object.values(groupsMap).filter((g) => {
-            const aName = areaMap.get(g.area_id) || 'Ohne Raum';
-            return aName === areaName;
-          });
+          const roomGroups = filteredGroups.filter((g) => (areaMap.get(g.area_id) || 'Ohne Raum') === areaName);
 
-          const groupCards = roomGroups.map((g) => {
-            const cat = DEVICE_CATEGORIES.find((c) => c.id === g.category);
-            const catColor = cat?.color || '#ffc107';
-            return h('div', { class: 'device-card group-card' },
-              h('div', { class: 'd-icon', style: { color: catColor } }, icon(g.icon || 'mdi:lightbulb-group')),
-              h('div', { class: 'd-info' },
-                h('div', { class: 'd-name' }, g.name),
-                h('div', { class: 'd-meta' },
-                  h('span', { class: 'badge-tag category', style: { '--badge-cat-color': catColor } },
-                    icon('mdi:lightbulb-group'), `Gruppe (${g.children?.length || 0} Elemente)`))),
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-                h('button', {
-                  class: 'btn secondary small',
-                  type: 'button',
-                  title: 'Gruppe bearbeiten',
-                  'aria-label': 'Bearbeiten',
-                  onClick: () => {
-                    this.onOpenGroup?.(g.id);
-                  },
-                }, icon('mdi:pencil'), 'Bearbeiten'),
-                h('button', {
-                  class: 'icon-btn danger',
-                  type: 'button',
-                  title: 'Gruppe auflösen',
-                  onClick: async () => {
-                    const conf = window.confirm(`Gruppe „${g.name}“ auflösen?\n\nDie enthaltenen Geräte bleiben erhalten.`);
-                    if (!conf) return;
-                    try {
-                      await this.hass.callWS({ type: 'smarthome_companion/groups/delete', group_id: g.id });
-                      delete groupsMap[g.id];
-                      this._renderDevicesTab(wrap);
-                    } catch (err) {
-                      alert(`Fehler beim Auflösen: ${err.message || err}`);
-                    }
-                  },
-                }, icon('mdi:delete-outline'))));
-          });
+          const groupCards = roomGroups.map((g) => createGroupCard({
+            group: g,
+            onEdit: () => this.onOpenGroup?.(g.id),
+            onDelete: async () => {
+              const conf = await showConfirmDialog(this.el, {
+                title: 'Gruppe auflösen?',
+                message: `Gruppe „${g.name}“ auflösen?\n• Enthaltene Geräte bleiben erhalten`,
+                confirmLabel: 'Auflösen',
+                danger: true,
+              });
+              if (!conf) return;
+              try {
+                await this.hass.callWS({ type: 'smarthome_companion/groups/delete', group_id: g.id });
+                delete groupsMap[g.id];
+                showToast(this.el, 'Gruppe aufgelöst');
+                if (!configuredIds.length && !Object.keys(groupsMap).length) {
+                  this._renderDevicesTab(wrap);
+                } else {
+                  preserveScroll(this.body, updateList);
+                }
+              } catch (err) {
+                showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
+              }
+            },
+          }));
 
           const cards = ids.map((id) => {
             const cfg = configuredMap[id];
@@ -562,60 +571,70 @@ export class Settings {
             const catIcon = cat?.icon || 'mdi:devices';
             const catColor = cat?.color || 'var(--cd-accent)';
 
-            const badges = [];
-            badges.push(h('span', {
-              class: 'badge-tag category',
-              style: { '--badge-cat-color': catColor },
-            }, icon(catIcon), catName));
+            const badges = [
+              h('span', {
+                class: 'badge-tag category',
+                style: { '--badge-cat-color': catColor },
+              }, icon(catIcon), catName),
+            ];
 
             return h('div', { class: 'device-card' },
               h('div', { class: 'd-icon', style: { color: catColor } }, icon(catIcon)),
               h('div', { class: 'd-info' },
                 h('div', { class: 'd-name' }, name),
-                h('div', { class: 'd-meta' }, mfg ? h('span', {}, mfg) : null, ...badges)),
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+                h('div', { class: 'd-meta' }, mfg ? h('span', { class: 'd-mfg' }, mfg) : null, ...badges)),
+              h('div', { class: 'device-card-actions' },
                 h('button', {
                   class: 'btn secondary small',
                   type: 'button',
                   title: 'Gerät bearbeiten',
+                  'aria-label': 'Bearbeiten',
                   onClick: () => this.onOpenDevice?.(id),
-                }, icon('mdi:pencil'), 'Bearbeiten'),
+                }, icon('mdi:pencil'), h('span', {}, 'Bearbeiten')),
                 h('button', {
                   class: 'icon-btn danger',
                   type: 'button',
-                  title: 'Companion-Einrichtung aufheben',
+                  title: 'Einrichtung aufheben',
+                  'aria-label': 'Einrichtung aufheben',
                   onClick: async () => {
-                    const conf = window.confirm(`Companion-Einrichtung für „${name}“ aufheben?\n\nDas Gerät bleibt in Home Assistant erhalten.`);
+                    const conf = await showConfirmDialog(this.el, {
+                      title: 'Einrichtung aufheben?',
+                      message: `Einrichtung für „${name}“ aufheben?\n• Gerät bleibt in Home Assistant erhalten`,
+                      confirmLabel: 'Aufheben',
+                      danger: true,
+                    });
                     if (!conf) return;
                     try {
                       await this.hass.callWS({ type: 'smarthome_companion/devices/remove', device_id: id });
                       delete configuredMap[id];
-                      this._renderDevicesTab(wrap);
+                      const idx = configuredIds.indexOf(id);
+                      if (idx >= 0) configuredIds.splice(idx, 1);
+                      showToast(this.el, 'Einrichtung aufgehoben');
+                      if (!configuredIds.length && !Object.keys(groupsMap).length) {
+                        this._renderDevicesTab(wrap);
+                      } else {
+                        preserveScroll(this.body, updateList);
+                      }
                     } catch (err) {
-                      alert(`Fehler beim Aufheben: ${err.message || err}`);
+                      showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
                     }
                   },
                 }, icon('mdi:delete-outline'))));
           });
 
           const totalCount = groupCards.length + cards.length;
-          return h('div', { class: 'device-room-section' },
-            h('div', { class: 'device-room-header' },
-              icon(areaName === 'Ohne Raum' ? 'mdi:help-circle-outline' : 'mdi:home-outline'),
-              h('span', {}, areaName),
-              h('span', { class: 'room-count' }, `(${totalCount})`)),
-            h('div', { class: 'device-list' }, ...groupCards, ...cards));
+          return createDeviceRoomSection(areaName, [...groupCards, ...cards], totalCount);
         });
 
         listEl.replaceChildren(...sections);
       };
 
       const searchInput = h('input', {
-        type: 'text', placeholder: 'Gerätename, Raum, Modell oder Kategorie suchen...',
+        type: 'text', placeholder: 'Suchen (Name, Raum, Modell)',
         onInput: (e) => { searchQ = e.target.value.toLowerCase().trim(); updateList(); },
       });
-      const topRow = h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' } },
-        h('div', { class: 'search-bar', style: { flex: 1 } }, icon('mdi:magnify'), searchInput),
+      const topRow = h('div', { class: 'devices-toolbar' },
+        h('div', { class: 'search-bar' }, icon('mdi:magnify'), searchInput),
         h('button', {
           class: 'btn primary',
           type: 'button',
@@ -625,7 +644,7 @@ export class Settings {
       updateList();
       wrap.replaceChildren(topRow, listEl);
     } catch (err) {
-      wrap.replaceChildren(h('div', { class: 'empty' }, icon('mdi:alert'), h('div', {}, `Fehler beim Laden: ${err.message || err}`)));
+      wrap.replaceChildren(h('div', { class: 'empty' }, icon('mdi:alert'), h('div', {}, `Fehler: ${err.message || err}`)));
     }
   }
 }

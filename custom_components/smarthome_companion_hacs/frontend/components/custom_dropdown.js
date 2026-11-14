@@ -1,6 +1,5 @@
-// CustomDropdown: beautiful bespoke select component replacing native browser <select>.
-// Features: custom styling, icons, color dots, optional search, keyboard & click-outside handling.
-import { h, icon } from '../lib/util.js';
+// CustomDropdown: bespoke select component replacing native browser <select>.
+import { h, icon, positionFloatingMenu } from '../lib/util.js';
 
 export class CustomDropdown {
   /**
@@ -13,7 +12,7 @@ export class CustomDropdown {
    *   onChange: (val: string) => void
    * }} opts
    */
-  constructor({ options, items, value, placeholder = 'Bitte wählen...', disabled = false, searchable, onChange }) {
+  constructor({ options, items, value, placeholder = 'Auswählen', disabled = false, searchable, onChange }) {
     const raw = options || items || [];
     this.options = raw.map((o) => ({
       ...o,
@@ -27,20 +26,24 @@ export class CustomDropdown {
     this.onChange = onChange;
     this.isOpen = false;
     this.searchQuery = '';
+    this._portalCleanup = null;
 
     this._onDocClick = (e) => {
       if (!this.isOpen) return;
-      if (!e.composedPath().includes(this.el)) {
+      const path = e.composedPath?.() || [];
+      if (!path.includes(this.el) && !path.includes(this.menu)) {
         this.close();
       }
     };
-    document.addEventListener('click', this._onDocClick);
 
     this._build();
   }
 
   destroy() {
-    document.removeEventListener('click', this._onDocClick);
+    this.close();
+    this._portalCleanup?.();
+    this._portalCleanup = null;
+    document.removeEventListener('pointerdown', this._onDocClick);
   }
 
   setDisabled(disabled) {
@@ -62,8 +65,9 @@ export class CustomDropdown {
       label: String(o.label || o.name || ''),
     }));
     this.searchable = this.options.length > 5;
+    if (this.searchRow) this.searchRow.hidden = !this.searchable;
     this._updateSelected();
-    if (this.isOpen) this._renderMenu();
+    if (this.isOpen) this._renderList();
   }
 
   _build() {
@@ -91,7 +95,27 @@ export class CustomDropdown {
       },
     }, this.iconEl, this.textEl, this.chevron);
 
-    this.menu = h('div', { class: 'cdd-menu', hidden: true });
+    this.searchInput = h('input', {
+      type: 'text',
+      class: 'cdd-search-input',
+      placeholder: 'Suchen',
+      autocomplete: 'off',
+      spellcheck: 'false',
+      onClick: (e) => e.stopPropagation(),
+      onInput: (e) => {
+        this.searchQuery = e.target.value;
+        this._renderList();
+      },
+      onKeydown: (e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          this.close();
+        }
+      },
+    });
+    this.searchRow = h('div', { class: 'cdd-search-row', hidden: !this.searchable }, icon('mdi:magnify'), this.searchInput);
+    this.listContainer = h('div', { class: 'cdd-list' });
+    this.menu = h('div', { class: 'cdd-menu', hidden: true }, this.searchRow, this.listContainer);
 
     this.el = h('div', { class: 'custom-dropdown' }, this.box, this.menu);
     this._updateSelected();
@@ -133,99 +157,79 @@ export class CustomDropdown {
     this.box.setAttribute('aria-expanded', 'true');
     this.menu.hidden = false;
     this.searchQuery = '';
-    this._renderMenu();
+    if (this.searchInput) this.searchInput.value = '';
+    if (this.searchRow) this.searchRow.hidden = !this.searchable;
+    this._renderList();
+    this._portalCleanup?.();
+    this._portalCleanup = positionFloatingMenu(this.box, this.menu, {
+      maxHeight: 280,
+      matchWidth: true,
+    });
+    document.addEventListener('pointerdown', this._onDocClick);
 
-    if (this.searchInput) {
-      setTimeout(() => {
-        this.searchInput.focus();
-        const rect = this.menu.getBoundingClientRect();
-        if (rect.bottom > window.innerHeight - 30) {
-          this.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      }, 30);
-    } else {
-      setTimeout(() => {
-        const rect = this.menu.getBoundingClientRect();
-        if (rect.bottom > window.innerHeight - 30) {
-          this.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      }, 30);
+    if (this.searchable && this.searchInput && window.matchMedia?.('(pointer: fine)').matches) {
+      setTimeout(() => this.searchInput.focus(), 20);
     }
   }
 
   close() {
     if (!this.isOpen) return;
     this.isOpen = false;
+    this._portalCleanup?.();
+    this._portalCleanup = null;
     delete this.box.dataset.open;
     this.box.setAttribute('aria-expanded', 'false');
     this.menu.hidden = true;
+    document.removeEventListener('pointerdown', this._onDocClick);
   }
 
   _renderMenu() {
+    this._renderList();
+  }
+
+  _renderList() {
     const q = this.searchQuery.toLowerCase().trim();
     const filtered = q
       ? this.options.filter((o) => o.label.toLowerCase().includes(q) || (o.sub && o.sub.toLowerCase().includes(q)))
       : this.options;
 
-    const items = [];
-
-    if (this.searchable) {
-      this.searchInput = h('input', {
-        type: 'text',
-        class: 'cdd-search-input',
-        placeholder: 'Suchen...',
-        value: this.searchQuery,
-        onClick: (e) => e.stopPropagation(),
-        onInput: (e) => {
-          this.searchQuery = e.target.value;
-          this._renderMenu();
-        },
-      });
-      const searchRow = h('div', { class: 'cdd-search-row' }, icon('mdi:magnify'), this.searchInput);
-      items.push(searchRow);
-    }
-
-    const list = h('div', { class: 'cdd-list' });
-
     if (!filtered.length) {
-      list.append(h('div', { class: 'cdd-empty' }, 'Keine Optionen gefunden'));
-    } else {
-      for (const opt of filtered) {
-        const isSelected = opt.value === this.value;
-        const iconWrap = h('div', { class: 'cdd-item-icon' });
-        if (opt.icon) {
-          iconWrap.append(icon(opt.icon));
-          if (opt.color) iconWrap.style.color = opt.color;
-        } else if (opt.color) {
-          iconWrap.append(h('span', { class: 'cdd-dot', style: { background: opt.color } }));
-        } else {
-          iconWrap.style.display = 'none';
-        }
-
-        const labelWrap = h('div', { class: 'cdd-item-texts' },
-          h('div', { class: 'cdd-item-label' }, opt.label),
-          opt.sub ? h('div', { class: 'cdd-item-sub' }, opt.sub) : null);
-
-        const checkWrap = h('div', { class: 'cdd-item-check' });
-        if (isSelected) checkWrap.append(icon('mdi:check'));
-
-        const item = h('div', {
-          class: `cdd-item${isSelected ? ' selected' : ''}`,
-          onClick: (e) => {
-            e.stopPropagation();
-            this.value = opt.value;
-            this._updateSelected();
-            this.close();
-            this.onChange?.(opt.value);
-          },
-        }, iconWrap, labelWrap, checkWrap);
-
-        list.append(item);
-      }
+      this.listContainer.replaceChildren(h('div', { class: 'cdd-empty' }, 'Kein Treffer'));
+      return;
     }
 
-    items.push(list);
-    this.menu.replaceChildren(...items);
+    const listNodes = filtered.map((opt) => {
+      const isSelected = opt.value === this.value;
+      const iconWrap = h('div', { class: 'cdd-item-icon' });
+      if (opt.icon) {
+        iconWrap.append(icon(opt.icon));
+        if (opt.color) iconWrap.style.color = opt.color;
+      } else if (opt.color) {
+        iconWrap.append(h('span', { class: 'cdd-dot', style: { background: opt.color } }));
+      } else {
+        iconWrap.style.display = 'none';
+      }
+
+      const labelWrap = h('div', { class: 'cdd-item-texts' },
+        h('div', { class: 'cdd-item-label' }, opt.label),
+        opt.sub ? h('div', { class: 'cdd-item-sub' }, opt.sub) : null);
+
+      const checkWrap = h('div', { class: 'cdd-item-check' });
+      if (isSelected) checkWrap.append(icon('mdi:check'));
+
+      return h('div', {
+        class: `cdd-item${isSelected ? ' selected' : ''}`,
+        onClick: (e) => {
+          e.stopPropagation();
+          this.value = opt.value;
+          this._updateSelected();
+          this.close();
+          this.onChange?.(opt.value);
+        },
+      }, iconWrap, labelWrap, checkWrap);
+    });
+
+    this.listContainer.replaceChildren(...listNodes);
   }
 }
 

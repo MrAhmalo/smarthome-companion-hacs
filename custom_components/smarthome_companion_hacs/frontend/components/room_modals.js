@@ -1,6 +1,6 @@
 // Shared modals for Room Editing (Edit Mode) and Dynamic Sensor Conflict Resolution.
 import {
-  h, icon, ROOM_ICON_OPTIONS, ROOM_SENSOR_TYPES,
+  h, icon, ROOM_ICON_OPTIONS, ROOM_SENSOR_TYPES, preserveScroll, showConfirmDialog, showToast,
 } from '../lib/util.js';
 import { IconPicker } from './icon_picker.js';
 
@@ -43,7 +43,7 @@ export function buildSensorPrefBlock({ hass, type, entityIds, currentPref, onCha
 
   const container = h('div', { class: 'sensor-pref-card' });
 
-  const render = () => {
+  const render = () => preserveScroll(container.closest?.('.dialog-body'), () => {
     const modeRow = h('div', { class: 'sensor-mode-tabs' },
       h('button', {
         type: 'button',
@@ -99,10 +99,10 @@ export function buildSensorPrefBlock({ hass, type, entityIds, currentPref, onCha
     });
 
     const hintText = mode === 'single'
-      ? 'Nur der ausgewählte Sensor wird in der Raumkachel angezeigt.'
+      ? '• Nur ausgewählter Sensor aktiv'
       : (isBinary
-        ? 'Ausgewählte Sensoren werden gemeinsam für die Meldung berücksichtigt.'
-        : `${selected.length} von ${entityIds.length} Sensoren fließen in den Durchschnittswert ein.`);
+        ? '• Auswahl kombiniert gemeldet'
+        : `• Durchschnitt aus ${selected.length} von ${entityIds.length} Sensoren`);
 
     container.replaceChildren(
       h('div', { class: 'sensor-pref-head' },
@@ -114,7 +114,7 @@ export function buildSensorPrefBlock({ hass, type, entityIds, currentPref, onCha
       h('div', { class: 'hint', style: { marginBottom: '8px' } }, hintText),
       h('div', { class: 'sensor-choice-list' }, ...rows),
     );
-  };
+  });
 
   render();
   return container;
@@ -142,6 +142,10 @@ export class SensorConflictModal {
     this._build();
   }
 
+  destroy() {
+    this.el?.remove();
+  }
+
   _build() {
     const blocks = this.conflicts.map((c) => buildSensorPrefBlock({
       hass: this.hass,
@@ -155,23 +159,23 @@ export class SensorConflictModal {
       type: 'button',
       class: 'btn primary',
       onClick: () => this._submit(),
-    }, icon('mdi:check'), 'Auswahl übernehmen');
+    }, icon('mdi:check'), 'Übernehmen');
 
     this.el = h('div', { class: 'overlay', style: { zIndex: '1010' } },
       h('div', { class: 'dialog room-modal-dialog' },
         h('div', { class: 'dialog-head' },
           icon('mdi:tune-variant'),
-          h('h2', {}, `Mehrere Sensoren in „${this.areaName}“`)),
+          h('h2', {}, `Sensoren: ${this.areaName}`)),
         h('div', { class: 'dialog-body' },
           h('div', { class: 'hint', style: { marginBottom: '10px' } },
-            'In diesem Raum sind mehrere Sensoren desselben Typs vorhanden. Wähle aus, ob ein einzelner Sensor exklusiv oder ein Durchschnitt ausgewählter Sensoren angezeigt werden soll.'),
+            '• Mehrere Sensoren gleichen Typs\n• Einzelsensor oder Durchschnitt wählen'),
           ...blocks),
         h('div', { class: 'dialog-foot', style: { justifyContent: 'flex-end' } },
           h('div', { class: 'dialog-foot-actions' },
             h('button', {
               type: 'button',
               class: 'btn',
-              onClick: () => { this.el.remove(); this.onCancel?.(); },
+              onClick: () => { this.destroy(); this.onCancel?.(); },
             }, 'Standard (Alle)'),
             this.saveBtn))));
   }
@@ -182,17 +186,18 @@ export class SensorConflictModal {
     this.saveBtn.disabled = true;
     try {
       await this.onSave?.(this.prefs);
-      this.el.remove();
-    } catch (_) {
+      this.destroy();
+    } catch (err) {
       this._saving = false;
       this.saveBtn.disabled = false;
+      showToast(this.el, `Fehler: ${err?.message || err}`, { error: true });
     }
   }
 }
 
 /**
  * Room Edit Modal opened when clicking a room header in Dashboard Edit Mode.
- * Allows changing the room icon (via existing CustomDropdown) and sensor conflict/average preferences.
+ * Allows changing the room icon and sensor conflict/average preferences.
  */
 export class RoomEditModal {
   constructor({ hass, roomSpec, onSaved, onClose }) {
@@ -207,13 +212,18 @@ export class RoomEditModal {
     this._build();
   }
 
+  destroy() {
+    this.iconPicker?.destroy();
+    this.el?.remove();
+  }
+
   _build() {
     const isUnassigned = this.roomSpec.area_id === '__none__';
     this.nameInput = h('input', {
       type: 'text',
       value: this.roomName,
       disabled: isUnassigned,
-      placeholder: 'Raumname...',
+      placeholder: 'Raumname',
       onInput: (e) => { this.roomName = e.target.value; },
     });
 
@@ -222,7 +232,7 @@ export class RoomEditModal {
       hass: this.hass,
       value: this.selectedIcon,
       priorityIcons: ROOM_ICON_OPTIONS,
-      placeholder: 'Raum-Icon wählen (z. B. Wohnzimmer, mdi:sofa)...',
+      placeholder: 'Raum-Icon suchen',
       onChange: (val) => {
         const nextIcon = (val && val.includes(':')) ? val : 'mdi:home-outline';
         this.selectedIcon = nextIcon;
@@ -257,7 +267,7 @@ export class RoomEditModal {
                 h('div', { class: 'sensor-choice-name' }, _entityLabel(this.hass, eid)),
                 h('div', { class: 'sensor-choice-id' }, eid))));
         })
-      : [h('div', { class: 'hint' }, 'Diesem Raum sind aktuell keine Raumsensoren zugewiesen. Sensoren können über „Gerät hinzufügen“ eingerichtet werden.')];
+      : [h('div', { class: 'hint' }, 'Keine Raumsensoren zugewiesen')];
 
     this.saveBtn = h('button', {
       type: 'button',
@@ -279,7 +289,7 @@ export class RoomEditModal {
     h('div', { class: 'dialog room-modal-dialog' },
       h('div', { class: 'dialog-head' },
         this.headIcon,
-        h('h2', {}, `Raum bearbeiten: ${this.roomSpec.name}`),
+        h('h2', {}, `Raum: ${this.roomSpec.name}`),
         h('button', {
           type: 'button', class: 'icon-btn', 'aria-label': 'Schließen',
           onClick: () => this._close(),
@@ -288,8 +298,8 @@ export class RoomEditModal {
         isUnassigned ? null : h('div', { class: 'section-title' }, 'Raumname'),
         isUnassigned ? null : h('div', { class: 'field', style: { marginBottom: '10px' } }, this.nameInput),
         h('div', { class: 'section-title' }, 'Raum-Icon'),
-        h('div', { class: 'field', style: { marginBottom: '10px', zIndex: '20' } }, this.iconPicker.el),
-        h('div', { class: 'section-title' }, 'Raumsensoren & Durchschnitt'),
+        h('div', { class: 'field', style: { marginBottom: '10px' } }, this.iconPicker.el),
+        h('div', { class: 'section-title' }, 'Raumsensoren'),
         ...sensorBlocks),
       h('div', { class: 'dialog-foot' },
         h('div', { class: 'dialog-foot-actions' }, deleteBtn),
@@ -299,36 +309,19 @@ export class RoomEditModal {
   }
 
   _close() {
-    this.iconPicker?.destroy();
-    this.el.remove();
+    this.destroy();
     this.onClose?.();
   }
 
-  _confirmDelete() {
-    const confirmOverlay = h('div', {
-      class: 'overlay',
-      style: { zIndex: '1020' },
-      onClick: (e) => { if (e.target === confirmOverlay) confirmOverlay.remove(); },
-    },
-    h('div', { class: 'dialog room-modal-dialog', style: { maxWidth: '440px' } },
-      h('div', { class: 'dialog-head' },
-        icon('mdi:alert-outline'),
-        h('h2', {}, 'Raum löschen?')),
-      h('div', { class: 'dialog-body' },
-        h('div', { class: 'hint', style: { fontSize: '14px', color: 'var(--primary-text-color, #fff)', lineHeight: '1.5' } },
-          `Möchtest du den Raum „${this.roomSpec.name}“ wirklich löschen?\n\nDer Raum wird entfernt, alle zugeordneten Geräte und Sensoren bleiben erhalten und werden automatisch nach „Nicht zugeordnet“ verschoben.`)),
-      h('div', { class: 'dialog-foot', style: { justifyContent: 'flex-end' } },
-        h('div', { class: 'dialog-foot-actions' },
-          h('button', { type: 'button', class: 'btn', onClick: () => confirmOverlay.remove() }, 'Abbrechen'),
-          h('button', {
-            type: 'button',
-            class: 'btn danger',
-            onClick: async () => {
-              confirmOverlay.remove();
-              await this._deleteRoom();
-            },
-          }, icon('mdi:delete-outline'), 'Endgültig löschen')))));
-    this.el.append(confirmOverlay);
+  async _confirmDelete() {
+    const conf = await showConfirmDialog(this.el, {
+      title: 'Raum löschen?',
+      message: `Raum „${this.roomSpec.name}“ löschen?\n• Zugewiesene Geräte bleiben erhalten\n• Verschiebung nach „Nicht zugeordnet“`,
+      confirmLabel: 'Löschen',
+      danger: true,
+    });
+    if (!conf) return;
+    await this._deleteRoom();
   }
 
   async _deleteRoom() {
@@ -361,12 +354,12 @@ export class RoomEditModal {
         await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
       }
 
-      this.iconPicker?.destroy();
-      this.el.remove();
+      this.destroy();
       this.onSaved?.();
     } catch (err) {
       this._saving = false;
       console.error('[RoomEditModal] delete failed', err);
+      showToast(this.el, `Fehler: ${err?.message || err}`, { error: true });
     }
   }
 
@@ -420,13 +413,13 @@ export class RoomEditModal {
         if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
       }
 
-      this.iconPicker?.destroy();
-      this.el.remove();
+      this.destroy();
       this.onSaved?.();
     } catch (err) {
       this._saving = false;
       this.saveBtn.disabled = false;
       console.error('[RoomEditModal] save failed', err);
+      showToast(this.el, `Fehler: ${err?.message || err}`, { error: true });
     }
   }
 }

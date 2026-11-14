@@ -1,5 +1,5 @@
 // Rich Entity Picker for Companion Dashboard (Shadow-DOM safe, instant autocomplete).
-import { h, icon, domainOf, entityIcon, stateLabel } from '../lib/util.js';
+import { h, icon, domainOf, entityIcon, stateLabel, positionFloatingMenu } from '../lib/util.js';
 
 const DOMAIN_LABELS_DE = {
   light: 'Lichter', switch: 'Schalter', sensor: 'Sensoren', binary_sensor: 'Binär',
@@ -9,7 +9,7 @@ const DOMAIN_LABELS_DE = {
 };
 
 export class EntityPicker {
-  constructor({ hass, value = '', onChange, filter, domain, placeholder = 'Entität suchen...', allowClear = true }) {
+  constructor({ hass, value = '', onChange, filter, domain, placeholder = 'Entität suchen', allowClear = true }) {
     this.hass = hass;
     this.value = value || '';
     this.onChange = onChange;
@@ -21,10 +21,12 @@ export class EntityPicker {
     this.isOpen = false;
     this.searchQuery = '';
     this.selectedDomain = 'all';
+    this._portalCleanup = null;
 
-    // Use composedPath() so Shadow DOM retargeting never closes the dropdown on inner clicks
+    // Use composedPath() so Shadow DOM retargeting and portaled menus never trigger false closes
     this._onDocClick = (e) => {
-      if (!e.composedPath().includes(this.el)) this._close();
+      const path = e.composedPath?.() || [];
+      if (!path.includes(this.el) && !path.includes(this.dropdown)) this._close();
     };
 
     this._build();
@@ -57,7 +59,9 @@ export class EntityPicker {
 
     // Dropdown popover
     this.searchInput = h('input', {
-      type: 'text', class: 'ep-search-input', placeholder: 'Name, Raum oder entity_id eintippen...',
+      type: 'text', class: 'ep-search-input', placeholder: 'Name oder entity_id',
+      autocomplete: 'off', spellcheck: 'false',
+      onClick: (e) => e.stopPropagation(),
       onInput: (e) => { this.searchQuery = e.target.value.toLowerCase().trim(); this._updateList(); },
       onKeydown: (e) => {
         if (e.key === 'Escape') { e.stopPropagation(); this._close(); }
@@ -130,23 +134,34 @@ export class EntityPicker {
     this.searchInput.value = initialChar;
     this._renderDomainChips();
     this._updateList();
+    this._portalCleanup?.();
+    this._portalCleanup = positionFloatingMenu(this.box, this.dropdown, {
+      minWidth: 260,
+      maxHeight: 300,
+      matchWidth: true,
+    });
+    document.addEventListener('pointerdown', this._onDocClick);
 
-    setTimeout(() => {
-      this.searchInput.focus();
-      document.addEventListener('pointerdown', this._onDocClick);
-      const rect = this.dropdown.getBoundingClientRect();
-      if (rect.bottom > window.innerHeight - 30) {
-        this.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
-    }, 20);
+    if (initialChar || window.matchMedia?.('(pointer: fine)').matches) {
+      setTimeout(() => this.searchInput.focus(), 20);
+    }
   }
 
   _close() {
     if (!this.isOpen) return;
     this.isOpen = false;
+    this._portalCleanup?.();
+    this._portalCleanup = null;
     this.dropdown.hidden = true;
     delete this.box.dataset.open;
     this.box.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', this._onDocClick);
+  }
+
+  destroy() {
+    this._close();
+    this._portalCleanup?.();
+    this._portalCleanup = null;
     document.removeEventListener('pointerdown', this._onDocClick);
   }
 
@@ -209,7 +224,7 @@ export class EntityPicker {
     if (!filtered.length) {
       this.listEl.replaceChildren(h('div', { class: 'empty', style: { padding: '20px 12px' } },
         icon('mdi:file-search-outline'),
-        h('div', { style: { fontSize: '12px', marginTop: '4px' } }, 'Keine passenden Entitäten gefunden')));
+        h('div', { style: { fontSize: '12px', marginTop: '4px' } }, 'Keine Entitäten')));
       return;
     }
 

@@ -1,45 +1,9 @@
-import { h, icon, domainOf, ROOM_ICON_OPTIONS, ROOM_SENSOR_TYPES } from '../lib/util.js';
+import { h, icon, domainOf, ROOM_ICON_OPTIONS, ROOM_SENSOR_TYPES, parseChannelKey, preserveScroll, showToast, showConfirmDialog } from '../lib/util.js';
 import { EntityPicker } from './entity_picker.js';
 import { CustomDropdown } from './custom_dropdown.js';
 import { IconPicker } from './icon_picker.js';
 import { SensorConflictModal } from './room_modals.js';
-
-export const DEVICE_CATEGORIES = [
-  { id: 'leuchte', name: 'Leuchte', icon: 'mdi:lightbulb', color: '#ffc107', desc: 'Lampen, Spots & LED-Streifen' },
-  { id: 'steckdose', name: 'Steckdose', icon: 'mdi:power-socket-eu', color: '#009688', desc: 'Zwischenstecker & Dosen' },
-  { id: 'schalter', name: 'Gerät / Relais', icon: 'mdi:power-plug', color: '#2196f3', desc: 'Allgemeine Schalter' },
-  { id: 'jalousie', name: 'Jalousie', icon: 'mdi:window-shutter', color: '#9c27b0', desc: 'Rollläden & Markisen' },
-  { id: 'wasserventil', name: 'Wasserventil', icon: 'mdi:water-pump', color: '#00bcd4', desc: 'Bewässerungsventile' },
-  { id: 'pumpe', name: 'Pumpe', icon: 'mdi:pump', color: '#03a9f4', desc: 'Garten- & Wasserpumpen' },
-  { id: 'klima', name: 'Klima', icon: 'mdi:thermometer', color: '#ff9800', desc: 'Thermostate & Klima' },
-  { id: 'fernseher', name: 'Fernseher', icon: 'mdi:television', color: '#03a9f4', desc: 'TVs & Mediaplayer' },
-  { id: 'bewegungsmelder', name: 'Bewegungsmelder', icon: 'mdi:motion-sensor', color: '#e91e63', desc: 'Präsenz- & Bewegung' },
-  { id: 'bodenmessgeraet', name: 'Bodenmessgerät', icon: 'mdi:sprout', color: '#4caf50', desc: 'Bodenfeuchte & Pflanzen' },
-  { id: 'raummessgeraet', name: 'Raummessgerät', icon: 'mdi:thermometer-lines', color: '#ff5722', desc: 'Raumluft- & Temperatursensoren' },
-];
-
-const CONTROLLABLE_DOMAINS = new Set(['light', 'switch', 'cover', 'valve', 'climate', 'media_player', 'fan']);
-
-/**
- * Filter out configuration, diagnostic, and internal utility switches (e.g. Overcharge protection, Child lock, LED mode).
- * Only genuine controllable actuators should be treated as device channels.
- */
-export function isControllableActuator(e) {
-  if (!e || !e.entity_id) return false;
-  if (e.disabled_by) return false;
-  if (e.entity_category === 'config' || e.entity_category === 'diagnostic') return false;
-
-  const domain = domainOf(e.entity_id);
-  if (!CONTROLLABLE_DOMAINS.has(domain)) return false;
-
-  // Pattern filter for configuration and diagnostic switches
-  const id = (e.entity_id || '').toLowerCase();
-  const name = (e.name || e.original_name || '').toLowerCase();
-  const configPattern = /(?:overcharge|protection|kindersicherung|child_?lock|indicator|led_?mode|backlight|status_?led|restart|reboot|update|firmware|start_?zustand|start_?state|auto_?off|inching|pairing|identify|interlock|relay_mode|power_on_state)/;
-  if (configPattern.test(id) || configPattern.test(name)) return false;
-
-  return true;
-}
+import { DEVICE_CATEGORIES, isControllableActuator, createGroupCard, createWizardDeviceElements, createDeviceRoomSection } from './device_list.js';
 
 export class DeviceWizard {
   /**
@@ -53,8 +17,8 @@ export class DeviceWizard {
     this.onClose = onClose;
     this.onSaved = onSaved;
 
-    this.step = 0; // 0=Gerät, 1=Details, 2=Kanäle, 3=Übersicht
-    this.steps = ['Gerät', 'Details', 'Kanäle & Messung', 'Übersicht'];
+    this.step = 0; // 0=Gerät, 1=Details, 2=Kanäle, 3=Prüfen
+    this.steps = ['Gerät', 'Details', 'Kanäle', 'Prüfen'];
 
     this.devices = [];
     this.entities = [];
@@ -87,25 +51,37 @@ export class DeviceWizard {
     this._load();
   }
 
+  destroy() {
+    this._cleanupDropdowns();
+    this.el?.remove();
+  }
+
+  _closeWizard() {
+    this._cleanupDropdowns();
+    this.onClose?.();
+  }
+
   _build() {
     this.body = h('div', { class: 'dialog-body' });
     this.stepBar = h('div', { class: 'wizard-steps' });
+    this.selectionSlot = h('div', { class: 'wizard-selection-slot' });
     this.foot = h('div', { class: 'dialog-foot' });
 
     this.dialog = h('div', { class: 'dialog', role: 'dialog', 'aria-label': 'Gerät einrichten', hidden: !!this.initialGroupId },
       h('div', { class: 'dialog-head' },
         icon('mdi:plus-circle-outline'),
         h('h2', {}, 'Gerät einrichten'),
-        h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: () => this.onClose() }, icon('mdi:close'))),
+        h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: () => this._closeWizard() }, icon('mdi:close'))),
       this.stepBar,
       this.body,
+      this.selectionSlot,
       this.foot);
 
-    this.el = h('div', { class: 'overlay', onClick: (e) => { if (e.target === this.el) this.onClose(); } }, this.dialog);
+    this.el = h('div', { class: 'overlay', onClick: (e) => { if (e.target === this.el) this._closeWizard(); } }, this.dialog);
   }
 
   async _load() {
-    this.body.replaceChildren(h('div', { class: 'empty' }, icon('mdi:loading'), h('div', { style: { marginTop: '8px' } }, 'Lade Geräte...')));
+    this.body.replaceChildren(h('div', { class: 'empty' }, icon('mdi:loading'), h('div', { style: { marginTop: '8px' } }, 'Lade Geräte')));
     try {
       const [devs, ents, areas, setup, dash] = await Promise.all([
         this.hass.callWS({ type: 'config/device_registry/list' }),
@@ -124,13 +100,17 @@ export class DeviceWizard {
       this._dashboardConfig = dash?.config || {};
 
       if (this.initialDeviceId) {
-        let id = this.initialDeviceId;
-        if (id.includes(':') && !id.startsWith('e:') && !id.startsWith('l:')) {
-          id = id.split(':')[0];
+        const parsed = parseChannelKey(this.initialDeviceId);
+        const lookupId = parsed.deviceId || parsed.entityId || this.initialDeviceId;
+        let target = this.devices.find((d) => d.id === lookupId);
+        if (!target && parsed.entityId) {
+          const ent = this.entities.find((e) => e.entity_id === parsed.entityId);
+          if (ent?.device_id) {
+            target = this.devices.find((d) => d.id === ent.device_id);
+          }
         }
-        let target = this.devices.find((d) => d.id === id);
         if (!target) {
-          const ent = this.entities.find((e) => e.entity_id === id);
+          const ent = this.entities.find((e) => e.entity_id === lookupId);
           if (ent?.device_id) {
             target = this.devices.find((d) => d.id === ent.device_id);
           }
@@ -150,12 +130,14 @@ export class DeviceWizard {
 
       this._render();
     } catch (err) {
-      this.body.replaceChildren(h('div', { class: 'empty' }, icon('mdi:alert'), h('div', {}, `Fehler beim Laden: ${err.message || err}`)));
+      this.body.replaceChildren(h('div', { class: 'empty' }, icon('mdi:alert'), h('div', {}, `Ladefehler: ${err.message || err}`)));
     }
   }
 
   _render() {
     this._cleanupDropdowns();
+    this.selectionSlot.replaceChildren();
+    if (this.body) this.body.scrollTop = 0;
     if (this.isCelebration) {
       this._renderCelebration();
       return;
@@ -194,22 +176,22 @@ export class DeviceWizard {
 
     const leftActions = [];
     if (isFirst || (this.initialDeviceId && this.step === 1)) {
-      leftActions.push(h('button', { class: 'btn', onClick: () => this.onClose() }, 'Abbrechen'));
+      leftActions.push(h('button', { class: 'btn', onClick: () => this._closeWizard() }, 'Abbrechen'));
       if (!isFirst && isConfigured) {
         leftActions.push(h('button', {
           class: 'btn danger',
-          title: 'Companion-Einrichtung für dieses Gerät aufheben',
+          title: 'Einrichtung aufheben',
           onClick: () => this._removeDevice(this.selectedDevice.id, this.customName),
-        }, icon('mdi:delete-outline'), 'Einrichtung aufheben'));
+        }, icon('mdi:delete-outline'), 'Entfernen'));
       }
     } else {
       leftActions.push(h('button', { class: 'btn', onClick: () => { this.step--; this._render(); } }, icon('mdi:chevron-left'), 'Zurück'));
       if (isConfigured) {
         leftActions.push(h('button', {
           class: 'btn danger',
-          title: 'Companion-Einrichtung für dieses Gerät aufheben',
+          title: 'Einrichtung aufheben',
           onClick: () => this._removeDevice(this.selectedDevice.id, this.customName),
-        }, icon('mdi:delete-outline'), 'Einrichtung aufheben'));
+        }, icon('mdi:delete-outline'), 'Entfernen'));
       }
     }
 
@@ -228,7 +210,7 @@ export class DeviceWizard {
       rightActions.push(h('button', {
         class: 'btn success', disabled: this._saving,
         onClick: () => this._save(),
-      }, icon('mdi:check'), this._saving ? 'Wird gespeichert...' : 'Fertigstellen'));
+      }, icon('mdi:check'), this._saving ? 'Speichert...' : 'Speichern'));
     }
 
     const leftWrap = h('div', { class: 'dialog-foot-actions' }, ...leftActions);
@@ -237,10 +219,14 @@ export class DeviceWizard {
   }
 
   async _removeDevice(deviceId, name) {
-    const devName = name || this.customName || 'diesem Gerät';
-    const confirmed = window.confirm(
-      `Soll die Companion-Einrichtung von „${devName}“ wirklich aufgehoben werden?\n\nDas Gerät bleibt in Home Assistant bestehen, wird aber nicht mehr als Companion-Gerät geführt.`
-    );
+    const devName = name || this.customName || 'Gerät';
+    const confirmed = await showConfirmDialog(this.el, {
+      title: 'Einrichtung aufheben',
+      message: `„${devName}“ entfernen? HA-Gerät bleibt bestehen.`,
+      confirmLabel: 'Entfernen',
+      cancelLabel: 'Abbrechen',
+      danger: true,
+    });
     if (!confirmed) return;
 
     try {
@@ -252,6 +238,7 @@ export class DeviceWizard {
 
       delete this.configuredDevices[deviceId];
       if (this.directMode) {
+        this._cleanupDropdowns();
         this.onSaved(null);
         return;
       }
@@ -263,50 +250,49 @@ export class DeviceWizard {
       this._render();
       this.onSaved(null);
     } catch (err) {
-      alert(`Fehler beim Aufheben der Einrichtung: ${err.message || err}`);
+      showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
     }
+  }
+
+  _isCandidateDevice(d) {
+    if (d.disabled_by || d.entry_type === 'service') return false;
+    const devEntities = this.entities.filter((e) => e.device_id === d.id && !e.disabled_by);
+    const controllable = devEntities.filter(isControllableActuator);
+    const sensors = devEntities.filter((e) => ['sensor', 'binary_sensor'].includes(domainOf(e.entity_id)));
+    if (!controllable.length && !sensors.length) return false;
+    const name = (d.name_by_user || d.name || '').toLowerCase();
+    const mfg = (d.manufacturer || '').toLowerCase();
+    const model = (d.model || '').toLowerCase();
+    const isSystem = (
+      name.includes('hacs') || mfg.includes('hacs') ||
+      name.includes('forecast') || mfg.includes('met.no') ||
+      name.includes('bluetooth') || mfg.includes('bluetooth') || name.startsWith('hci') ||
+      name.includes('plugin') || model.includes('plugin') ||
+      mfg.includes('integration') || model.includes('integration') ||
+      name === 'sun'
+    );
+    if (isSystem && !controllable.length) return false;
+    return true;
   }
 
   // ═══════════════ STEP 0: Gerät auswählen ═══════════════
   _renderStep0() {
-    const isCandidate = (d) => {
-      if (d.disabled_by || d.entry_type === 'service') return false;
-      const devEntities = this.entities.filter((e) => e.device_id === d.id && !e.disabled_by);
-      const controllable = devEntities.filter(isControllableActuator);
-      const sensors = devEntities.filter((e) => ['sensor', 'binary_sensor'].includes(domainOf(e.entity_id)));
-      if (!controllable.length && !sensors.length) return false;
-      const name = (d.name_by_user || d.name || '').toLowerCase();
-      const mfg = (d.manufacturer || '').toLowerCase();
-      const model = (d.model || '').toLowerCase();
-      const isSystem = (
-        name.includes('hacs') || mfg.includes('hacs') ||
-        name.includes('forecast') || mfg.includes('met.no') ||
-        name.includes('bluetooth') || mfg.includes('bluetooth') || name.startsWith('hci') ||
-        name.includes('plugin') || model.includes('plugin') ||
-        mfg.includes('integration') || model.includes('integration') ||
-        name === 'sun'
-      );
-      if (isSystem && !controllable.length) return false;
-      return true;
-    };
-    const candidates = this.devices.filter(isCandidate);
+    const candidates = this.devices.filter((d) => this._isCandidateDevice(d));
     const configuredCount = candidates.filter((d) => !!this.configuredDevices[d.id]).length;
     const unconfiguredCount = candidates.length - configuredCount;
     const allCount = candidates.length;
 
-    const hero = h('div', { class: 'win11-hero-badge', style: { '--hero-color': '#2196F3' } }, icon('mdi:devices'));
-
     const searchInput = h('input', {
-      type: 'text', placeholder: 'Gerät suchen (Name, Hersteller, Modell, Raum)...', value: this.searchQuery,
+      type: 'text', placeholder: 'Gerät oder Raum suchen', value: this.searchQuery,
       onInput: (e) => { this.searchQuery = e.target.value.toLowerCase().trim(); this._updateDeviceList(); },
     });
     const searchWrap = h('div', { class: 'search-bar' }, icon('mdi:magnify'), searchInput);
 
     const filterChips = h('div', { class: 'filter-chips' },
       ...[
-        ['unconfigured', `Nicht eingerichtet (${unconfiguredCount})`],
-        ['configured', `Bereits eingerichtet (${configuredCount})`],
-        ['all', `Alle Geräte (${allCount})`],
+        ['unconfigured', `Offen (${unconfiguredCount})`],
+        ['configured', `Eingerichtet (${configuredCount})`],
+        ['all', `Alle (${allCount})`],
       ].map(([id, label]) => h('button', {
         class: 'filter-chip', ...(id === this.statusFilter ? { 'data-active': '' } : {}),
         onClick: () => { this.statusFilter = id; this._renderStep0(); },
@@ -316,9 +302,6 @@ export class DeviceWizard {
     this._updateDeviceList();
 
     this.body.replaceChildren(
-      hero,
-      h('div', { class: 'hint', style: { textAlign: 'center', marginBottom: '12px' } },
-        'Wähle das Gerät aus, das im Dashboard eingerichtet oder bearbeitet werden soll:'),
       searchWrap,
       filterChips,
       this.deviceListEl);
@@ -329,38 +312,23 @@ export class DeviceWizard {
     const q = this.searchQuery;
 
     const filtered = this.devices.filter((d) => {
-      if (d.disabled_by) return false;
-      if (d.entry_type === 'service') return false;
-
-      const devEntities = this.entities.filter((e) => e.device_id === d.id && !e.disabled_by);
-      const controllable = devEntities.filter(isControllableActuator);
-      const sensors = devEntities.filter((e) => ['sensor', 'binary_sensor'].includes(domainOf(e.entity_id)));
-      if (!controllable.length && !sensors.length) return false;
-
-      const name = (d.name_by_user || d.name || '').toLowerCase();
-      const mfg = (d.manufacturer || '').toLowerCase();
-      const model = (d.model || '').toLowerCase();
-      const isSystem = (
-        name.includes('hacs') || mfg.includes('hacs') ||
-        name.includes('forecast') || mfg.includes('met.no') ||
-        name.includes('bluetooth') || mfg.includes('bluetooth') || name.startsWith('hci') ||
-        name.includes('plugin') || model.includes('plugin') ||
-        mfg.includes('integration') || model.includes('integration') ||
-        name === 'sun'
-      );
-      if (isSystem && !controllable.length) return false;
+      if (!this._isCandidateDevice(d)) return false;
 
       const isConfigured = !!this.configuredDevices[d.id];
       if (this.statusFilter === 'unconfigured' && isConfigured) return false;
       if (this.statusFilter === 'configured' && !isConfigured) return false;
 
       if (!q) return true;
+      const name = (d.name_by_user || d.name || '').toLowerCase();
+      const mfg = (d.manufacturer || '').toLowerCase();
+      const model = (d.model || '').toLowerCase();
       const area = (areaMap.get(d.area_id) || '').toLowerCase();
       return name.includes(q) || mfg.includes(q) || model.includes(q) || area.includes(q);
     });
 
     if (!filtered.length) {
-      this.deviceListEl.replaceChildren(h('div', { class: 'empty' }, icon('mdi:devices'), h('div', {}, 'Keine passenden Geräte gefunden')));
+      this.deviceListEl.replaceChildren(h('div', { class: 'empty' }, icon('mdi:devices'), h('div', {}, 'Keine Geräte')));
+      this.selectionSlot.replaceChildren();
       return;
     }
 
@@ -371,8 +339,10 @@ export class DeviceWizard {
       groups.get(areaName).push(d);
     }
 
-    // Also include rooms from groups
+    // Also include rooms from groups (when filter shows configured/all and matches or no query)
     for (const g of Object.values(this.groups)) {
+      if (q && !(g.name || '').toLowerCase().includes(q) && !(areaMap.get(g.area_id) || '').toLowerCase().includes(q)) continue;
+      if (this.statusFilter === 'unconfigured') continue;
       const areaName = areaMap.get(g.area_id) || 'Ohne Raum';
       if (!groups.has(areaName)) groups.set(areaName, []);
     }
@@ -383,6 +353,14 @@ export class DeviceWizard {
       return a.localeCompare(b);
     });
 
+    const toggleSelectId = (id) => {
+      preserveScroll(this.body, () => {
+        if (this.selectedDevices.has(id)) this.selectedDevices.delete(id);
+        else this.selectedDevices.add(id);
+        this._updateDeviceList();
+      });
+    };
+
     const sections = sortedGroupNames.map((areaName) => {
       const devs = groups.get(areaName) || [];
       devs.sort((a, b) => {
@@ -391,158 +369,50 @@ export class DeviceWizard {
         return nameA.localeCompare(nameB);
       });
 
-      // Existing Groups for this room
       const roomGroups = Object.values(this.groups).filter((g) => {
+        if (q && !(g.name || '').toLowerCase().includes(q) && !(areaMap.get(g.area_id) || '').toLowerCase().includes(q)) return false;
         const aName = areaMap.get(g.area_id) || 'Ohne Raum';
         return aName === areaName;
       });
 
-      const groupCards = roomGroups.map((g) => {
-        const isChecked = this.selectedDevices.has(g.id);
-        const chk = h('button', {
-          class: 'sel-checkbox', ...(isChecked ? { 'data-checked': '' } : {}),
-          type: 'button', 'aria-label': `${g.name} auswählen`,
-          onClick: (e) => {
-            e.stopPropagation();
-            if (this.selectedDevices.has(g.id)) this.selectedDevices.delete(g.id);
-            else this.selectedDevices.add(g.id);
-            this._updateDeviceList();
-          },
-        }, isChecked ? icon('mdi:check') : null);
+      const groupCards = roomGroups.map((g) => createGroupCard({
+        group: g,
+        selectable: true,
+        isSelected: this.selectedDevices.has(g.id),
+        onToggleSelect: () => toggleSelectId(g.id),
+        onCardClick: () => toggleSelectId(g.id),
+        onEdit: () => this._openGroupModal(g),
+        onDelete: () => this._removeGroup(g.id, g.name),
+      }));
 
-        const cat = DEVICE_CATEGORIES.find((c) => c.id === g.category);
-        const catColor = cat?.color || '#ffc107';
-
-        return h('div', {
-          class: 'device-card group-card', ...(isChecked ? { 'data-selected': '' } : {}),
-          onClick: () => {
-            if (this.selectedDevices.has(g.id)) this.selectedDevices.delete(g.id);
-            else this.selectedDevices.add(g.id);
-            this._updateDeviceList();
-          },
-        },
-        chk,
-        h('div', { class: 'd-icon', style: { color: catColor } }, icon(g.icon || 'mdi:lightbulb-group')),
-        h('div', { class: 'd-info' },
-          h('div', { class: 'd-name' }, g.name),
-          h('div', { class: 'd-meta' },
-            h('span', { class: 'badge-tag category', style: { '--badge-cat-color': catColor } },
-              icon('mdi:lightbulb-group'), `Gruppe (${g.children?.length || 0} Elemente)`))),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
-          h('button', {
-            class: 'btn secondary small',
-            title: 'Gruppe bearbeiten',
-            'aria-label': 'Bearbeiten',
-            onClick: (e) => {
-              e.stopPropagation();
-              this._openGroupModal(g);
-            },
-          }, icon('mdi:pencil'), 'Bearbeiten'),
-          h('button', {
-            class: 'icon-btn danger', title: 'Gruppe auflösen',
-            onClick: (e) => {
-              e.stopPropagation();
-              this._removeGroup(g.id, g.name);
-            },
-          }, icon('mdi:delete-outline'))));
-      });
-
-      const devCards = devs.map((d) => {
-        const name = d.name_by_user || d.name || 'Unbenanntes Gerät';
-        const mfg = [d.manufacturer, d.model].filter(Boolean).join(' · ');
-        const isConfigured = !!this.configuredDevices[d.id];
-        const cfg = this.configuredDevices[d.id];
-
-        const devEntities = this.entities.filter((e) => e.device_id === d.id && !e.disabled_by);
-        const controllable = devEntities.filter(isControllableActuator);
-
-        const isChecked = this.selectedDevices.has(d.id);
-        const chk = h('button', {
-          class: 'sel-checkbox', ...(isChecked ? { 'data-checked': '' } : {}),
-          type: 'button', 'aria-label': `${name} auswählen`,
-          onClick: (e) => {
-            e.stopPropagation();
-            if (this.selectedDevices.has(d.id)) this.selectedDevices.delete(d.id);
-            else this.selectedDevices.add(d.id);
-            this._updateDeviceList();
-          },
-        }, isChecked ? icon('mdi:check') : null);
-
-        const badges = [];
-        if (isConfigured) {
-          const cat = DEVICE_CATEGORIES.find((c) => c.id === cfg.category);
-          const catColor = cat?.color || 'var(--cd-accent)';
-          badges.push(h('span', {
-            class: 'badge-tag category',
-            style: { '--badge-cat-color': catColor },
-          }, icon(cat?.icon || 'mdi:check-circle'), cat?.name || cfg.category));
-        } else if (controllable.length > 1) {
-          const isExp = this._expandedDeviceChannels.has(d.id);
-          badges.push(h('button', {
-            class: 'btn-channels-toggle',
-            type: 'button',
-            title: isExp ? 'Kanäle einklappen' : 'Kanäle anzeigen',
-            onClick: (e) => {
-              e.stopPropagation();
-              if (isExp) this._expandedDeviceChannels.delete(d.id);
+      const devCards = devs.flatMap((d) => {
+        const name = d.name_by_user || d.name || 'Gerät';
+        return createWizardDeviceElements({
+          device: d,
+          entities: this.entities,
+          configuredCfg: this.configuredDevices[d.id],
+          isSelected: this.selectedDevices.has(d.id),
+          isExpanded: this._expandedDeviceChannels.has(d.id),
+          selectedIds: this.selectedDevices,
+          onToggleSelect: () => toggleSelectId(d.id),
+          onToggleChannelSelect: (chKey) => toggleSelectId(chKey),
+          onToggleExpand: () => {
+            preserveScroll(this.body, () => {
+              if (this._expandedDeviceChannels.has(d.id)) this._expandedDeviceChannels.delete(d.id);
               else this._expandedDeviceChannels.add(d.id);
               this._updateDeviceList();
-            },
-          }, icon(isExp ? 'mdi:chevron-up' : 'mdi:chevron-down'), `${controllable.length} Kanäle`));
-        } else if (controllable.length === 1) {
-          badges.push(h('span', { class: 'badge-tag' }, '1 steuerbar'));
-        }
-
-        const actions = [];
-        if (isConfigured) {
-          actions.push(
-            h('button', {
-              class: 'btn secondary small',
-              title: 'Gerät bearbeiten',
-              'aria-label': 'Bearbeiten',
-              onClick: (e) => {
-                e.stopPropagation();
-                this.selectedDevice = d;
-                this._initDevice();
-                this.step = 1;
-                this._render();
-              },
-            }, icon('mdi:pencil'), 'Bearbeiten'),
-            h('button', {
-              class: 'icon-btn danger',
-              title: 'Companion-Einrichtung aufheben',
-              'aria-label': 'Einrichtung aufheben',
-              onClick: (e) => {
-                e.stopPropagation();
-                this._removeDevice(d.id, name);
-              },
-            }, icon('mdi:delete-outline'))
-          );
-        } else {
-          actions.push(
-            h('button', {
-              class: 'btn primary small',
-              title: 'Gerät einrichten',
-              'aria-label': 'Einrichten',
-              onClick: (e) => {
-                e.stopPropagation();
-                this.selectedDevice = d;
-                this._initDevice();
-                this.step = 1;
-                this._render();
-              },
-            }, icon('mdi:plus'), 'Einrichten')
-          );
-        }
-
-        const mainCard = h('div', {
-          class: 'device-card',
-          ...(isChecked ? { 'data-selected': '' } : {}),
-          onClick: () => {
+            });
+          },
+          onConfigure: () => {
+            this.selectedDevice = d;
+            this._initDevice();
+            this.step = 1;
+            this._render();
+          },
+          onRemove: () => this._removeDevice(d.id, name),
+          onCardClick: () => {
             if (this.selectedDevices.size > 0) {
-              if (this.selectedDevices.has(d.id)) this.selectedDevices.delete(d.id);
-              else this.selectedDevices.add(d.id);
-              this._updateDeviceList();
+              toggleSelectId(d.id);
               return;
             }
             this.selectedDevice = d;
@@ -550,71 +420,23 @@ export class DeviceWizard {
             this.step = 1;
             this._render();
           },
-        },
-        chk,
-        h('div', { class: 'd-icon' }, icon('mdi:devices')),
-        h('div', { class: 'd-info' },
-          h('div', { class: 'd-name' }, name),
-          h('div', { class: 'd-meta' }, mfg ? h('span', {}, mfg) : null, ...badges)),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, ...actions));
-
-        const isExp = this._expandedDeviceChannels.has(d.id);
-        if (isExp && controllable.length > 1) {
-          const channelRows = controllable.map((e) => {
-            const chKey = `d:${d.id}:${e.entity_id}`;
-            const isChChecked = this.selectedDevices.has(chKey);
-            const chName = e.name || e.original_name || e.entity_id;
-            const isLight = domainOf(e.entity_id) === 'light';
-            return h('div', {
-              class: 'device-channel-row', ...(isChChecked ? { 'data-selected': '' } : {}),
-              onClick: (ev) => {
-                ev.stopPropagation();
-                if (this.selectedDevices.has(chKey)) this.selectedDevices.delete(chKey);
-                else this.selectedDevices.add(chKey);
-                this._updateDeviceList();
-              },
-            },
-            h('button', {
-              class: 'sel-checkbox', ...(isChChecked ? { 'data-checked': '' } : {}),
-              type: 'button', 'aria-label': `${chName} auswählen`,
-              onClick: (ev) => {
-                ev.stopPropagation();
-                if (this.selectedDevices.has(chKey)) this.selectedDevices.delete(chKey);
-                else this.selectedDevices.add(chKey);
-                this._updateDeviceList();
-              },
-            }, isChChecked ? icon('mdi:check') : null),
-            icon(isLight ? 'mdi:lightbulb' : 'mdi:power-plug'),
-            h('div', { class: 'device-channel-info' },
-              h('div', { class: 'device-channel-name' }, chName),
-              h('div', { class: 'device-channel-meta' }, e.entity_id)));
-          });
-          return [mainCard, h('div', { class: 'device-channels-wrap' }, ...channelRows)];
-        }
-
-        return [mainCard];
+        });
       });
 
-      const devCardElements = devCards.flat();
-      const totalCount = groupCards.length + devCards.length;
-      return h('div', { class: 'device-room-section' },
-        h('div', { class: 'device-room-header' },
-          icon(areaName === 'Ohne Raum' ? 'mdi:help-circle-outline' : 'mdi:home-outline'),
-          h('span', {}, areaName),
-          h('span', { class: 'room-count' }, `(${totalCount})`)),
-        h('div', { class: 'device-list' }, ...groupCards, ...devCardElements));
+      const totalCount = groupCards.length + devs.length;
+      return createDeviceRoomSection(areaName, [...groupCards, ...devCards], totalCount);
     });
 
-    const children = [...sections];
+    this.deviceListEl.replaceChildren(...sections);
 
     if (this.selectedDevices.size > 0) {
       const selectedList = Array.from(this.selectedDevices);
       const names = selectedList.map((id) => {
         if (this.groups[id]) return this.groups[id].name;
         if (id.startsWith('d:')) {
-          const parts = id.split(':', 2);
-          const ent = this.entities.find((e) => e.entity_id === parts[2]);
-          return ent?.name || ent?.original_name || parts[2];
+          const parsed = parseChannelKey(id);
+          const ent = this.entities.find((e) => e.entity_id === parsed.entityId);
+          return ent?.name || ent?.original_name || parsed.entityId || id;
         }
         const d = this.devices.find((dev) => dev.id === id);
         return d?.name_by_user || d?.name || id;
@@ -630,8 +452,13 @@ export class DeviceWizard {
         h('button', {
           class: 'btn secondary small',
           type: 'button',
-          onClick: () => { this.selectedDevices.clear(); this._updateDeviceList(); },
-        }, 'Abbrechen')
+          onClick: () => {
+            preserveScroll(this.body, () => {
+              this.selectedDevices.clear();
+              this._updateDeviceList();
+            });
+          },
+        }, 'Abbrechen'),
       ];
 
       if (isSingleGroup) {
@@ -640,7 +467,7 @@ export class DeviceWizard {
             class: 'btn secondary small',
             type: 'button',
             onClick: () => this._openGroupModal(this.groups[singleId]),
-          }, icon('mdi:pencil'), 'Gruppe bearbeiten'),
+          }, icon('mdi:pencil'), 'Bearbeiten'),
           h('button', {
             class: 'btn danger small',
             type: 'button',
@@ -654,7 +481,7 @@ export class DeviceWizard {
               class: 'btn primary small',
               type: 'button',
               onClick: () => this._openAddToGroupModal(selectedList),
-            }, icon('mdi:plus-box-multiple'), 'Zu bestehender Gruppe hinzufügen')
+            }, icon('mdi:plus-box-multiple'), '+ Gruppe')
           );
         }
         buttons.push(
@@ -662,20 +489,19 @@ export class DeviceWizard {
             class: 'btn primary small',
             type: 'button',
             disabled: true,
-            title: 'Mindestens 2 Geräte oder Gruppen zum Gruppieren auswählen',
+            title: 'Mind. 2 Elemente wählen',
             style: { opacity: '0.45', cursor: 'not-allowed' },
-          }, icon('mdi:lightbulb-group'), 'Neue Gruppe (mind. 2)')
+          }, icon('mdi:lightbulb-group'), 'Gruppe (ab 2)')
         );
       } else {
-        // >= 2 items
         buttons.push(
           h('button', {
             class: 'btn primary small',
             type: 'button',
             onClick: () => this._openGroupModal(),
           }, icon(allGroups ? 'mdi:folder-multiple' : 'mdi:lightbulb-group'),
-            h('span', { class: 'btn-label-desktop' }, allGroups ? 'Als Hauptgruppe zusammenfassen' : 'Als Gruppe zusammenfassen'),
-            h('span', { class: 'btn-label-mobile' }, allGroups ? 'Hauptgruppe' : 'Gruppieren'))
+            h('span', { class: 'btn-label-desktop' }, allGroups ? 'Hauptgruppe' : 'Gruppieren'),
+            h('span', { class: 'btn-label-mobile' }, allGroups ? 'Hauptgruppe' : 'Gruppe'))
         );
         if (hasExistingGroups && !allGroups) {
           buttons.push(
@@ -684,29 +510,29 @@ export class DeviceWizard {
               type: 'button',
               onClick: () => this._openAddToGroupModal(selectedList),
             }, icon('mdi:plus-box-multiple'),
-              h('span', { class: 'btn-label-desktop' }, 'Zu bestehender Gruppe hinzufügen'),
+              h('span', { class: 'btn-label-desktop' }, '+ Gruppe'),
               h('span', { class: 'btn-label-mobile' }, '+ Gruppe'))
           );
         }
       }
 
-      const bar = h('div', { class: 'selection-action-bar' },
-        h('div', { class: 'sel-info' },
-          h('span', { class: 'sel-count' }, `${selectedList.length} ausgewählt`),
-          h('span', { class: 'sel-names' }, names)),
-        h('div', { class: 'sel-buttons' }, ...buttons)
+      this.selectionSlot.replaceChildren(
+        h('div', { class: 'selection-action-bar' },
+          h('div', { class: 'sel-info' },
+            h('span', { class: 'sel-count' }, `${selectedList.length} ausgewählt`),
+            h('span', { class: 'sel-names' }, names)),
+          h('div', { class: 'sel-buttons' }, ...buttons))
       );
-      children.push(bar);
+    } else {
+      this.selectionSlot.replaceChildren();
     }
-
-    this.deviceListEl.replaceChildren(...children);
   }
 
   _openAddToGroupModal(selectedIds) {
     const existingGroups = Object.values(this.groups);
     if (!existingGroups.length) return;
 
-    const overlay = h('div', { class: 'overlay', style: { zIndex: '999' } });
+    const overlay = h('div', { class: 'overlay', style: { zIndex: '1200' } });
     const groupCards = existingGroups.map((g) => {
       const cat = DEVICE_CATEGORIES.find((c) => c.id === g.category);
       const catColor = cat?.color || '#ffc107';
@@ -731,7 +557,7 @@ export class DeviceWizard {
             this._load();
             this.onSaved?.(null);
           } catch (err) {
-            alert(`Fehler beim Aktualisieren der Gruppe: ${err.message || err}`);
+            showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
           }
         },
       },
@@ -740,22 +566,23 @@ export class DeviceWizard {
         h('div', { class: 'd-name' }, g.name),
         h('div', { class: 'd-meta' },
           h('span', { class: 'badge-tag category', style: { '--badge-cat-color': catColor } },
-            icon('mdi:lightbulb-group'), `Gruppe (${g.children?.length || 0} Elemente)${roomTxt}`))),
+            icon('mdi:lightbulb-group'), `Gruppe (${g.children?.length || 0})${roomTxt}`))),
       h('div', { style: { display: 'flex', alignItems: 'center' } }, icon('mdi:chevron-right')));
     });
 
-    const dialog = h('div', { class: 'dialog group-modal-dialog', style: { maxWidth: '480px', width: 'min(480px, 94vw)' } },
+    const dialog = h('div', { class: 'dialog group-modal-dialog' },
       h('div', { class: 'dialog-head' },
         icon('mdi:plus-box-multiple'),
-        h('h2', {}, 'Zu Gruppe hinzufügen'),
-        h('button', { class: 'icon-btn', onClick: () => overlay.remove() }, icon('mdi:close'))),
-      h('div', { class: 'dialog-body', style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
-        h('div', { class: 'hint', style: { marginBottom: '4px' } }, `Wähle die Gruppe, zu der die ${selectedIds.length} ausgewählte(n) Element(e) hinzugefügt werden sollen:`),
-        h('div', { style: { maxHeight: '340px', overflowY: 'auto' } }, ...groupCards)),
+        h('h2', {}, 'Zu Gruppe'),
+        h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: () => overlay.remove() }, icon('mdi:close'))),
+      h('div', { class: 'dialog-body', style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+        h('div', { class: 'hint' }, `${selectedIds.length} Element(e) hinzufügen`),
+        ...groupCards),
       h('div', { class: 'dialog-foot' },
         h('div', { class: 'dialog-foot-actions' },
           h('button', { class: 'btn', onClick: () => overlay.remove() }, 'Abbrechen')))
     );
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
     overlay.appendChild(dialog);
     this.el.appendChild(overlay);
   }
@@ -773,8 +600,8 @@ export class DeviceWizard {
       for (const id of selectedIds) {
         if (this.groups[id]?.area_id) { defaultArea = this.groups[id].area_id; }
         else if (id.startsWith('d:')) {
-          const parts = id.split(':', 2);
-          const dev = this.devices.find((d) => d.id === parts[1]);
+          const parsed = parseChannelKey(id);
+          const dev = this.devices.find((d) => d.id === parsed.deviceId);
           if (dev?.area_id) defaultArea = dev.area_id;
         } else {
           const dev = this.devices.find((d) => d.id === id);
@@ -797,13 +624,13 @@ export class DeviceWizard {
     let selectedArea = defaultArea;
     let selectedCat = detectedCat;
 
-    const overlay = h('div', { class: 'overlay', style: { zIndex: '999' } });
+    const overlay = h('div', { class: 'overlay', style: { zIndex: '1200' } });
     const nameInput = h('input', {
       type: 'text',
       class: 'dialog-input',
       value: groupName,
-      placeholder: 'z. B. Deckenlampen',
-      style: { width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(128,128,128,.3)', background: 'var(--cd-tile-bg)', color: '#fff', boxSizing: 'border-box' },
+      placeholder: 'Gruppenname',
+      style: { width: '100%', minHeight: '42px', padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(128,128,128,.3)', background: 'var(--cd-tile-bg)', color: 'var(--primary-text-color, inherit)', font: 'inherit', boxSizing: 'border-box' },
       onInput: (e) => { groupName = e.target.value.trim(); },
     });
 
@@ -819,7 +646,7 @@ export class DeviceWizard {
     const iconPicker = new IconPicker({
       hass: this.hass,
       value: selectedIcon,
-      placeholder: 'Icon auswählen (z. B. mdi:lightbulb-group)...',
+      placeholder: 'Icon suchen',
       onChange: (v) => {
         selectedIcon = v;
         isCustomIcon = true;
@@ -829,14 +656,14 @@ export class DeviceWizard {
     const areaDd = new CustomDropdown({
       options: areaOptions,
       value: selectedArea,
-      placeholder: 'Raum auswählen...',
+      placeholder: 'Raum',
       onChange: (v) => { selectedArea = v; },
     });
 
     const catDd = new CustomDropdown({
       options: catOptions,
       value: selectedCat,
-      placeholder: 'Kategorie auswählen...',
+      placeholder: 'Kategorie',
       onChange: (v) => {
         selectedCat = v;
         if (!isCustomIcon) {
@@ -852,16 +679,16 @@ export class DeviceWizard {
     const getLabelForId = (id) => {
       if (this.groups[id]) return `${this.groups[id].name} (Gruppe)`;
       if (id.startsWith('d:')) {
-        const parts = id.split(':', 2);
-        const ent = this.entities.find((e) => e.entity_id === parts[2]);
-        return ent?.name || ent?.original_name || parts[2];
+        const parsed = parseChannelKey(id);
+        const ent = this.entities.find((e) => e.entity_id === parsed.entityId);
+        return ent?.name || ent?.original_name || parsed.entityId || id;
       }
       const dev = this.devices.find((d) => d.id === id);
       return dev?.name_by_user || dev?.name || id;
     };
 
-    const countHeader = h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, `Ausgewählte Elemente (${selectedIds.length}):`);
-    const tagsContainer = h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '130px', overflowY: 'auto' } });
+    const countHeader = h('div', { class: 'field-label', style: { marginBottom: '6px' } }, `Elemente (${selectedIds.length})`);
+    const tagsContainer = h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px' } });
 
     const renderTags = () => {
       const tags = selectedIds.map((id) => {
@@ -882,20 +709,17 @@ export class DeviceWizard {
         );
       });
       tagsContainer.replaceChildren(...tags);
-      countHeader.textContent = `Ausgewählte Elemente (${selectedIds.length}):`;
+      countHeader.textContent = `Elemente (${selectedIds.length})`;
     };
     renderTags();
 
-    // Inline picker to add unselected items
     const availableToAdd = [];
-    // Groups
     for (const [gid, g] of Object.entries(this.groups)) {
       if (existingGroup && gid === existingGroup.id) continue;
       if (!selectedIds.includes(gid)) {
         availableToAdd.push({ value: gid, label: `${g.name} (Gruppe)`, icon: 'mdi:folder-multiple' });
       }
     }
-    // Devices
     for (const d of this.devices) {
       if (!selectedIds.includes(d.id)) {
         const dName = d.name_by_user || d.name || d.id;
@@ -909,7 +733,7 @@ export class DeviceWizard {
       addDd = new CustomDropdown({
         options: availableToAdd,
         value: '',
-        placeholder: '+ Element hinzufügen...',
+        placeholder: '+ Element hinzufügen',
         onChange: (val) => {
           if (val && !selectedIds.includes(val)) {
             selectedIds.push(val);
@@ -921,13 +745,17 @@ export class DeviceWizard {
       addDropdownWrap = h('div', { style: { marginTop: '6px' } }, addDd.el);
     }
 
-    const closeGroupModal = () => {
-      overlay.remove();
+    const destroyPickers = () => {
       areaDd.destroy();
       catDd.destroy();
       addDd?.destroy();
-      iconPicker._close();
-      if (isDirect) this.onClose?.();
+      iconPicker.destroy();
+    };
+
+    const closeGroupModal = () => {
+      overlay.remove();
+      destroyPickers();
+      if (isDirect) this._closeWizard();
     };
     if (isDirect) {
       overlay.style.background = 'transparent';
@@ -938,25 +766,17 @@ export class DeviceWizard {
       if (e.target === overlay) closeGroupModal();
     });
 
-    const dialog = h('div', { class: 'dialog group-modal-dialog', style: { maxWidth: '520px', width: 'min(520px, 94vw)' } },
+    const dialog = h('div', { class: 'dialog group-modal-dialog' },
       h('div', { class: 'dialog-head' },
         icon(isMultiGroup ? 'mdi:folder-multiple' : 'mdi:lightbulb-group'),
-        h('h2', {}, existingGroup ? 'Gruppe bearbeiten' : (isMultiGroup ? 'Hauptgruppe erstellen' : 'Gruppe erstellen')),
-        h('button', { class: 'icon-btn', onClick: closeGroupModal }, icon('mdi:close'))),
-      h('div', { class: 'dialog-body', style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
+        h('h2', {}, existingGroup ? 'Gruppe bearbeiten' : (isMultiGroup ? 'Hauptgruppe' : 'Neue Gruppe')),
+        h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: closeGroupModal }, icon('mdi:close'))),
+      h('div', { class: 'dialog-body', style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+        h('div', { class: 'field' }, 'Gruppenname', nameInput),
+        h('div', { class: 'field' }, 'Raum', areaDd.el),
+        h('div', { class: 'field' }, 'Kategorie', catDd.el),
+        h('div', { class: 'field' }, 'Icon', iconPicker.el),
         h('div', {},
-          h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Gruppen-Name:'),
-          nameInput),
-        h('div', { style: { position: 'relative', zIndex: '30' } },
-          h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Raum:'),
-          areaDd.el),
-        h('div', { style: { position: 'relative', zIndex: '20' } },
-          h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Kategorie:'),
-          catDd.el),
-        h('div', { style: { position: 'relative', zIndex: '15' } },
-          h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Symbol / Icon:'),
-          iconPicker.el),
-        h('div', { style: { position: 'relative', zIndex: '10' } },
           countHeader,
           tagsContainer,
           addDropdownWrap)),
@@ -970,21 +790,18 @@ export class DeviceWizard {
               const removed = await this._removeGroup(existingGroup.id, existingGroup.name, true);
               if (removed) {
                 overlay.remove();
-                areaDd.destroy();
-                catDd.destroy();
-                addDd?.destroy();
-                iconPicker._close();
+                destroyPickers();
                 if (isDirect) this.onSaved?.(null);
                 else this._load();
               }
             },
-          }, icon('mdi:delete-outline'), 'Gruppe auflösen') : null),
+          }, icon('mdi:delete-outline'), 'Auflösen') : null),
         h('div', { class: 'dialog-foot-actions' },
           h('button', {
             class: 'btn primary',
             onClick: async () => {
-              if (!groupName) { alert('Bitte einen Namen eingeben'); return; }
-              if (selectedIds.length === 0) { alert('Bitte mindestens ein Element zur Gruppe hinzufügen'); return; }
+              if (!groupName) { showToast(this.el, 'Name fehlt', { error: true }); return; }
+              if (selectedIds.length === 0) { showToast(this.el, 'Mind. 1 Element wählen', { error: true }); return; }
               try {
                 await this.hass.callWS({
                   type: 'smarthome_companion/groups/save',
@@ -998,18 +815,15 @@ export class DeviceWizard {
                   },
                 });
                 overlay.remove();
-                areaDd.destroy();
-                catDd.destroy();
-                addDd?.destroy();
-                iconPicker._close();
+                destroyPickers();
                 this.selectedDevices.clear();
                 if (isDirect) this.onSaved?.(null);
                 else this._load();
               } catch (err) {
-                alert(`Fehler beim Speichern der Gruppe: ${err.message || err}`);
+                showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
               }
             },
-          }, icon('mdi:check'), 'Gruppe speichern')))
+          }, icon('mdi:check'), 'Speichern')))
     );
 
     overlay.appendChild(dialog);
@@ -1017,17 +831,24 @@ export class DeviceWizard {
   }
 
   async _removeGroup(groupId, groupName, skipReload = false) {
-    const conf = window.confirm(`Gruppe „${groupName}“ auflösen?\n\nDie enthaltenen Geräte bleiben erhalten.`);
+    const conf = await showConfirmDialog(this.el, {
+      title: 'Gruppe auflösen',
+      message: `Gruppe „${groupName}“ auflösen? Geräte bleiben erhalten.`,
+      confirmLabel: 'Auflösen',
+      cancelLabel: 'Abbrechen',
+      danger: true,
+    });
     if (!conf) return false;
     try {
       await this.hass.callWS({ type: 'smarthome_companion/groups/delete', group_id: groupId });
       delete this.groups[groupId];
+      this.selectedDevices.delete(groupId);
       if (!skipReload) {
         this._load();
       }
       return true;
     } catch (err) {
-      alert(`Fehler beim Auflösen der Gruppe: ${err.message || err}`);
+      showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
       return false;
     }
   }
@@ -1210,7 +1031,7 @@ export class DeviceWizard {
     const areaDropdown = new CustomDropdown({
       options: areaOptions,
       value: this.selectedAreaId,
-      placeholder: 'Raum auswählen...',
+      placeholder: 'Raum',
       onChange: (val) => {
         this.selectedAreaId = val;
         if (this._isNewRoomForDevice(val)) {
@@ -1225,7 +1046,7 @@ export class DeviceWizard {
             this.customName = stripped;
           }
         }
-        this._renderStep1();
+        preserveScroll(this.body, () => this._renderStep1());
       },
     });
     this._dropdowns.push(areaDropdown);
@@ -1237,15 +1058,15 @@ export class DeviceWizard {
         hass: this.hass,
         value: this.roomIcon || 'mdi:home-outline',
         priorityIcons: ROOM_ICON_OPTIONS,
-        placeholder: 'Raum-Icon wählen (z. B. Wohnzimmer, mdi:sofa)...',
+        placeholder: 'Raum-Icon suchen',
         onChange: (val) => { this.roomIcon = val || 'mdi:home-outline'; },
       });
       this._dropdowns.push(roomIconPicker);
-      roomIconField = h('div', { class: 'field', style: { position: 'relative', zIndex: '16' } }, 'Raum-Icon (neuer Raum)', roomIconPicker.el);
+      roomIconField = h('div', { class: 'field' }, 'Raum-Icon', roomIconPicker.el);
     }
 
     const nameInput = h('input', {
-      type: 'text', value: this.customName, placeholder: 'Gerätename...',
+      type: 'text', value: this.customName, placeholder: 'Gerätename',
       onInput: (e) => { this.customName = e.target.value; },
     });
 
@@ -1253,7 +1074,7 @@ export class DeviceWizard {
     const devIconPicker = new IconPicker({
       hass: this.hass,
       value: this.customIcon || curCat.icon,
-      placeholder: 'Icon auswählen (z. B. mdi:lightbulb)...',
+      placeholder: 'Icon suchen',
       onChange: (val) => {
         this.customIcon = val;
       },
@@ -1271,7 +1092,7 @@ export class DeviceWizard {
             if (!this.customIcon) {
               devIconPicker._setValue(c.icon);
             }
-            this._render();
+            preserveScroll(this.body, () => this._render());
           },
         },
         icon(c.icon),
@@ -1283,14 +1104,13 @@ export class DeviceWizard {
 
     this.body.replaceChildren(
       hero,
-      h('div', { class: 'section-title' }, 'Geräteinformationen'),
+      h('div', { class: 'section-title' }, 'Details'),
       h('div', { class: 'fields' },
-        h('div', { class: 'field' }, 'Anzeigename im Dashboard', nameInput),
-        h('div', { class: 'field' }, 'Raum (Bereich)', areaDropdown.el),
+        h('div', { class: 'field' }, 'Name', nameInput),
+        h('div', { class: 'field' }, 'Raum', areaDropdown.el),
         roomIconField,
-        h('div', { class: 'field', style: { position: 'relative', zIndex: '15' } }, 'Symbol / Icon', devIconPicker.el)),
-      h('div', { class: 'section-title', style: { marginTop: '16px' } }, 'Haupt-Kategorie'),
-      h('div', { class: 'hint' }, 'Bestimmt das Standard-Icon und das Verhalten im Dashboard:'),
+        h('div', { class: 'field' }, 'Icon', devIconPicker.el)),
+      h('div', { class: 'section-title', style: { marginTop: '12px' } }, 'Kategorie'),
       catGrid);
   }
 
@@ -1309,7 +1129,7 @@ export class DeviceWizard {
       });
 
       const autoBadge = (s.type === s.detectedType && s.type !== 'ignore')
-        ? h('span', { class: 'badge-tag ok auto-badge' }, icon('mdi:check-circle'), 'Automatisch erkannt')
+        ? h('span', { class: 'badge-tag ok auto-badge' }, icon('mdi:check-circle'), 'Auto')
         : null;
 
       const typeDd = new CustomDropdown({
@@ -1326,24 +1146,23 @@ export class DeviceWizard {
       this._dropdowns.push(typeDd);
 
       card.append(
-        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' } },
           h('div', { style: { minWidth: '0', flex: '1' } },
             h('div', { style: { fontWeight: '600', fontSize: '14px' } }, s.name),
-            h('div', { class: 'hint', style: { fontSize: '11px' } }, s.entity_id)),
+            h('div', { class: 'hint', style: { fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.entity_id)),
           h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
             autoBadge,
             h('span', { class: 'badge-tag' }, liveVal))),
         h('div', { class: 'field' },
-          h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Sensor-Typ auf Raumkachel')),
+          h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Typ auf Raumkachel')),
           typeDd.el));
 
       return card;
     });
 
-    return h('div', { style: { marginTop: '18px' } },
-      h('div', { class: 'section-title' }, 'Raumsensoren & Messwerte'),
-      h('div', { class: 'hint', style: { marginBottom: '10px' } },
-        'Lege fest, welche Sensorwerte auf der Raumkachel angezeigt oder ignoriert werden sollen:'),
+    return h('div', { style: { marginTop: '14px' } },
+      h('div', { class: 'section-title' }, 'Raumsensoren'),
+      h('div', { class: 'hint', style: { marginBottom: '8px' } }, 'Werte für Raumkachel wählen'),
       ...cards);
   }
 
@@ -1356,23 +1175,21 @@ export class DeviceWizard {
     if (!this.channels.length && !sensorSection) {
       this.body.replaceChildren(h('div', { class: 'empty' },
         icon('mdi:alert-circle-outline'),
-        h('div', { style: { fontWeight: '600' } }, 'Keine steuerbaren Entitäten oder Sensoren gefunden'),
-        h('div', { class: 'hint' }, 'Dieses Gerät hat keine passenden Entitäten in Home Assistant.')));
+        h('div', { style: { fontWeight: '600' } }, 'Keine Entitäten'),
+        h('div', { class: 'hint' }, 'Keine passenden Kanäle/Sensoren')));
       return;
     }
 
     const curCat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
     const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color || 'var(--cd-accent)', '--hero-color': curCat.color || 'var(--cd-accent)' } }, icon(curCat.icon || 'mdi:tune-vertical'));
 
-    const header = h('div', { style: { textAlign: 'center', marginBottom: '14px' } },
-      h('h3', { style: { margin: '0 0 4px', fontSize: '18px', fontWeight: '700' } },
-        !this.channels.length ? 'Raumsensoren konfigurieren' : (isMulti ? 'Kanäle & Messung' : 'Messung & Simulation')),
+    const header = h('div', { style: { textAlign: 'center', marginBottom: '8px' } },
+      h('h3', { style: { margin: '0 0 2px', fontSize: '17px', fontWeight: '700' } },
+        !this.channels.length ? 'Raumsensoren' : (isMulti ? 'Kanäle & Messung' : 'Messung & Simulation')),
       h('div', { class: 'hint' },
         !this.channels.length
-          ? 'Sensor-Typen prüfen, bei Bedarf überschreiben oder unerwünschte Entitäten ignorieren'
-          : (isMulti
-            ? 'Mehrkanal-Gerät: Kanäle separat konfigurieren und zuordnen'
-            : 'Optionale Leistungsmessung (Watt) und automatische Anwesenheitssimulation')));
+          ? 'Sensortyp für Raumkachel'
+          : (isMulti ? 'Kanäle einzeln zuordnen' : 'Leistung & Simulation')));
 
     if (!this.channels.length) {
       this.body.replaceChildren(hero, header, sensorSection);
@@ -1380,32 +1197,32 @@ export class DeviceWizard {
     }
 
     if (!isMulti) {
-      // SINGLE ENTITY: No duplicate channel name, no duplicate category, no confusing disable switch!
       const ch = this.channels[0];
 
       const powerPicker = new EntityPicker({
         hass: this.hass,
         value: ch.power || '',
-        placeholder: 'sensor.xxx_power (optional)',
+        placeholder: 'Watt-Sensor (optional)',
         domain: 'sensor',
         onChange: (val) => {
           ch.power = val;
           this.powerEntityId = val;
         },
       });
+      this._dropdowns.push(powerPicker);
 
       const isAutoPower = ch.power && ch.power === this.powerEntityId;
       const powerBadge = isAutoPower
-        ? h('span', { class: 'badge-tag ok auto-badge', style: { marginLeft: '8px' } }, icon('mdi:check-circle'), 'Automatisch erkannt')
+        ? h('span', { class: 'badge-tag ok auto-badge', style: { marginLeft: '8px' } }, icon('mdi:check-circle'), 'Auto')
         : null;
 
-      const powerCard = h('div', { class: 'row-card', style: { padding: '16px 20px', gap: '12px' } },
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
-          h('div', { class: 'feature-icon', style: { color: '#ffb74d', display: 'grid', placeItems: 'center', width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(255,183,77,0.15)' } }, icon('mdi:flash')),
-          h('div', { style: { flex: 1 } },
-            h('div', { style: { fontWeight: '600', fontSize: '15px', display: 'flex', alignItems: 'center' } },
-              'Leistungssensor (Watt)', powerBadge),
-            h('div', { class: 'hint', style: { marginTop: '2px' } }, 'Zeigt den aktuellen Stromverbrauch live auf der Kachel an'))),
+      const powerCard = h('div', { class: 'row-card', style: { padding: '14px 16px', gap: '10px' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+          h('div', { class: 'feature-icon', style: { color: '#ffb74d', display: 'grid', placeItems: 'center', width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(255,183,77,0.15)', flex: 'none' } }, icon('mdi:flash')),
+          h('div', { style: { flex: '1', minWidth: '0' } },
+            h('div', { style: { fontWeight: '600', fontSize: '14px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' } },
+              'Leistung (Watt)', powerBadge),
+            h('div', { class: 'hint', style: { marginTop: '2px' } }, 'Live-Verbrauch auf Kachel'))),
         powerPicker.el);
 
       const simCard = h('div', {
@@ -1421,7 +1238,7 @@ export class DeviceWizard {
       h('div', { class: 'feature-icon' }, icon('mdi:home-clock')),
       h('div', { class: 'feature-info' },
         h('div', { class: 'feature-title' }, 'Anwesenheitssimulation'),
-        h('div', { class: 'feature-desc' }, 'Zufälliges automatisches Schalten bei Abwesenheit zum Einbruchschutz')),
+        h('div', { class: 'feature-desc' }, 'Zufallsschalten bei Abwesenheit')),
       h('div', { class: 'switch-ui' }));
 
       this.body.replaceChildren(...[hero, header, powerCard, simCard, sensorSection].filter(Boolean));
@@ -1435,7 +1252,7 @@ export class DeviceWizard {
 
     const channelCards = this.channels.map((ch, idx) => {
       const nameInput = h('input', {
-        type: 'text', value: ch.name, placeholder: `Kanal ${idx + 1} Name...`, disabled: !ch.enabled,
+        type: 'text', value: ch.name, placeholder: `Kanal ${idx + 1}`, disabled: !ch.enabled,
         onInput: (e) => { ch.name = e.target.value; },
       });
 
@@ -1450,10 +1267,11 @@ export class DeviceWizard {
       const powerPicker = new EntityPicker({
         hass: this.hass,
         value: ch.power || '',
-        placeholder: 'sensor.xxx_power (optional)',
+        placeholder: 'Watt-Sensor (optional)',
         domain: 'sensor',
         onChange: (val) => { ch.power = val; },
       });
+      this._dropdowns.push(powerPicker);
 
       const simCard = h('div', {
         class: `feature-card${ch.presence_simulation && ch.enabled ? ' active' : ''}`,
@@ -1469,12 +1287,12 @@ export class DeviceWizard {
       h('div', { class: 'feature-icon' }, icon('mdi:home-clock')),
       h('div', { class: 'feature-info' },
         h('div', { class: 'feature-title' }, 'Anwesenheitssimulation'),
-        h('div', { class: 'feature-desc' }, 'Zufälliges automatisches Schalten bei Abwesenheit zum Einbruchschutz')),
+        h('div', { class: 'feature-desc' }, 'Zufallsschalten bei Abwesenheit')),
       h('div', { class: 'switch-ui' }));
 
       const isAutoPower = ch.power && ch.power === this.powerEntityId;
       const powerBadge = isAutoPower
-        ? h('span', { class: 'badge-tag ok auto-badge' }, icon('mdi:check-circle'), 'Automatisch erkannt')
+        ? h('span', { class: 'badge-tag ok auto-badge' }, icon('mdi:check-circle'), 'Auto')
         : null;
 
       const enabledToggle = h('div', {
@@ -1483,14 +1301,17 @@ export class DeviceWizard {
         onClick: (e) => {
           e.stopPropagation();
           ch.enabled = !ch.enabled;
-          this._renderStep2();
+          preserveScroll(this.body, () => this._renderStep2());
         },
       });
 
       const headCard = h('div', {
         class: 'channel-head',
         style: { cursor: 'pointer' },
-        onClick: () => { ch.enabled = !ch.enabled; this._renderStep2(); },
+        onClick: () => {
+          ch.enabled = !ch.enabled;
+          preserveScroll(this.body, () => this._renderStep2());
+        },
       },
       enabledToggle,
       h('div', { class: 'ch-title' }, ch.name || ch.entity_id),
@@ -1502,14 +1323,14 @@ export class DeviceWizard {
         headCard,
         h('div', { class: 'fields' },
           h('div', { class: 'field' },
-            h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Kanal-Name')),
+            h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Kanalname')),
             nameInput),
           h('div', { class: 'field' },
             h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Kategorie')),
             catDropdown.el),
           h('div', { class: 'field' },
             h('div', { class: 'field-head' },
-              h('span', { class: 'field-label' }, 'Leistungssensor (Watt)'),
+              h('span', { class: 'field-label' }, 'Leistung (Watt)'),
               powerBadge),
             powerPicker.el)),
         simCard);
@@ -1518,21 +1339,19 @@ export class DeviceWizard {
     this.body.replaceChildren(...[hero, header, ...channelCards, sensorSection].filter(Boolean));
   }
 
-  // ═══════════════ STEP 3: Zusammenfassung & Speichern ═══════════════
+  // ═══════════════ STEP 3: Prüfen & Speichern ═══════════════
   _renderStep3() {
     const area = this.areas.find((a) => a.area_id === this.selectedAreaId);
     const areaName = area?.name || 'Kein Raum';
     const cat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
     const activeChannels = this.channels.filter((c) => c.enabled);
 
-    // Reliable Hero Badge with Category Icon and glowing ring
     const hero = h('div', { class: 'win11-hero-badge', style: { color: cat.color, '--hero-color': cat.color } }, icon(cat.icon || 'mdi:check-circle'));
 
-    const header = h('div', { style: { textAlign: 'center', marginBottom: '14px' } },
-      h('h3', { style: { margin: '0 0 4px', fontSize: '18px', fontWeight: '700' } }, 'Fast fertig!'),
-      h('div', { class: 'hint' }, 'Überprüfe die Einstellungen vor dem Speichern'));
+    const header = h('div', { style: { textAlign: 'center', marginBottom: '10px' } },
+      h('h3', { style: { margin: '0 0 2px', fontSize: '17px', fontWeight: '700' } }, 'Prüfen'),
+      h('div', { class: 'hint' }, 'Auswahl kontrollieren & speichern'));
 
-    // Live visual preview card
     const hasSim = activeChannels.some((c) => c.presence_simulation);
     const hasPower = activeChannels.some((c) => c.power);
 
@@ -1542,14 +1361,13 @@ export class DeviceWizard {
     },
     h('div', { class: 'win11-preview-icon' }, icon(cat.icon)),
     h('div', { class: 'win11-preview-info' },
-      h('div', { class: 'win11-preview-name' }, this.customName || 'Mein Gerät'),
+      h('div', { class: 'win11-preview-name' }, this.customName || 'Gerät'),
       h('div', { class: 'win11-preview-meta' },
         h('span', { class: 'badge-tag category', style: { '--badge-cat-color': cat.color } }, icon(cat.icon), cat.name),
         h('span', { class: 'badge-tag area' }, icon('mdi:map-marker'), areaName),
-        hasPower ? h('span', { class: 'badge-tag', style: { color: '#ffb74d' } }, icon('mdi:flash'), 'Leistungsmessung') : null,
+        hasPower ? h('span', { class: 'badge-tag', style: { color: '#ffb74d' } }, icon('mdi:flash'), 'Leistung') : null,
         hasSim ? h('span', { class: 'badge-tag', style: { color: '#ce93d8' } }, icon('mdi:home-clock'), 'Simulation') : null)));
 
-    // Home Assistant sync card: Hidden inside collapsible <details>, default active
     const syncCard = h('div', {
       class: `feature-card${this.renameInHA ? ' active' : ''}`,
       style: { '--feat-color': '#2196f3', cursor: 'pointer' },
@@ -1562,21 +1380,20 @@ export class DeviceWizard {
     },
     h('div', { class: 'feature-icon' }, icon('mdi:home-assistant')),
     h('div', { class: 'feature-info' },
-      h('div', { class: 'feature-title' }, 'In Home Assistant synchronisieren (Standard: Aktiv)'),
-      h('div', { class: 'feature-desc' }, 'Aktualisiert Gerätename und Raumzuweisung direkt in den HA-Registries')),
+      h('div', { class: 'feature-title' }, 'HA-Synchronisierung'),
+      h('div', { class: 'feature-desc' }, 'Name & Raum in HA übernehmen')),
     h('div', { class: 'switch-ui' }));
 
     const syncAccordion = h('details', { class: 'adv-options' },
-      h('summary', {}, icon('mdi:cog-outline'), 'Erweiterte Optionen: Home Assistant Synchronisierung'),
+      h('summary', {}, icon('mdi:cog-outline'), 'Optionen: HA-Sync'),
       h('div', { class: 'adv-content' }, syncCard));
 
-    // Channel details (only shown if multi-channel)
     const channelSummary = this.channels.length > 1
-      ? h('div', { class: 'row-card', style: { marginTop: '12px' } },
-        h('div', { style: { fontWeight: '600', fontSize: '13px' } }, `Kanäle (${activeChannels.length} aktiv)`),
+      ? h('div', { class: 'row-card', style: { marginTop: '8px' } },
+        h('div', { style: { fontWeight: '600', fontSize: '13px' } }, `Kanäle (${activeChannels.length})`),
         h('div', { class: 'hint' }, activeChannels.map((c) => {
           const cCat = DEVICE_CATEGORIES.find((catItem) => catItem.id === c.category);
-          return `• ${c.name} (${c.entity_id}) – ${cCat?.name || c.category}`;
+          return `• ${c.name} (${cCat?.name || c.category})`;
         }).join('\n')))
       : null;
 
@@ -1591,22 +1408,23 @@ export class DeviceWizard {
     this.body.replaceChildren(...items);
   }
 
-  // ═══════════════ POST-SAVE CELEBRATION (Windows 11 Setup Vibe) ═══════════════
+  // ═══════════════ POST-SAVE CELEBRATION ═══════════════
   _renderCelebration() {
+    this._cleanupDropdowns();
+    this.selectionSlot.replaceChildren();
     this.stepBar.hidden = true;
     this.foot.hidden = true;
     this.dialog.style.setProperty('--hero-color', '#10b981');
 
-    const cat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
     const area = this.areas.find((a) => a.area_id === this.selectedAreaId);
     const areaName = area?.name || 'Dashboard';
 
     const celebration = h('div', { class: 'win11-celebration' },
       h('div', { class: 'win11-success-badge' }, icon('mdi:check')),
-      h('h2', { style: { margin: '8px 0 2px', fontSize: '22px', fontWeight: '700', color: 'var(--primary-text-color, #fff)' } }, 'Alles bereit!'),
-      h('div', { class: 'hint', style: { fontSize: '15px', maxWidth: '440px', lineHeight: '1.5', color: 'rgba(255,255,255,0.85)' } },
-        `Gerät „${this.customName}“ wurde erfolgreich im Raum „${areaName}“ eingerichtet.`),
-      h('div', { style: { display: 'flex', gap: '12px', marginTop: '18px' } },
+      h('h2', { style: { margin: '6px 0 2px', fontSize: '20px', fontWeight: '700', color: 'var(--primary-text-color, inherit)' } }, 'Fertig'),
+      h('div', { class: 'hint', style: { fontSize: '14px', maxWidth: '400px' } },
+        `„${this.customName}“ · ${areaName}`),
+      h('div', { style: { display: 'flex', gap: '10px', marginTop: '14px', flexWrap: 'wrap', justifyContent: 'center' } },
         this.directMode ? null : h('button', {
           class: 'btn secondary',
           onClick: () => {
@@ -1615,14 +1433,14 @@ export class DeviceWizard {
             this.selectedDevice = null;
             this._render();
           },
-        }, icon('mdi:plus'), 'Weiteres Gerät einrichten'),
+        }, icon('mdi:plus'), 'Weiteres Gerät'),
         h('button', {
           class: 'btn primary',
           onClick: () => {
-            this.onClose();
+            this._closeWizard();
             this.onSaved(null);
           },
-        }, icon(this.directMode ? 'mdi:check' : 'mdi:view-dashboard'), this.directMode ? 'Fertig' : 'Zum Dashboard')));
+        }, icon(this.directMode ? 'mdi:check' : 'mdi:view-dashboard'), this.directMode ? 'Fertig' : 'Dashboard')));
 
     this.body.replaceChildren(celebration);
   }

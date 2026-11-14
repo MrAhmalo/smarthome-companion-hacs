@@ -1,4 +1,4 @@
-import { h, icon, COLORS, COLOR_NAMES, COLOR_LABELS_DE, resolveColor } from '../lib/util.js';
+import { h, icon, COLORS, COLOR_NAMES, COLOR_LABELS_DE, resolveColor, positionFloatingMenu } from '../lib/util.js';
 
 export class ColorPicker {
   /**
@@ -17,7 +17,8 @@ export class ColorPicker {
     this.isOpen = false;
 
     this._onDocClick = (e) => {
-      if (!e.composedPath().includes(this.el)) this._close();
+      const path = e.composedPath?.() || [];
+      if (!path.includes(this.el) && !path.includes(this.dropdown)) this._close();
     };
 
     this._build();
@@ -72,15 +73,30 @@ export class ColorPicker {
     this.dropdown.hidden = false;
     this.box.dataset.open = '';
     this._renderOptions();
-    
+    this._portalCleanup?.();
+    this._portalCleanup = positionFloatingMenu(this.box, this.dropdown, {
+      minWidth: 250,
+      maxHeight: 260,
+      matchWidth: false,
+      alignRight: true,
+    });
     setTimeout(() => document.addEventListener('pointerdown', this._onDocClick), 20);
   }
 
   _close() {
     if (!this.isOpen) return;
     this.isOpen = false;
+    this._portalCleanup?.();
+    this._portalCleanup = null;
     this.dropdown.hidden = true;
     delete this.box.dataset.open;
+    document.removeEventListener('pointerdown', this._onDocClick);
+  }
+
+  destroy() {
+    this._close();
+    this._portalCleanup?.();
+    this._portalCleanup = null;
     document.removeEventListener('pointerdown', this._onDocClick);
   }
 

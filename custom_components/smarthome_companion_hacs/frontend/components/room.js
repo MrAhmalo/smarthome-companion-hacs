@@ -1,6 +1,6 @@
 // Room component: collapsible "expander" card with area header (sensors, alerts, group controls) and tiles.
 import {
-  h, icon, editBorder, domainOf, isActive, numeric, effectiveCategory,
+  h, icon, editBorder, domainOf, isActive, numeric, effectiveCategory, parseChannelKey,
 } from '../lib/util.js';
 import { Tile, GroupTile } from './tile.js';
 
@@ -21,27 +21,27 @@ export function average(hass, ids) {
 }
 
 /**
- * Smart 2-per-row layout algorithm respecting slider vs compact tiles.
- * - Naturally wide tiles (Media Player/TV, covers) get full width.
- * - Slider tiles: if 2 exist, paired side-by-side in 1 row; if 1 (or odd leftover), gets full width!
- * - Compact non-slider tiles: paired side-by-side with each other in rows!
- * - Master group tiles sit at the bottom in full width.
+ * Smart 2-per-row layout algorithm respecting slider vs compact tiles,
+ * keeping a strictly stable order regardless of active/on/off state.
+ * - Top wide tiles (Media Player/TV, covers) take full width.
+ * - Compact non-slider tiles are paired cleanly 2-per-row together.
+ * - Slider-capable tiles always take full row width (never paired with other tiles).
+ * - Group tiles sit at the bottom in full width.
  */
 export function applySmartTileLayout(tiles, grid = null) {
   if (!tiles || !tiles.length) return;
 
   const topWide = [];
-  const bottomWide = [];
-  const sliderTiles = [];
   const compactTiles = [];
+  const sliderTiles = [];
+  const bottomWide = [];
 
   for (const t of tiles) {
-    if (t.isAlwaysWide) {
-      if (t.spec?.is_group || t.is_group === true || t.constructor?.name === 'GroupTile') {
-        bottomWide.push(t);
-      } else {
-        topWide.push(t);
-      }
+    const isGroup = t.spec?.is_group || t.is_group === true || t.constructor?.name === 'GroupTile';
+    if (isGroup) {
+      bottomWide.push(t);
+    } else if (t.isAlwaysWide) {
+      topWide.push(t);
     } else if (t.hasSlider) {
       sliderTiles.push(t);
     } else {
@@ -49,23 +49,10 @@ export function applySmartTileLayout(tiles, grid = null) {
     }
   }
 
-  // Always wide tiles
   topWide.forEach((t) => t.setWide(true));
+  sliderTiles.forEach((t) => t.setWide(true));
   bottomWide.forEach((t) => t.setWide(true));
 
-  // Slider tiles:
-  // "wenn zwei geräte mit slider existieren das diese nebeneinander sind"
-  // "falls nur ein gerät mit slider es immer ein eigene zeile bekommt"
-  if (sliderTiles.length % 2 === 1) {
-    for (let i = 0; i < sliderTiles.length - 1; i++) {
-      sliderTiles[i].setWide(false);
-    }
-    sliderTiles[sliderTiles.length - 1].setWide(true);
-  } else {
-    sliderTiles.forEach((t) => t.setWide(false));
-  }
-
-  // Compact non-slider tiles: pair in 2s
   if (compactTiles.length % 2 === 1) {
     for (let i = 0; i < compactTiles.length - 1; i++) {
       compactTiles[i].setWide(false);
@@ -115,7 +102,7 @@ export class GroupedCoverTile {
         e.stopPropagation();
         if (this.ctx?.isEditMode?.()) {
           const firstCover = this.coverSpecs[0];
-          const devId = firstCover?.device_id || (firstCover?.key?.includes(':') ? firstCover.key.split(':')[0] : null);
+          const devId = firstCover?.device_id || parseChannelKey(firstCover?.key).deviceId || null;
           if (devId) { this.ctx.onOpenDevice?.(devId); return; }
         }
         this.ctx.onOpenRoom?.(this.roomSpec.area_id);
@@ -129,7 +116,7 @@ export class GroupedCoverTile {
       onClick: () => {
         if (this.ctx?.isEditMode?.()) {
           const firstCover = this.coverSpecs[0];
-          const devId = firstCover?.device_id || (firstCover?.key?.includes(':') ? firstCover.key.split(':')[0] : null);
+          const devId = firstCover?.device_id || parseChannelKey(firstCover?.key).deviceId || null;
           if (devId) { this.ctx.onOpenDevice?.(devId); return; }
         }
         this.ctx.onOpenRoom?.(this.roomSpec.area_id);
@@ -146,7 +133,7 @@ export class GroupedCoverTile {
     this.btnDown = mk('mdi:arrow-down', 'Alle schließen', () => this._service('close'));
 
     this.btnDetail = h('button', {
-      class: 'mini-btn', 'aria-label': 'Details', title: 'Einzelne Rollläden anzeigen',
+      class: 'mini-btn', 'aria-label': 'Details', title: 'Details',
       onClick: (e) => { e.stopPropagation(); this.ctx.onOpenRoom?.(this.roomSpec.area_id); },
     }, icon('mdi:arrow-right'));
 
@@ -162,7 +149,7 @@ export class GroupedCoverTile {
         e.stopPropagation();
         e.preventDefault();
         const firstCover = this.coverSpecs[0];
-        const devId = firstCover?.device_id || (firstCover?.key?.includes(':') ? firstCover.key.split(':')[0] : null) || firstCover?.entity_id;
+        const devId = firstCover?.device_id || parseChannelKey(firstCover?.key).deviceId || firstCover?.entity_id;
         if (devId) this.ctx.onOpenDevice?.(devId);
       }
     }, true);
@@ -272,9 +259,25 @@ export class Room {
         } else if (g.key === 'cover') {
           matchingTiles = spec.tiles.filter((t) => effectiveCategory(t) === 'cover');
         }
+        const collectIds = (list) => {
+          const out = [];
+          const seen = new Set();
+          for (const t of list) {
+            const eids = t.is_group && Array.isArray(t.entity_ids)
+              ? t.entity_ids
+              : (t.entity_id ? [t.entity_id] : []);
+            for (const eid of eids) {
+              if (eid && !seen.has(eid)) {
+                seen.add(eid);
+                out.push(eid);
+              }
+            }
+          }
+          return out;
+        };
         return {
           ...g,
-          ids: matchingTiles.map((t) => t.entity_id),
+          ids: collectIds(matchingTiles),
         };
       })
       .filter((g) => g.ids.length > 0)
@@ -289,7 +292,7 @@ export class Room {
 
     // Room detail view button (sub-menu navigation)
     this.detailBtn = h('button', {
-      class: 'ctrl-btn', 'aria-label': `${spec.name} Details`, title: `${spec.name} öffnen`,
+      class: 'ctrl-btn', 'aria-label': `${spec.name} Details`, title: 'Details',
       onClick: (e) => { e.stopPropagation(); this.ctx.onOpenRoom?.(this.spec.area_id); },
     }, icon('mdi:arrow-right'));
 

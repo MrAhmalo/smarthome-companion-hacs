@@ -461,9 +461,264 @@ export const ROOM_ICON_OPTIONS = [
 ];
 
 export const ROOM_SENSOR_TYPES = [
-  { value: 'temperature', label: 'Raumtemperatur', icon: 'mdi:thermometer', color: '#ff7043' },
+  { value: 'temperature', label: 'Temperatur', icon: 'mdi:thermometer', color: '#ff7043' },
   { value: 'humidity', label: 'Luftfeuchtigkeit', icon: 'mdi:water-percent', color: '#29b6f6' },
-  { value: 'motion', label: 'Anwesenheit / Bewegung', icon: 'mdi:motion-sensor', color: '#e91e63' },
-  { value: 'moisture', label: 'Feuchtigkeit / Wasserleck', icon: 'mdi:water-alert', color: '#26c6da' },
-  { value: 'ignore', label: 'Ignorieren (nicht anzeigen)', icon: 'mdi:eye-off-outline', color: '#9e9e9e' },
+  { value: 'motion', label: 'Anwesenheit', icon: 'mdi:motion-sensor', color: '#e91e63' },
+  { value: 'moisture', label: 'Feuchtigkeit', icon: 'mdi:water-alert', color: '#26c6da' },
+  { value: 'ignore', label: 'Ignorieren', icon: 'mdi:eye-off-outline', color: '#9e9e9e' },
 ];
+
+/**
+ * Parse a dashboard spec/channel key cleanly:
+ * - "d:<deviceId>:<entityId>" -> { prefix: 'd', deviceId, entityId, groupId: '' }
+ * - "e:<entityId>" / "l:<entityId>" -> { prefix, deviceId: '', entityId, groupId: '' }
+ * - "g:<groupId>" -> { prefix: 'g', deviceId: '', entityId: '', groupId }
+ * - "<deviceId>:<entityId>" -> { prefix: '', deviceId, entityId, groupId: '' }
+ * - "<entityId>" -> { prefix: '', deviceId: '', entityId: key, groupId: '' }
+ */
+export function parseChannelKey(key) {
+  if (!key || typeof key !== 'string') {
+    return { prefix: '', deviceId: '', entityId: '', groupId: '' };
+  }
+  const parts = key.split(':');
+  const first = parts[0];
+  if (first === 'd') {
+    return { prefix: 'd', deviceId: parts[1] || '', entityId: parts.slice(2).join(':'), groupId: '' };
+  }
+  if (first === 'e' || first === 'l') {
+    return { prefix: first, deviceId: '', entityId: parts.slice(1).join(':'), groupId: '' };
+  }
+  if (first === 'g') {
+    return { prefix: 'g', deviceId: '', entityId: '', groupId: parts.slice(1).join(':') };
+  }
+  if (parts.length >= 2) {
+    return { prefix: '', deviceId: first, entityId: parts.slice(1).join(':'), groupId: '' };
+  }
+  return { prefix: '', deviceId: '', entityId: key, groupId: '' };
+}
+
+/** Preserve scroll position of a scroll container across synchronous DOM replacements. */
+export function preserveScroll(scrollEl, fn) {
+  const top = scrollEl ? scrollEl.scrollTop : 0;
+  fn?.();
+  if (scrollEl && top > 0) {
+    scrollEl.scrollTop = top;
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        if (scrollEl.isConnected) scrollEl.scrollTop = top;
+      });
+    }
+  }
+}
+
+/**
+ * Portal and position a floating menu inside the nearest `.overlay` or shadowRoot
+ * using `visualViewport` bounds and auto flip-above when space below is tight.
+ * Returns a cleanup callback to restore `menuEl` and detach listeners.
+ */
+export function positionFloatingMenu(anchorEl, menuEl, opts = {}) {
+  if (!anchorEl || !menuEl) return () => {};
+  const {
+    minWidth = 0,
+    maxWidth = null,
+    maxHeight = 280,
+    matchWidth = true,
+    alignRight = false,
+  } = opts;
+
+  const originalParent = menuEl.parentNode;
+  const originalNextSibling = menuEl.nextSibling;
+  const portalHost = anchorEl.closest?.('.overlay') || anchorEl.getRootNode?.() || originalParent;
+
+  menuEl.classList.add('cd-portal-menu');
+  if (portalHost && portalHost.appendChild && menuEl.parentNode !== portalHost) {
+    portalHost.appendChild(menuEl);
+  }
+
+  let closed = false;
+  const update = () => {
+    if (closed) return;
+    if (!anchorEl.isConnected || !menuEl.isConnected) return;
+
+    const rect = anchorEl.getBoundingClientRect();
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    const layoutW = (typeof document !== 'undefined' && document.documentElement?.clientWidth)
+      || (typeof window !== 'undefined' ? window.innerWidth : 1024);
+    const layoutH = (typeof document !== 'undefined' && document.documentElement?.clientHeight)
+      || (typeof window !== 'undefined' ? window.innerHeight : 768);
+
+    const visLeft = vv ? vv.offsetLeft : 0;
+    const visTop = vv ? vv.offsetTop : 0;
+    const visW = vv ? vv.width : layoutW;
+    const visH = vv ? vv.height : layoutH;
+    const visBottom = visTop + visH;
+
+    const spaceBelow = Math.max(0, visBottom - rect.bottom - 10);
+    const spaceAbove = Math.max(0, rect.top - visTop - 10);
+    const openUp = spaceBelow < Math.min(200, maxHeight) && spaceAbove > spaceBelow;
+    const availH = Math.max(120, Math.min(maxHeight, openUp ? spaceAbove : spaceBelow));
+
+    const targetW = matchWidth
+      ? Math.max(rect.width, minWidth || 0)
+      : Math.max(minWidth || 200, rect.width);
+    const clampedW = Math.max(160, Math.min(targetW, visW - 16, maxWidth || (visW - 16)));
+    const desiredLeft = alignRight ? (rect.right - clampedW) : rect.left;
+    const clampedLeft = Math.max(visLeft + 8, Math.min(desiredLeft, visLeft + visW - clampedW - 8));
+
+    menuEl.style.position = 'fixed';
+    menuEl.style.zIndex = '1500';
+    menuEl.style.left = `${Math.round(clampedLeft)}px`;
+    menuEl.style.right = 'auto';
+    menuEl.style.width = `${Math.round(clampedW)}px`;
+    menuEl.style.maxWidth = `${Math.round(visW - 16)}px`;
+    menuEl.style.maxHeight = `${Math.round(availH)}px`;
+
+    if (openUp) {
+      menuEl.style.top = 'auto';
+      menuEl.style.bottom = `${Math.max(8, Math.round(layoutH - rect.top + 6))}px`;
+      menuEl.dataset.placement = 'top';
+    } else {
+      menuEl.style.bottom = 'auto';
+      menuEl.style.top = `${Math.round(rect.bottom + 6)}px`;
+      menuEl.dataset.placement = 'bottom';
+    }
+  };
+
+  update();
+
+  const onViewportChange = () => update();
+  if (typeof window !== 'undefined') {
+    window.addEventListener('scroll', onViewportChange, { capture: true, passive: true });
+    window.addEventListener('resize', onViewportChange, { passive: true });
+    window.visualViewport?.addEventListener('resize', onViewportChange, { passive: true });
+    window.visualViewport?.addEventListener('scroll', onViewportChange, { passive: true });
+  }
+
+  return () => {
+    if (closed) return;
+    closed = true;
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('scroll', onViewportChange, { capture: true });
+      window.removeEventListener('resize', onViewportChange);
+      window.visualViewport?.removeEventListener('resize', onViewportChange);
+      window.visualViewport?.removeEventListener('scroll', onViewportChange);
+    }
+    menuEl.classList.remove('cd-portal-menu');
+    menuEl.style.position = '';
+    menuEl.style.zIndex = '';
+    menuEl.style.left = '';
+    menuEl.style.right = '';
+    menuEl.style.top = '';
+    menuEl.style.bottom = '';
+    menuEl.style.width = '';
+    menuEl.style.maxWidth = '';
+    menuEl.style.maxHeight = '';
+    delete menuEl.dataset.placement;
+    if (originalParent && originalParent.isConnected) {
+      if (originalNextSibling && originalNextSibling.parentNode === originalParent) {
+        originalParent.insertBefore(menuEl, originalNextSibling);
+      } else {
+        originalParent.appendChild(menuEl);
+      }
+    } else if (menuEl.parentNode) {
+      menuEl.remove();
+    }
+  };
+}
+
+/** Display a toast inside ShadowRoot above modal overlays and safe areas. */
+export function showToast(anchorOrRoot, message, opts = {}) {
+  const { error = false, duration = 2600 } = opts;
+  const root = anchorOrRoot?.getRootNode?.() || anchorOrRoot;
+  if (!root || !root.appendChild) return;
+  try {
+    root.querySelectorAll?.('.toast').forEach((n) => n.remove());
+  } catch (_) { /* ignore */ }
+  const el = h('div', {
+    class: `toast${error ? ' error' : ''}`,
+    role: error ? 'alert' : 'status',
+  }, String(message || ''));
+  root.appendChild(el);
+  if (typeof setTimeout === 'function') {
+    setTimeout(() => { if (el.isConnected) el.remove(); }, duration);
+  }
+  return el;
+}
+
+/**
+ * In-DOM ShadowRoot confirmation dialog replacing native window.confirm().
+ * Resolves to true when confirmed, false when cancelled.
+ */
+export function showConfirmDialog(anchorOrRoot, opts = {}) {
+  const {
+    title = 'Bestätigen',
+    message = '',
+    confirmLabel = 'Bestätigen',
+    cancelLabel = 'Abbrechen',
+    danger = true,
+  } = opts;
+  const root = anchorOrRoot?.getRootNode?.() || anchorOrRoot;
+  if (!root || !root.appendChild) return Promise.resolve(false);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let overlayEl = null;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        finish(false);
+      }
+    };
+    const finish = (val) => {
+      if (settled) return;
+      settled = true;
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('keydown', onKeyDown, true);
+      }
+      overlayEl?.remove();
+      resolve(val);
+    };
+
+    const confirmBtn = h('button', {
+      type: 'button',
+      class: `btn ${danger ? 'danger' : 'primary'}`,
+      onClick: () => finish(true),
+    }, confirmLabel);
+
+    const cancelBtn = h('button', {
+      type: 'button',
+      class: 'btn secondary',
+      onClick: () => finish(false),
+    }, cancelLabel);
+
+    const dialogEl = h('div', {
+      class: 'dialog confirm-modal-dialog',
+      role: 'alertdialog',
+      'aria-modal': 'true',
+      'aria-label': title,
+    },
+    h('div', { class: 'dialog-head' },
+      icon(danger ? 'mdi:alert-outline' : 'mdi:help-circle-outline'),
+      h('h2', {}, title),
+      h('button', {
+        type: 'button',
+        class: 'icon-btn',
+        'aria-label': 'Schließen',
+        onClick: () => finish(false),
+      }, icon('mdi:close'))),
+    message ? h('div', { class: 'dialog-body confirm-modal-body' },
+      h('p', { class: 'confirm-modal-msg' }, message)) : null,
+    h('div', { class: 'dialog-foot' },
+      h('div', { class: 'dialog-foot-actions' }, cancelBtn, confirmBtn)));
+
+    overlayEl = h('div', {
+      class: 'overlay confirm-overlay',
+      onClick: (e) => { if (e.target === overlayEl) finish(false); },
+    }, dialogEl);
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('keydown', onKeyDown, true);
+    }
+    root.appendChild(overlayEl);
+  });
+}

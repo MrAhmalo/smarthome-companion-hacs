@@ -1,6 +1,6 @@
 // Room detail subview: dedicated granular control page for a single room.
 import {
-  h, icon, editBorder, domainOf, numeric, isActive, isUnavailable, entityIcon, setSliderVal,
+  h, icon, editBorder, domainOf, numeric, isActive, isUnavailable, entityIcon, setSliderVal, parseChannelKey,
 } from '../lib/util.js';
 import { Tile, GroupTile } from './tile.js';
 import { effectiveCategory, applySmartTileLayout, GROUPS, average } from './room.js';
@@ -55,9 +55,22 @@ export class RoomDetailView {
         if (g.key === 'light') matchingTiles = this.lightSpecs;
         else if (g.key === 'cover') matchingTiles = this.coverSpecs;
         else if (g.key === 'switch') matchingTiles = this.switchSpecs;
+        const ids = [];
+        const seen = new Set();
+        for (const t of matchingTiles) {
+          const eids = t.is_group && Array.isArray(t.entity_ids)
+            ? t.entity_ids
+            : (t.entity_id ? [t.entity_id] : []);
+          for (const eid of eids) {
+            if (eid && !seen.has(eid)) {
+              seen.add(eid);
+              ids.push(eid);
+            }
+          }
+        }
         return {
           ...g,
-          ids: matchingTiles.map((t) => t.entity_id),
+          ids,
         };
       })
       .filter((g) => g.ids.length > 0)
@@ -164,6 +177,7 @@ export class RoomDetailView {
     slider.addEventListener('pointerdown', (e) => e.stopPropagation());
     slider.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
     slider.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
+    slider.addEventListener('click', (e) => e.stopPropagation());
 
     let dragging = false;
     slider.addEventListener('input', () => {
@@ -197,7 +211,7 @@ export class RoomDetailView {
           class: 'cover-detail-info',
           onClick: () => {
             if (this.ctx?.isEditMode?.()) {
-              const devId = spec.device_id || (spec.key?.includes(':') ? spec.key.split(':')[0] : null) || spec.entity_id;
+              const devId = spec.device_id || parseChannelKey(spec.key).deviceId || spec.entity_id;
               if (devId) { this.ctx.onOpenDevice?.(devId); return; }
             }
           },
@@ -218,7 +232,7 @@ export class RoomDetailView {
       if (this.ctx?.isEditMode?.()) {
         e.stopPropagation();
         e.preventDefault();
-        const devId = spec.device_id || (spec.key?.includes(':') ? spec.key.split(':')[0] : null) || spec.entity_id;
+        const devId = spec.device_id || parseChannelKey(spec.key).deviceId || spec.entity_id;
         if (devId) this.ctx.onOpenDevice?.(devId);
       }
     }, true);

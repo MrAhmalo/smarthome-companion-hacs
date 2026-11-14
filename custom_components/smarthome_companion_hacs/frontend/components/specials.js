@@ -93,7 +93,7 @@ export class SmokeAlerts {
       h('div', { class: 'a-icon' }, icon('mdi:fire-alert')),
       h('div', {},
         h('div', { class: 'a-title' }, hass.states[id].attributes.friendly_name || id),
-        h('div', { class: 'a-sub' }, 'In diesem Raum wurde Rauch gemeldet')))));
+        h('div', { class: 'a-sub' }, 'Rauch erkannt')))));
     this.el.hidden = ids.length === 0;
   }
 }

@@ -19,19 +19,31 @@ const STYLES = `
   --cd-tile-bg: rgba(128, 128, 128, 0.12);
   --cd-tile-bg: color-mix(in srgb, var(--primary-text-color, #fff) 6%, transparent);
   --cd-active: var(--state-active-color, #ffc107);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 ha-icon { --mdc-icon-size: 22px; display: inline-flex; }
 button { font: inherit; color: inherit; touch-action: manipulation; }
 
-.page { max-width: 1680px; margin: 0 auto; padding: 0 16px 110px; overflow-x: hidden; }
+.page {
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: var(--safe-top) calc(16px + var(--safe-right)) calc(96px + var(--safe-bottom)) calc(16px + var(--safe-left));
+  overflow-x: clip;
+  container-type: inline-size;
+  container-name: cdpage;
+}
 
 /* ── Toolbar / header ── */
-.toolbar { display: flex; align-items: center; gap: 8px; height: 56px; padding: 0 4px; }
-.toolbar .spacer { flex: 1; }
+.toolbar { display: flex; align-items: center; gap: 6px; min-height: 52px; padding: 4px; min-width: 0; }
+.toolbar .spacer { flex: 1; min-width: 8px; }
 .icon-btn {
-  width: 44px; height: 44px; border-radius: 50%; border: 0; background: transparent; cursor: pointer;
-  display: grid; place-items: center; color: var(--primary-text-color, #fff);
+  width: 44px; height: 44px; min-width: 44px; min-height: 44px; flex: none;
+  border-radius: 50%; border: 0; background: transparent; cursor: pointer;
+  display: grid; place-items: center; color: var(--primary-text-color, #fff); position: relative;
 }
 @media (hover: hover) {
   .icon-btn:hover { background: var(--cd-tile-bg); }
@@ -40,11 +52,13 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .icon-btn[data-active] {
   background: var(--cd-accent, #0284c7) !important;
   color: #fff !important;
+  box-shadow: 0 0 12px rgba(2, 132, 199, 0.5) !important;
   box-shadow: 0 0 12px color-mix(in srgb, var(--cd-accent, #0284c7) 80%, transparent) !important;
 }
 .edit-mode-banner {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 10px 16px; margin: 4px 0 14px; border-radius: 12px;
+  padding: 10px 14px; margin: 4px 0 14px; border-radius: 12px;
+  background: rgba(2, 132, 199, 0.16);
   background: color-mix(in srgb, var(--cd-accent, #0284c7) 22%, var(--cd-card, #1a1a1a));
   border: 1.5px solid var(--cd-accent, #0284c7);
   color: var(--primary-text-color, #fff);
@@ -61,7 +75,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .edit-mode-banner-btn {
-  padding: 6px 14px; border-radius: 18px; border: 0;
+  padding: 6px 14px; min-height: 36px; border-radius: 18px; border: 0;
   background: var(--cd-accent, #0284c7); color: #fff;
   font-size: 12px; font-weight: 700; cursor: pointer; flex: none;
   transition: transform .1s, opacity .15s;
@@ -107,13 +121,13 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
     animation: cdEditMarch 0.8s linear infinite;
   }
 }
-.device-room-section { margin-top: 16px; }
-.device-room-section:first-child { margin-top: 4px; }
+.device-room-section { margin-top: 14px; }
+.device-room-section:first-child { margin-top: 2px; }
 .device-room-header {
   display: flex; align-items: center; gap: 8px; padding: 6px 4px 8px;
   font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
-  color: var(--primary-text-color, #fff);
-  border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 8px;
+  color: var(--primary-text-color, inherit);
+  border-bottom: 1px solid rgba(128, 128, 128, .22); margin-bottom: 8px;
 }
 .device-room-header ha-icon { color: var(--cd-accent); --mdc-icon-size: 18px; flex: none; }
 .device-room-header .room-count { font-size: 12px; font-weight: 500; color: var(--cd-secondary); }
@@ -124,25 +138,26 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   padding: 4px 0 14px; scrollbar-width: none;
 }
 .badge {
-  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px 0 10px;
-  border-radius: 18px; background: var(--cd-card); cursor: pointer; border: 0; white-space: nowrap;
-  font-size: 14px; font-weight: 500; --badge-color: var(--cd-accent);
+  display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 14px 0 10px;
+  border-radius: 19px; background: var(--cd-card); cursor: pointer; border: 0; white-space: nowrap;
+  font-size: 14px; font-weight: 500; --badge-color: var(--cd-accent); position: relative;
 }
+.badge::after { content: ''; position: absolute; inset: -3px 0; }
 .badge ha-icon { --mdc-icon-size: 20px; color: var(--badge-color); }
 .badge .badge-name { color: var(--cd-secondary); font-weight: 400; }
 .badge:active { transform: scale(0.97); }
 
 /* ── Layout ── */
 .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-items: start; }
-@media (min-width: 1000px) {
-  .layout.has-side { grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); }
+@container cdpage (min-width: 960px) {
+  .layout.has-side { grid-template-columns: minmax(290px, 350px) minmax(0, 1fr); }
 }
 .side, .main { display: grid; gap: 12px; min-width: 0; align-content: start; }
 .rooms {
-  display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start;
+  display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; min-width: 0;
 }
 .room-col {
-  flex: 1 1 360px; max-width: 440px; min-width: min(100%, 320px);
+  flex: 1 1 320px; max-width: 460px; min-width: min(100%, 280px);
   display: flex; flex-direction: column; gap: 12px;
 }
 
@@ -171,8 +186,10 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   display: grid; place-items: center; background: var(--cd-tile-bg); color: var(--cd-secondary);
   transition: transform .15s, background .15s, color .15s; touch-action: manipulation;
 }
+.ctrl-btn::after { content: ''; position: absolute; inset: -3px; }
 .ctrl-btn[data-on] {
   color: var(--group-color, var(--cd-active));
+  background: rgba(255, 193, 7, 0.16);
   background: color-mix(in srgb, var(--group-color, var(--cd-active)) 18%, transparent);
 }
 .chevron {
@@ -187,6 +204,10 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .room[data-open] .room-body { grid-template-rows: 1fr; }
 .room-body-inner { overflow: hidden; min-height: 0; }
 .tile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 2px 10px 10px; }
+@container cdpage (max-width: 340px) {
+  .tile-grid, .group-sub-grid { grid-template-columns: minmax(0, 1fr); }
+  .tile.wide { grid-column: span 1; }
+}
 
 /* ── Tiles ── */
 .tile {
@@ -243,8 +264,16 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   grid-column: span 1;
 }
 @media (hover: hover) {
+  .tile:not(.group):hover {
+    background: color-mix(in srgb, var(--primary-text-color, #fff) 8%, var(--cd-tile-bg));
+  }
+  .tile.group:not(.subgroup):hover:not(:has(.tile.group.subgroup:hover)):not(:has(.tile:hover)) {
+    background: color-mix(in srgb, var(--primary-text-color, #fff) 8%, var(--cd-tile-bg));
+    border-color: color-mix(in srgb, var(--primary-text-color, #fff) 16%, transparent);
+  }
   .tile.group.subgroup:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--primary-text-color, #fff) 10%, rgba(255, 255, 255, 0.05));
+    border-color: color-mix(in srgb, var(--primary-text-color, #fff) 18%, transparent);
   }
 }
 .group-icon-btn { position: relative; }
@@ -278,24 +307,29 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 
 /* ── Multi-select & Action Bar ── */
 .sel-checkbox {
-  width: 22px; height: 22px; border-radius: 6px; border: 2px solid rgba(255,255,255,.3);
+  width: 22px; height: 22px; border-radius: 6px; border: 2px solid rgba(128, 128, 128, .45);
   background: transparent; display: grid; place-items: center; cursor: pointer; flex: none;
-  transition: background .15s, border-color .15s; color: transparent;
+  transition: background .15s, border-color .15s; color: transparent; position: relative;
 }
+.sel-checkbox::after { content: ''; position: absolute; inset: -11px; }
 .sel-checkbox[data-checked] {
   background: var(--cd-accent); border-color: var(--cd-accent); color: #fff;
 }
 .sel-checkbox ha-icon { --mdc-icon-size: 16px; }
+.wizard-selection-slot {
+  flex-shrink: 0;
+  padding: 0 20px 10px;
+}
+.wizard-selection-slot:empty { display: none; }
 .selection-action-bar {
-  position: sticky; bottom: 0; left: 0; right: 0; z-index: 20;
   display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
-  padding: 10px 14px; margin: 12px 0 0; border-radius: var(--cd-radius);
+  padding: 10px 14px; margin: 0; border-radius: var(--cd-radius);
   background: var(--cd-card); border: 1.5px solid var(--cd-accent);
-  box-shadow: 0 -4px 20px rgba(0,0,0,.5); animation: cdFadeIn 0.2s ease-out;
+  box-shadow: 0 4px 18px rgba(0,0,0,.35); animation: cdFadeIn 0.2s ease-out;
   box-sizing: border-box; width: 100%;
 }
 .sel-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 140px; }
-.sel-count { font-size: 13px; font-weight: 700; color: var(--primary-text-color, #fff); }
+.sel-count { font-size: 13px; font-weight: 700; color: var(--primary-text-color, inherit); }
 .sel-names { font-size: 11px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sel-buttons { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; justify-content: flex-end; flex-wrap: wrap; }
 .btn-label-mobile { display: none; }
@@ -305,8 +339,9 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   flex: none; width: 38px; height: 38px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center;
   color: var(--tile-color); background: rgba(128, 128, 128, 0.18);
   background: color-mix(in srgb, var(--tile-color) 18%, transparent);
-  transition: background .2s, color .2s;
+  transition: background .2s, color .2s; position: relative;
 }
+.tile-icon::after { content: ''; position: absolute; inset: -3px; }
 .tile-icon:active { transform: scale(0.92); }
 .tile-info { flex: 1; min-width: 0; cursor: pointer; }
 .tile-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -314,27 +349,30 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .tile-btns { display: flex; gap: 4px; flex: none; }
 .mini-btn {
   width: 38px; height: 38px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center;
-  flex-shrink: 0; touch-action: manipulation;
+  flex-shrink: 0; touch-action: manipulation; position: relative;
   background: rgba(128, 128, 128, 0.2); background: color-mix(in srgb, var(--primary-text-color, #fff) 10%, transparent);
 }
+.mini-btn::after { content: ''; position: absolute; inset: -3px; }
 .mini-btn:disabled { opacity: .35; cursor: default; }
 .mini-btn:not(:disabled):active { transform: scale(0.9); }
 .mini-btn ha-icon { --mdc-icon-size: 20px; }
 .tile-feature { display: flex; align-items: center; gap: 10px; padding: 0 2px 2px; flex-wrap: wrap; min-width: 0; }
 .tile-feature[hidden] { display: none; }
-.swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); cursor: pointer; flex: none; padding: 0; }
+.swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); cursor: pointer; flex: none; padding: 0; position: relative; }
+.swatch::after { content: ''; position: absolute; inset: -8px; }
 .swatch:active { transform: scale(0.9); }
 input[type=range].slider {
-  -webkit-appearance: none; appearance: none; flex: 1; min-width: 60px; height: 28px; border-radius: 14px; outline: none; cursor: pointer;
-  background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
+  -webkit-appearance: none; appearance: none; flex: 1; min-width: 60px; height: 44px; border-radius: 14px; outline: none; cursor: pointer;
+  background: transparent;
   touch-action: none;
   box-sizing: border-box;
   padding: 0;
-  margin: 0;
+  margin: -8px 0;
 }
 input[type=range].slider::-webkit-slider-runnable-track {
   height: 28px;
   border-radius: 14px;
+  background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
 }
 input[type=range].slider::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -349,6 +387,7 @@ input[type=range].slider::-webkit-slider-thumb {
 input[type=range].slider::-moz-range-track {
   height: 28px;
   border-radius: 14px;
+  background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
 }
 input[type=range].slider::-moz-range-thumb {
   width: 6px;
@@ -406,7 +445,9 @@ input[type=range].slider::-moz-range-thumb {
   display: flex; align-items: center; gap: 10px; padding: 4px 6px; border-radius: var(--cd-tile-radius, 12px);
   background: transparent; min-height: 44px; transition: transform .15s, background .15s; width: 100%; min-width: 0;
 }
-.bin:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--primary-text-color, #fff) 10%, transparent); }
+@media (hover: hover) {
+  .bin:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--primary-text-color, #fff) 10%, transparent); }
+}
 .bin img { width: 38px; height: 38px; object-fit: contain; pointer-events: none; flex-shrink: 0; }
 .bin svg { width: 38px; height: 38px; flex-shrink: 0; pointer-events: none; }
 .bin ha-icon { --mdc-icon-size: 32px; flex-shrink: 0; }
@@ -435,12 +476,16 @@ input[type=range].slider::-moz-range-thumb {
   background: var(--cd-card); min-height: 52px; transition: transform .15s, background .15s;
   flex: 1 1 140px; min-width: 120px;
 }
-.trash-card .bin:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--primary-text-color, #fff) 10%, transparent); }
+@media (hover: hover) {
+  .trash-card .bin:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--primary-text-color, #fff) 10%, transparent); }
+}
 
 /* ── Standalone Announce Card ── */
 .announce-card { padding: 0; overflow: hidden; cursor: pointer; }
 .announce-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; transition: background .15s; }
-.announce-row:hover { background: color-mix(in srgb, var(--primary-text-color, #fff) 6%, transparent); }
+@media (hover: hover) {
+  .announce-row:hover { background: color-mix(in srgb, var(--primary-text-color, #fff) 6%, transparent); }
+}
 .announce-icon {
   width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none;
   color: var(--cd-accent); background: color-mix(in srgb, var(--cd-accent) 18%, transparent);
@@ -461,14 +506,16 @@ input[type=range].slider::-moz-range-thumb {
 
 /* ── Bottom nav ── */
 .nav {
-  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 5;
-  display: flex; gap: 8px; padding: 8px; border-radius: 28px; max-width: calc(100% - 24px);
+  position: fixed; left: 50%; bottom: calc(12px + var(--safe-bottom)); transform: translateX(-50%); z-index: 5;
+  display: flex; gap: 8px; padding: 8px; border-radius: 28px;
+  max-width: calc(100vw - 24px - var(--safe-left) - var(--safe-right));
+  overflow-x: auto; scrollbar-width: none;
   background: var(--cd-card); box-shadow: 0 4px 24px rgba(0,0,0,.35);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
 }
 .nav-btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 52px; height: 48px;
-  padding: 0 18px; border-radius: 24px; border: 0; cursor: pointer; background: var(--cd-tile-bg); font-weight: 600; font-size: 14px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 52px; min-height: 44px; height: 46px;
+  padding: 0 18px; border-radius: 23px; border: 0; cursor: pointer; background: var(--cd-tile-bg); font-weight: 600; font-size: 14px; flex: none;
 }
 .nav-btn:active { transform: scale(0.96); }
 
@@ -478,14 +525,21 @@ input[type=range].slider::-moz-range-thumb {
   background: rgba(0, 0, 0, 0.65);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   display: flex; align-items: center; justify-content: center;
-  padding: 24px 16px;
-  overflow-y: auto;
+  padding: max(16px, var(--safe-top)) max(16px, var(--safe-right)) max(16px, var(--safe-bottom)) max(16px, var(--safe-left));
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+.overlay.confirm-overlay {
+  z-index: 1600;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
 }
 .dialog {
-  width: min(1200px, 96vw);
-  min-height: min(740px, 88vh);
-  max-height: min(94vh, 940px);
-  height: min(820px, 90vh);
+  width: min(1040px, 100%);
+  height: min(780px, calc(100vh - 32px));
+  height: min(780px, calc(100dvh - 32px - var(--safe-top) - var(--safe-bottom)));
+  min-height: 0;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px - var(--safe-top) - var(--safe-bottom));
   margin: auto;
   display: flex; flex-direction: column;
   border-radius: var(--cd-radius);
@@ -496,125 +550,179 @@ input[type=range].slider::-moz-range-thumb {
   position: relative;
 }
 .dialog-head { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 12px 12px 12px 20px; border-bottom: 1px solid rgba(128,128,128,.18); border-radius: calc(var(--cd-radius) - 1px) calc(var(--cd-radius) - 1px) 0 0; }
-.dialog-head h2 { flex: 1; margin: 0; font-size: 18px; }
+.dialog-head h2 { flex: 1; min-width: 0; margin: 0; font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tabs { flex-shrink: 0; display: flex; gap: 4px; padding: 6px 12px 0; min-height: 44px; align-items: flex-end; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid rgba(128,128,128,.18); }
-.tab { flex-shrink: 0; border: 0; background: transparent; cursor: pointer; padding: 9px 14px; border-radius: 10px 10px 0 0; font-weight: 600; font-size: 13px; color: var(--cd-secondary); white-space: nowrap; transition: color .15s, background .15s; }
-.tab:hover { color: var(--primary-text-color, #fff); background: rgba(128,128,128,.08); }
+.tab { flex-shrink: 0; border: 0; background: transparent; cursor: pointer; padding: 9px 14px; min-height: 40px; border-radius: 10px 10px 0 0; font-weight: 600; font-size: 13px; color: var(--cd-secondary); white-space: nowrap; transition: color .15s, background .15s; }
+@media (hover: hover) {
+  .tab:hover { color: var(--primary-text-color, inherit); background: rgba(128,128,128,.08); }
+}
 .tab[data-active] { color: var(--cd-accent); box-shadow: inset 0 -2px 0 var(--cd-accent); }
-.dialog-body { flex: 1; min-height: 480px; overflow-y: auto; overflow-x: hidden; padding: 20px 24px 20px; display: flex; flex-direction: column; gap: 14px; }
-.dialog-foot { flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 24px; border-top: 1px solid rgba(128,128,128,.18); background: var(--cd-card); border-radius: 0 0 calc(var(--cd-radius) - 1px) calc(var(--cd-radius) - 1px); }
-.dialog-foot-actions { display: flex; align-items: center; gap: 10px; }
-.hint { font-size: 12px; color: var(--cd-secondary); line-height: 1.5; white-space: pre-line; }
-.section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--cd-secondary); margin-top: 6px; }
-.row-card { border-radius: var(--cd-tile-radius, 12px); background: var(--cd-tile-bg); padding: 10px 12px; display: grid; gap: 10px; }
-.row-head { display: flex; align-items: center; gap: 6px; }
+.dialog-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 16px 22px 20px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.dialog-foot { flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 20px; border-top: 1px solid rgba(128,128,128,.18); background: var(--cd-card); border-radius: 0 0 calc(var(--cd-radius) - 1px) calc(var(--cd-radius) - 1px); }
+.dialog-foot-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.confirm-modal-dialog {
+  width: min(420px, calc(100vw - 32px - var(--safe-left) - var(--safe-right)));
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: calc(100dvh - 32px - var(--safe-top) - var(--safe-bottom));
+}
+.confirm-modal-body { flex: 0 1 auto; }
+.confirm-modal-msg { margin: 0; font-size: 14px; line-height: 1.45; color: var(--primary-text-color, inherit); }
+.hint { font-size: 12px; color: var(--cd-secondary); line-height: 1.45; white-space: pre-line; }
+.section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--cd-secondary); margin-top: 4px; }
+.row-card { border-radius: var(--cd-tile-radius, 12px); background: var(--cd-tile-bg); padding: 10px 12px; display: grid; gap: 10px; min-width: 0; }
+.row-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .row-head .row-title { flex: 1; font-weight: 600; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fields { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.fields { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); min-width: 0; }
 .field { display: grid; gap: 6px; font-size: 12px; color: var(--cd-secondary); min-width: 0; position: relative; }
-.field:has([data-open]), .row-card:has([data-open]), .channel-card:has([data-open]) { position: relative; z-index: 999 !important; }
-.field-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 22px; }
-.field-label { font-size: 12px; font-weight: 600; color: var(--cd-secondary); white-space: nowrap; }
+.field-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 22px; flex-wrap: wrap; }
+.field-label { font-size: 12px; font-weight: 600; color: var(--cd-secondary); }
 .field > input[type=text], .field > input[type=number], .field > select, .field > input:not([type]) {
   height: 40px; border-radius: 12px; border: 1px solid rgba(128,128,128,.3); padding: 0 10px; font: inherit; font-size: 13px;
-  background: var(--cd-card); color: var(--primary-text-color, #fff); min-width: 0; width: 100%; outline: none; transition: border-color .2s;
+  background: var(--cd-card); color: var(--primary-text-color, inherit); min-width: 0; width: 100%; outline: none; transition: border-color .2s;
 }
 .field > input[type=text]:focus, .field > input[type=number]:focus, .field > select:focus { border-color: var(--cd-accent); }
 .field input[type=color] { height: 38px; width: 100%; border: 1px solid rgba(128,128,128,.3); border-radius: 10px; background: var(--cd-card); padding: 2px; }
-.field.check { grid-auto-flow: column; justify-content: start; align-items: center; gap: 8px; height: 38px; color: var(--primary-text-color, #fff); font-size: 14px; }
+.field.check { grid-auto-flow: column; justify-content: start; align-items: center; gap: 8px; min-height: 40px; color: var(--primary-text-color, inherit); font-size: 14px; }
 .user-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .user-chip {
-  border: 1px solid rgba(128,128,128,.35); background: transparent; border-radius: 16px; padding: 4px 12px; cursor: pointer; font-size: 13px; color: var(--primary-text-color, #fff);
+  border: 1px solid rgba(128,128,128,.35); background: transparent; border-radius: 16px; padding: 6px 12px; min-height: 36px; cursor: pointer; font-size: 13px; color: var(--primary-text-color, inherit);
 }
 .user-chip[data-on] { background: var(--cd-accent); border-color: var(--cd-accent); color: #fff; }
 .btn {
-  height: 40px; padding: 0 18px; border-radius: 20px; border: 0; cursor: pointer; font-weight: 600; background: var(--cd-tile-bg);
-  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 40px; padding: 0 16px; border-radius: 20px; border: 0; cursor: pointer; font-weight: 600; font-size: 13px;
+  background: var(--cd-tile-bg); color: var(--primary-text-color, inherit);
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
 }
+.btn.small { min-height: 36px; padding: 0 12px; border-radius: 18px; font-size: 12px; }
+.btn.secondary { background: var(--cd-tile-bg); border: 1px solid rgba(128,128,128,.22); color: var(--primary-text-color, inherit); }
 .btn.primary { background: var(--cd-accent); color: #fff; }
 .btn.success { background: var(--success-color, #43a047); color: #fff; }
 .btn.danger { color: #f44336; }
 .btn:disabled { opacity: .5; cursor: default; }
 
-/* ── Wizard ── */
-.wizard-steps { flex-shrink: 0; display: flex; gap: 8px; padding: 12px 20px 8px; border-bottom: 1px solid rgba(128,128,128,.18); }
-.wizard-step { flex: 1; display: grid; gap: 4px; font-size: 11px; font-weight: 600; color: var(--cd-secondary); }
-.wizard-step[data-active] { color: var(--primary-text-color, #fff); }
+/* ── Wizard & Shared Device List ── */
+.wizard-steps { flex-shrink: 0; display: flex; gap: 8px; padding: 10px 20px 8px; border-bottom: 1px solid rgba(128,128,128,.18); }
+.wizard-step { flex: 1; display: grid; gap: 4px; font-size: 11px; font-weight: 600; color: var(--cd-secondary); min-width: 0; }
+.wizard-step > div:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wizard-step[data-active] { color: var(--primary-text-color, inherit); }
 .wizard-step[data-done] { color: var(--success-color, #43a047); }
 .wizard-bar { height: 4px; border-radius: 2px; background: rgba(128,128,128,.2); transition: background .3s; }
 .wizard-step[data-active] .wizard-bar { background: var(--cd-accent); }
 .wizard-step[data-done] .wizard-bar { background: var(--success-color, #43a047); }
-.device-list { display: grid; gap: 8px; flex: 1; min-height: 250px; max-height: none; overflow-y: auto; padding-right: 6px; box-sizing: border-box; }
-.device-card {
-  display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px;
-  background: var(--cd-tile-bg); cursor: pointer; border: 2px solid transparent; transition: border-color .2s, background .2s;
-  box-sizing: border-box;
+.devices-toolbar {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center; min-width: 0;
 }
-.device-card:hover { background: color-mix(in srgb, var(--primary-text-color, #fff) 10%, transparent); }
-.device-card[data-selected] { border-color: var(--cd-accent); background: color-mix(in srgb, var(--cd-accent) 14%, var(--cd-tile-bg)); }
+.devices-toolbar > * { flex: 1 1 180px; min-width: 0; }
+.device-list { display: flex; flex-direction: column; gap: 10px; min-width: 0; box-sizing: border-box; }
+.device-cards { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.device-card {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px;
+  background: var(--cd-tile-bg); cursor: pointer; border: 2px solid transparent; transition: border-color .2s, background .2s;
+  box-sizing: border-box; min-width: 0; width: 100%;
+}
+@media (hover: hover) {
+  .device-card:hover { background: color-mix(in srgb, var(--primary-text-color, #fff) 10%, transparent); }
+}
+.device-card[data-selected] {
+  border-color: var(--cd-accent);
+  background: rgba(3, 169, 244, 0.14);
+  background: color-mix(in srgb, var(--cd-accent) 14%, var(--cd-tile-bg));
+}
+.device-card-actions {
+  display: flex; align-items: center; gap: 6px; flex: none; margin-left: auto;
+}
 .group-card {
   border: 1.5px solid rgba(255, 193, 7, 0.28);
 }
 .group-card[data-selected] {
   border-color: var(--cd-accent);
+  background: rgba(3, 169, 244, 0.14);
   background: color-mix(in srgb, var(--cd-accent) 14%, var(--cd-tile-bg));
 }
 .device-channels-wrap {
-  display: grid; gap: 4px; padding: 6px 10px 8px 36px; margin-top: -4px;
+  display: grid; gap: 4px; padding: 6px 10px 8px 24px; margin-top: -4px;
   background: var(--cd-tile-bg); border-radius: 0 0 12px 12px;
-  border-left: 2px solid var(--cd-accent);
+  border-left: 2px solid var(--cd-accent); min-width: 0;
 }
 .device-channel-row {
-  display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px;
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; min-height: 44px; border-radius: 8px;
   background: var(--cd-card); cursor: pointer; border: 1.5px solid transparent;
-  transition: border-color .15s, background .15s;
+  transition: border-color .15s, background .15s; min-width: 0;
 }
-.device-channel-row:hover { background: color-mix(in srgb, var(--primary-text-color, #fff) 8%, transparent); }
+@media (hover: hover) {
+  .device-channel-row:hover { background: color-mix(in srgb, var(--primary-text-color, #fff) 8%, transparent); }
+}
 .device-channel-row[data-selected] {
   border-color: var(--cd-accent);
+  background: rgba(3, 169, 244, 0.14);
   background: color-mix(in srgb, var(--cd-accent) 14%, var(--cd-tile-bg));
 }
 .device-channel-info { flex: 1; min-width: 0; }
 .device-channel-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.device-channel-meta { font-size: 11px; color: var(--cd-secondary); }
+.device-channel-meta { font-size: 11px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .btn-channels-toggle {
-  display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 8px;
+  display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; min-height: 30px; border-radius: 10px;
   background: var(--cd-tile-bg); color: var(--primary-text-color, inherit); font-size: 11px; font-weight: 600;
-  border: 1px solid rgba(128,128,128,.2); cursor: pointer; transition: background .15s;
+  border: 1px solid rgba(128,128,128,.2); cursor: pointer; transition: background .15s; position: relative;
 }
-.btn-channels-toggle:hover { background: rgba(128,128,128,.2); }
+.btn-channels-toggle::after { content: ''; position: absolute; inset: -7px -4px; }
+@media (hover: hover) {
+  .btn-channels-toggle:hover { background: rgba(128,128,128,.2); }
+}
 .btn-channels-toggle ha-icon { --mdc-icon-size: 14px; }
 .group-member-tag {
   display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px;
-  background: rgba(128,128,128,.2); font-size: 12px; font-weight: 600; color: var(--primary-text-color, #fff);
+  background: rgba(128,128,128,.2); font-size: 12px; font-weight: 600; color: var(--primary-text-color, inherit);
 }
 .group-member-tag .remove-btn {
-  background: transparent; border: 0; cursor: pointer; color: rgba(255,255,255,.6);
-  padding: 0; display: grid; place-items: center; font-size: 12px; border-radius: 50%;
+  background: transparent; border: 0; cursor: pointer; color: var(--cd-secondary);
+  padding: 2px; min-width: 24px; min-height: 24px; display: grid; place-items: center; font-size: 12px; border-radius: 50%; position: relative;
 }
-.group-member-tag .remove-btn:hover { color: #f44336; }
+.group-member-tag .remove-btn::after { content: ''; position: absolute; inset: -10px; }
+@media (hover: hover) {
+  .group-member-tag .remove-btn:hover { color: #f44336; }
+}
 .device-card .d-icon {
-  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
   background: rgba(128,128,128,.18); color: var(--cd-accent); flex: none;
 }
 .device-card .d-info { flex: 1; min-width: 0; }
 .device-card .d-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.device-card .d-meta { font-size: 12px; color: var(--cd-secondary); display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
-.cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: 8px; }
+.device-card .d-meta { font-size: 12px; color: var(--cd-secondary); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 3px; min-width: 0; }
+.device-card .d-mfg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 118px), 1fr)); gap: 8px; }
 .cat-card {
   display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border-radius: 12px;
   background: var(--cd-tile-bg); border: 1px solid transparent; cursor: pointer; text-align: center; font-size: 12px; font-weight: 600;
-  transition: transform .15s, border-color .15s, background .15s;
+  transition: transform .15s, border-color .15s, background .15s; min-width: 0;
 }
-.cat-card:hover { transform: translateY(-2px); }
-.cat-card[data-selected] { border-color: var(--cat-color, var(--cd-accent)); background: color-mix(in srgb, var(--cat-color, var(--cd-accent)) 16%, transparent); }
+@media (hover: hover) {
+  .cat-card:hover { transform: translateY(-2px); }
+}
+.cat-card[data-selected] {
+  border-color: var(--cat-color, var(--cd-accent));
+  background: rgba(3, 169, 244, 0.16);
+  background: color-mix(in srgb, var(--cat-color, var(--cd-accent)) 16%, transparent);
+}
 .cat-card ha-icon { --mdc-icon-size: 28px; color: var(--cat-color, var(--cd-accent)); }
 .badge-tag {
   display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
-  background: rgba(128,128,128,.2); color: var(--cd-secondary);
+  background: rgba(128,128,128,.2); color: var(--cd-secondary); max-width: 100%; min-width: 0;
 }
 .badge-tag.ok { background: rgba(67, 160, 71, .2); color: #81c784; }
 .badge-tag.area { background: rgba(3, 169, 244, .18); color: #4fc3f7; }
 .badge-tag.category {
+  background: rgba(3, 169, 244, 0.16);
   background: color-mix(in srgb, var(--badge-cat-color, var(--cd-accent)) 16%, transparent);
   color: var(--badge-cat-color, var(--cd-accent));
   border: 1px solid color-mix(in srgb, var(--badge-cat-color, var(--cd-accent)) 25%, transparent);
@@ -624,20 +732,22 @@ input[type=range].slider::-moz-range-thumb {
   color: var(--badge-cat-color, var(--cd-accent));
 }
 .channel-card {
-  border-radius: 12px; background: var(--cd-tile-bg); padding: 10px 14px; display: grid; gap: 10px;
+  border-radius: 12px; background: var(--cd-tile-bg); padding: 10px 14px; display: grid; gap: 10px; min-width: 0;
 }
-.channel-head { display: flex; align-items: center; gap: 10px; }
-.channel-head .ch-title { flex: 1; font-weight: 600; font-size: 14px; }
+.channel-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.channel-head .ch-title { flex: 1 1 140px; min-width: 0; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.channel-head .badge-tag { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .search-bar {
-  display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 40px; border-radius: 12px;
-  background: var(--cd-card); border: 1px solid rgba(128,128,128,.3);
+  display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 42px; border-radius: 12px;
+  background: var(--cd-card); border: 1px solid rgba(128,128,128,.3); min-width: 0; width: 100%;
 }
-.search-bar input { flex: 1; border: 0; background: transparent; color: inherit; font: inherit; outline: none; }
-.filter-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.search-bar input { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; color: inherit; font: inherit; outline: none; }
+.filter-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
 .filter-chip {
-  padding: 4px 12px; border-radius: 14px; border: 1px solid rgba(128,128,128,.3); background: transparent;
-  color: var(--cd-secondary); cursor: pointer; font-size: 12px; font-weight: 500;
+  padding: 6px 12px; min-height: 36px; border-radius: 18px; border: 1px solid rgba(128,128,128,.3); background: transparent;
+  color: var(--cd-secondary); cursor: pointer; font-size: 12px; font-weight: 500; position: relative;
 }
+.filter-chip::after { content: ''; position: absolute; inset: -4px 0; }
 .filter-chip[data-active] { background: var(--cd-accent); color: #fff; border-color: var(--cd-accent); }
 
 details.sub { border-radius: 10px; background: rgba(128,128,128,.08); padding: 6px 10px; }
@@ -646,106 +756,134 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .sub-tile .st-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sub-tile .st-id { color: var(--cd-secondary); font-size: 11px; }
 .sub-tile[data-hidden] .st-name { opacity: .45; text-decoration: line-through; }
-.toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); z-index: 30; background: #323232; color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
+.toast {
+  position: fixed; left: 50%; bottom: calc(20px + var(--safe-bottom)); transform: translateX(-50%); z-index: 2000;
+  max-width: calc(100vw - 32px - var(--safe-left) - var(--safe-right));
+  background: #262626; color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 13px; font-weight: 600;
+  text-align: center; box-shadow: 0 6px 22px rgba(0,0,0,.45);
+}
+.toast.error { background: #c62828; }
+
+.cd-portal-menu {
+  position: fixed;
+  z-index: 1500;
+  margin: 0;
+  box-sizing: border-box;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, .36);
+}
 
 /* ── Entity Picker ── */
-.entity-picker { position: relative; width: 100%; font-size: 13px; }
+.entity-picker { position: relative; width: 100%; min-width: 0; font-size: 13px; }
 .ep-box {
-  display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 4px 10px;
+  display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 10px;
   border-radius: 10px; border: 1px solid rgba(128,128,128,.3); background: var(--cd-card);
   color: var(--primary-text-color, inherit);
   cursor: pointer; transition: border-color .2s, box-shadow .2s; outline: none;
 }
-.entity-picker:has([data-open]) { z-index: 999 !important; }
-.ep-box:hover { border-color: var(--cd-accent); }
+@media (hover: hover) {
+  .ep-box:hover { border-color: var(--cd-accent); }
+}
 .ep-box[data-open] { border-color: var(--cd-accent); box-shadow: 0 0 0 1px var(--cd-accent); }
 .ep-icon { flex: none; color: var(--cd-accent); display: grid; place-items: center; }
 .ep-content { flex: 1; min-width: 0; display: grid; gap: 1px; }
 .ep-title { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--primary-text-color, inherit); }
 .ep-sub { font-size: 11px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ep-placeholder { color: var(--cd-secondary); font-size: 13px; }
-.ep-clear { border: 0; background: transparent; cursor: pointer; color: var(--cd-secondary); padding: 4px; border-radius: 50%; display: grid; place-items: center; flex: none; }
-.ep-clear:hover { color: var(--primary-text-color, inherit); background: rgba(128,128,128,.2); }
+.ep-clear { border: 0; background: transparent; cursor: pointer; color: var(--cd-secondary); padding: 6px; min-width: 32px; min-height: 32px; border-radius: 50%; display: grid; place-items: center; flex: none; position: relative; }
+.ep-clear::after { content: ''; position: absolute; inset: -6px; }
+@media (hover: hover) {
+  .ep-clear:hover { color: var(--primary-text-color, inherit); background: rgba(128,128,128,.2); }
+}
 .ep-chevron { flex: none; color: var(--cd-secondary); transition: transform .2s ease; }
 .ep-box[data-open] .ep-chevron { transform: rotate(180deg); }
 .ep-dropdown {
-  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1000;
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1500;
   border-radius: 12px; background: var(--cd-card); color: var(--primary-text-color, inherit);
   border: 1px solid rgba(128,128,128,.28);
   box-shadow: 0 12px 32px rgba(0,0,0,.28); display: flex; flex-direction: column; overflow: hidden;
 }
 .ep-search {
-  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex-shrink: 0;
   border-bottom: 1px solid rgba(128,128,128,.15); background: var(--cd-tile-bg);
 }
 .ep-search input {
-  flex: 1; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; outline: none;
+  flex: 1; min-width: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; outline: none;
 }
-.ep-chips { display: flex; gap: 6px; padding: 6px 10px; overflow-x: auto; background: var(--cd-tile-bg); border-bottom: 1px solid rgba(128,128,128,.12); }
-.ep-list { max-height: 240px; overflow-y: auto; display: grid; }
+.ep-chips { display: flex; gap: 6px; padding: 6px 10px; overflow-x: auto; flex-shrink: 0; background: var(--cd-tile-bg); border-bottom: 1px solid rgba(128,128,128,.12); scrollbar-width: none; }
+.ep-list { flex: 1; min-height: 0; max-height: 240px; overflow-y: auto; -webkit-overflow-scrolling: touch; display: grid; }
 .ep-item {
-  display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer;
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-height: 44px; cursor: pointer;
   border-bottom: 1px solid rgba(128,128,128,.06); transition: background .15s; outline: none;
 }
-.ep-item:hover, .ep-item:focus { background: color-mix(in srgb, var(--cd-accent) 15%, transparent); }
-.ep-item[data-active] { background: color-mix(in srgb, var(--cd-accent) 22%, transparent); }
+@media (hover: hover) {
+  .ep-item:hover, .ep-item:focus { background: color-mix(in srgb, var(--cd-accent) 15%, transparent); }
+}
+.ep-item[data-active] { background: rgba(3, 169, 244, 0.18); background: color-mix(in srgb, var(--cd-accent) 22%, transparent); }
 .ep-item .item-state { flex: none; font-size: 11px; color: var(--cd-secondary); background: rgba(128,128,128,.15); padding: 2px 6px; border-radius: 6px; }
 .ep-check { flex: none; color: var(--cd-accent); }
 
 /* ── Color Picker ── */
-.color-picker { position: relative; width: 100%; }
-.color-picker:has([data-open]) { z-index: 999 !important; }
+.color-picker { position: relative; width: 100%; min-width: 0; }
 .cp-box {
-  display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px;
+  display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px;
   border-radius: 12px; border: 1px solid rgba(128,128,128,.3); background: var(--cd-card);
   color: var(--primary-text-color, inherit); width: 100%; cursor: pointer; text-align: left; font-size: 13px;
   transition: border-color .2s; outline: none;
 }
-.cp-box:hover, .cp-box[data-open] { border-color: var(--cd-accent); }
+@media (hover: hover) {
+  .cp-box:hover { border-color: var(--cd-accent); }
+}
+.cp-box[data-open] { border-color: var(--cd-accent); }
 .cp-dot { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid rgba(128,128,128,.35); flex-shrink: 0; }
 .cp-label { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cp-chevron { flex-shrink: 0; color: var(--cd-secondary); transition: transform .2s ease; }
 .cp-box[data-open] .cp-chevron { transform: rotate(180deg); }
 .cp-dropdown {
-  position: absolute; top: calc(100% + 4px); right: 0; width: max(100%, 250px); max-width: 85vw; z-index: 1000;
+  position: absolute; top: calc(100% + 4px); right: 0; width: max(100%, 250px); max-width: calc(100vw - 24px); z-index: 1500;
   border-radius: 14px; background: var(--cd-card); color: var(--primary-text-color, inherit);
   border: 1px solid rgba(128,128,128,.28);
-  box-shadow: 0 12px 32px rgba(0,0,0,.28); max-height: 260px; overflow-y: auto; padding: 6px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.28); max-height: 260px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 6px;
 }
 .cp-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
 .cp-item {
-  display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px;
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-height: 42px; border-radius: 8px;
   cursor: pointer; transition: background .15s; font-size: 13px;
 }
-.cp-item:hover { background: color-mix(in srgb, var(--cd-accent) 15%, transparent); }
-.cp-item[data-active] { background: color-mix(in srgb, var(--cd-accent) 22%, transparent); font-weight: 600; }
+@media (hover: hover) {
+  .cp-item:hover { background: color-mix(in srgb, var(--cd-accent) 15%, transparent); }
+}
+.cp-item[data-active] { background: rgba(3, 169, 244, 0.2); background: color-mix(in srgb, var(--cd-accent) 22%, transparent); font-weight: 600; }
 .cp-opt-name { flex: 1; }
 .cp-check { margin-left: auto; color: var(--cd-accent); }
 
 /* ── Icon Picker ── */
-.icon-picker { position: relative; width: 100%; }
-.icon-picker:has([data-open]) { z-index: 999 !important; }
+.icon-picker { position: relative; width: 100%; min-width: 0; }
 .ip-box {
-  display: flex; align-items: center; gap: 8px; height: 40px; padding: 2px 6px 2px 8px;
+  display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 2px 6px 2px 8px;
   border-radius: 12px; border: 1px solid rgba(128,128,128,.3); background: var(--cd-card);
   color: var(--primary-text-color, inherit);
   transition: border-color .2s, box-shadow .2s;
 }
-.ip-box:hover, .ip-box[data-open] { border-color: var(--cd-accent); }
-.ip-box[data-open] { box-shadow: 0 0 0 1px var(--cd-accent); }
+@media (hover: hover) {
+  .ip-box:hover { border-color: var(--cd-accent); }
+}
+.ip-box[data-open] { border-color: var(--cd-accent); box-shadow: 0 0 0 1px var(--cd-accent); }
 .ip-preview {
-  width: 30px; height: 30px; border-radius: 8px; background: var(--cd-tile-bg);
-  display: grid; place-items: center; color: var(--cd-accent); flex-shrink: 0;
+  width: 32px; height: 32px; border-radius: 8px; background: var(--cd-tile-bg);
+  display: grid; place-items: center; color: var(--cd-accent); flex-shrink: 0; cursor: pointer;
 }
 .ip-input { flex: 1; border: 0; background: transparent; color: var(--primary-text-color, inherit); font: inherit; font-size: 13px; outline: none; min-width: 0; }
 .ip-clear, .ip-toggle {
-  width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent;
-  cursor: pointer; color: var(--cd-secondary); display: grid; place-items: center; flex-shrink: 0;
+  width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent;
+  cursor: pointer; color: var(--cd-secondary); display: grid; place-items: center; flex-shrink: 0; position: relative;
 }
-.ip-clear:hover, .ip-toggle:hover { background: var(--cd-tile-bg); color: var(--primary-text-color, inherit); }
+.ip-clear::after, .ip-toggle::after { content: ''; position: absolute; inset: -6px; }
+@media (hover: hover) {
+  .ip-clear:hover, .ip-toggle:hover { background: var(--cd-tile-bg); color: var(--primary-text-color, inherit); }
+}
 .ip-clear[hidden] { display: none; }
 .ip-dropdown {
-  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1000;
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1500;
   border-radius: 14px; background: var(--cd-card); color: var(--primary-text-color, inherit);
   border: 1px solid rgba(128,128,128,.28);
   box-shadow: 0 12px 32px rgba(0,0,0,.28); max-height: 280px; display: flex; flex-direction: column; overflow: hidden;
@@ -753,16 +891,18 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .ip-dropdown[hidden] { display: none; }
 .ip-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px;
-  padding: 8px; overflow-y: auto; max-height: 268px;
+  padding: 8px; overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1; min-height: 0;
 }
 .ip-chip {
-  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; min-height: 52px;
   border-radius: 10px; border: 1px solid transparent; background: var(--cd-tile-bg);
   color: inherit; cursor: pointer; text-align: center; font-size: 11px;
   transition: transform .12s, border-color .12s, background .12s;
 }
-.ip-chip:hover { transform: translateY(-2px); border-color: var(--cd-accent); background: color-mix(in srgb, var(--cd-accent) 15%, transparent); }
-.ip-chip.active { border-color: var(--cd-accent); background: color-mix(in srgb, var(--cd-accent) 22%, transparent); font-weight: 600; }
+@media (hover: hover) {
+  .ip-chip:hover { transform: translateY(-2px); border-color: var(--cd-accent); background: color-mix(in srgb, var(--cd-accent) 15%, transparent); }
+}
+.ip-chip.active { border-color: var(--cd-accent); background: rgba(3, 169, 244, 0.2); background: color-mix(in srgb, var(--cd-accent) 22%, transparent); font-weight: 600; }
 .ip-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70px; }
 .ip-empty { padding: 20px 12px; text-align: center; color: var(--cd-secondary); font-size: 12px; }
 
@@ -809,27 +949,27 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 }
 .warning-detail-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .warning-detail-back {
-  display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px 0 10px;
-  border-radius: 19px; border: 0; cursor: pointer; background: var(--cd-tile-bg);
-  color: var(--primary-text-color, #fff); font-weight: 600; font-size: 13px;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px 0 10px;
+  border-radius: 22px; border: 0; cursor: pointer; background: var(--cd-tile-bg);
+  color: var(--primary-text-color, inherit); font-weight: 600; font-size: 13px;
   transition: transform .12s, background .15s;
 }
 .warning-detail-back:active { transform: scale(0.96); }
-.warning-detail-title-wrap { display: flex; align-items: center; gap: 10px; }
+.warning-detail-title-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .warning-detail-title-wrap .icon {
   width: 40px; height: 40px; border-radius: 12px; background: rgba(251, 140, 0, 0.15);
-  display: grid; place-items: center; color: #fb8c00; font-size: 20px;
+  display: grid; place-items: center; color: #fb8c00; font-size: 20px; flex: none;
 }
-.warning-detail-title { margin: 0; font-size: 20px; font-weight: 700; color: var(--primary-text-color, #fff); }
+.warning-detail-title { margin: 0; font-size: 20px; font-weight: 700; color: var(--primary-text-color, inherit); }
 .warning-detail-count {
   display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px;
   border-radius: 14px; background: var(--cd-tile-bg); font-size: 12px; font-weight: 600;
-  color: var(--primary-text-color, #fff);
+  color: var(--primary-text-color, inherit);
 }
 .warning-list { display: flex; flex-direction: column; gap: 14px; }
 .warning-card {
   background: var(--cd-card); border-radius: var(--cd-radius); padding: 18px 20px;
-  display: flex; flex-direction: column; gap: 14px; border: 1px solid rgba(255,255,255,.08);
+  display: flex; flex-direction: column; gap: 14px; border: 1px solid rgba(128,128,128,.16);
   box-shadow: 0 4px 20px rgba(0,0,0,.25);
 }
 .warning-top {
@@ -845,8 +985,8 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   color: var(--cd-secondary); font-weight: 500;
 }
 .warning-time ha-icon { --mdc-icon-size: 16px; }
-.warning-hl { font-size: 18px; font-weight: 700; line-height: 1.3; color: var(--primary-text-color, #fff); }
-.warning-desc { font-size: 14px; line-height: 1.55; color: rgba(255,255,255,.88); white-space: pre-line; }
+.warning-hl { font-size: 18px; font-weight: 700; line-height: 1.3; color: var(--primary-text-color, inherit); }
+.warning-desc { font-size: 14px; line-height: 1.55; color: var(--primary-text-color, inherit); opacity: 0.9; white-space: pre-line; }
 .warning-instruction {
   background: color-mix(in srgb, var(--cd-tile-bg) 80%, rgba(251,140,0,.15));
   border-radius: var(--cd-tile-radius, 12px); border-left: 3px solid #fb8c00;
@@ -857,11 +997,11 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   text-transform: uppercase; letter-spacing: .5px; color: #fb8c00;
 }
 .warning-instruction-title ha-icon { --mdc-icon-size: 16px; }
-.warning-instruction-text { font-size: 13px; line-height: 1.5; color: rgba(255,255,255,.9); }
+.warning-instruction-text { font-size: 13px; line-height: 1.5; color: var(--primary-text-color, inherit); opacity: 0.9; }
 .warning-empty {
   background: var(--cd-card); border-radius: var(--cd-radius); padding: 48px 24px;
   display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px;
-  border: 1px solid rgba(255,255,255,.06);
+  border: 1px solid rgba(128,128,128,.12);
 }
 .warning-empty .icon {
   width: 56px; height: 56px; border-radius: 50%; background: rgba(76, 175, 80, 0.15);
@@ -871,14 +1011,14 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .warning-empty .sub { font-size: 13px; color: var(--cd-secondary); max-width: 420px; line-height: 1.4; }
 .room-detail-head {
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
-  padding: 16px; border-radius: var(--cd-radius); background: var(--cd-card);
+  padding: 14px 16px; border-radius: var(--cd-radius); background: var(--cd-card);
   box-shadow: 0 4px 20px rgba(0,0,0,.25);
 }
-.room-detail-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.room-detail-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
 .room-detail-back {
-  display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px 0 10px;
-  border-radius: 19px; border: 0; cursor: pointer; background: var(--cd-tile-bg);
-  color: var(--primary-text-color, #fff); font-weight: 600; font-size: 13px;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px 0 10px;
+  border-radius: 22px; border: 0; cursor: pointer; background: var(--cd-tile-bg);
+  color: var(--primary-text-color, inherit); font-weight: 600; font-size: 13px;
   transition: transform .12s, background .15s;
 }
 .room-detail-back:active { transform: scale(0.96); }
@@ -927,15 +1067,17 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .cover-slider-label { font-size: 11px; color: var(--cd-secondary); font-weight: 600; min-width: 26px; }
 .cover-slider-wrap input[type=range].slider {
   --tile-color: #9c27b0;
-  height: 24px;
+  height: 44px;
   border-radius: 12px;
   box-sizing: border-box;
   padding: 0;
-  margin: 0;
+  margin: -8px 0;
+  background: transparent;
 }
 .cover-slider-wrap input[type=range].slider::-webkit-slider-runnable-track {
   height: 24px;
   border-radius: 12px;
+  background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
 }
 .cover-slider-wrap input[type=range].slider::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -950,6 +1092,7 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .cover-slider-wrap input[type=range].slider::-moz-range-track {
   height: 24px;
   border-radius: 12px;
+  background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
 }
 .cover-slider-wrap input[type=range].slider::-moz-range-thumb {
   width: 6px;
@@ -961,15 +1104,16 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 }
 
 /* ── Custom Dropdown (No native browser <select>) ── */
-.custom-dropdown { position: relative; width: 100%; font-size: 13px; z-index: 10; }
-.custom-dropdown:has([data-open]) { z-index: 999 !important; }
+.custom-dropdown { position: relative; width: 100%; min-width: 0; font-size: 13px; }
 .cdd-box {
-  display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 4px 12px;
+  display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 12px;
   border-radius: 10px; border: 1px solid rgba(128,128,128,.3); background: var(--cd-card);
   color: var(--primary-text-color, inherit);
-  cursor: pointer; transition: border-color .2s, box-shadow .2s; outline: none; user-select: none;
+  cursor: pointer; transition: border-color .2s, box-shadow .2s; outline: none; user-select: none; min-width: 0;
 }
-.cdd-box:hover:not(.disabled) { border-color: var(--cd-accent); }
+@media (hover: hover) {
+  .cdd-box:hover:not(.disabled) { border-color: var(--cd-accent); }
+}
 .cdd-box[data-open] { border-color: var(--cd-accent); box-shadow: 0 0 0 1px var(--cd-accent); }
 .cdd-box.disabled { opacity: .5; cursor: default; }
 .cdd-icon { flex: none; display: grid; place-items: center; font-size: 18px; }
@@ -979,7 +1123,7 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .cdd-chevron { flex: none; color: var(--cd-secondary); transition: transform .2s ease; }
 .cdd-box[data-open] .cdd-chevron { transform: rotate(180deg); }
 .cdd-menu {
-  position: absolute; z-index: 1000; left: 0; right: 0; top: calc(100% + 4px);
+  position: absolute; z-index: 1500; left: 0; right: 0; top: calc(100% + 4px);
   background: var(--cd-card); color: var(--primary-text-color, inherit);
   border-radius: 12px; border: 1px solid rgba(128,128,128,.28);
   box-shadow: 0 12px 32px rgba(0,0,0,.28); max-height: 280px; display: flex; flex-direction: column; overflow: hidden;
@@ -990,19 +1134,21 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   to { opacity: 1; transform: translateY(0); }
 }
 .cdd-search-row {
-  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex-shrink: 0;
   background: var(--cd-tile-bg); color: var(--primary-text-color, inherit);
   border-bottom: 1px solid rgba(128,128,128,.15);
 }
-.cdd-search-input { flex: 1; border: 0; background: transparent; color: var(--primary-text-color, inherit); font: inherit; font-size: 13px; outline: none; }
-.cdd-list { overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.cdd-search-input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--primary-text-color, inherit); font: inherit; font-size: 13px; outline: none; }
+.cdd-list { overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1; min-height: 0; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
 .cdd-item {
-  display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px;
+  display: flex; align-items: center; gap: 10px; padding: 10px; min-height: 44px; border-radius: 8px;
   color: var(--primary-text-color, inherit);
   cursor: pointer; transition: background .12s; user-select: none;
 }
-.cdd-item:hover { background: rgba(128,128,128,.15); }
-.cdd-item.selected { background: color-mix(in srgb, var(--cd-accent) 18%, transparent); }
+@media (hover: hover) {
+  .cdd-item:hover { background: rgba(128,128,128,.15); }
+}
+.cdd-item.selected { background: rgba(3, 169, 244, 0.16); background: color-mix(in srgb, var(--cd-accent) 18%, transparent); }
 .cdd-item-texts { flex: 1; min-width: 0; }
 .cdd-item-label { font-size: 13px; font-weight: 600; color: var(--primary-text-color, inherit); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cdd-item-sub { font-size: 11px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1040,20 +1186,24 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .feature-card {
   display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px;
   background: var(--cd-tile-bg); border: 1px solid rgba(128,128,128,.18); cursor: pointer;
-  transition: background .15s, border-color .15s, transform .1s;
+  transition: background .15s, border-color .15s, transform .1s; min-width: 0;
 }
-.feature-card:hover { border-color: rgba(255,255,255,.25); }
+@media (hover: hover) {
+  .feature-card:hover { border-color: rgba(128,128,128,.4); }
+}
 .feature-card[data-active] {
   border-color: var(--feat-color, var(--cd-accent));
+  background: rgba(3, 169, 244, 0.12);
   background: color-mix(in srgb, var(--feat-color, var(--cd-accent)) 12%, var(--cd-tile-bg));
 }
 .feature-icon {
   width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; flex: none;
   color: var(--feat-color, var(--cd-accent));
+  background: rgba(3, 169, 244, 0.16);
   background: color-mix(in srgb, var(--feat-color, var(--cd-accent)) 18%, transparent);
 }
 .feature-info { flex: 1; min-width: 0; }
-.feature-title { font-size: 13px; font-weight: 600; color: var(--primary-text-color, #fff); }
+.feature-title { font-size: 13px; font-weight: 600; color: var(--primary-text-color, inherit); }
 .feature-desc { font-size: 11px; color: var(--cd-secondary); margin-top: 2px; line-height: 1.3; }
 
 /* ── Switch UI Toggle ── */
@@ -1076,124 +1226,122 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 /* ── Wizard Endscreen Preview & Celebration ── */
 .win11-preview-card {
   display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 14px;
-  background: var(--cd-tile-bg); border: 1px solid rgba(255,255,255,.12);
-  box-shadow: 0 6px 20px rgba(0,0,0,.35);
+  background: var(--cd-tile-bg); border: 1px solid rgba(128,128,128,.22);
+  box-shadow: 0 6px 20px rgba(0,0,0,.25); min-width: 0;
 }
 .win11-preview-icon {
   width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; flex: none;
   color: var(--preview-color, var(--cd-accent));
+  background: rgba(3, 169, 244, 0.18);
   background: color-mix(in srgb, var(--preview-color, var(--cd-accent)) 20%, transparent);
 }
 .win11-preview-info { flex: 1; min-width: 0; }
-.win11-preview-name { font-size: 15px; font-weight: 700; color: var(--primary-text-color, #fff); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.win11-preview-name { font-size: 15px; font-weight: 700; color: var(--primary-text-color, inherit); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .win11-preview-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 
 .win11-celebration {
-  text-align: center; padding: 40px 24px 32px; display: flex; flex-direction: column; align-items: center; gap: 14px;
+  text-align: center; padding: 32px 20px 28px; display: flex; flex-direction: column; align-items: center; gap: 14px;
   animation: win11Pop .35s cubic-bezier(.2, .9, .3, 1);
   background: radial-gradient(circle at center, rgba(16, 185, 129, 0.22) 0%, rgba(16, 185, 129, 0.05) 60%, transparent 100%);
   border-radius: 16px; border: 1px solid rgba(16, 185, 129, 0.3);
-  margin: 12px auto; max-width: 600px;
+  margin: 12px auto; max-width: 600px; width: 100%;
 }
 .win11-success-badge {
-  width: 68px; height: 68px; border-radius: 50%; display: grid; place-items: center;
+  width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center;
   background: radial-gradient(circle, rgba(16,185,129,0.35) 0%, rgba(16,185,129,0.12) 70%);
   color: #10b981; box-shadow: 0 0 32px rgba(16,185,129,0.55);
   animation: win11SuccessGlow 3s infinite ease-in-out;
 }
-.win11-success-badge ha-icon { --mdc-icon-size: 38px; }
+.win11-success-badge ha-icon { --mdc-icon-size: 36px; }
 
 /* ── Advanced options details ── */
 details.adv-options {
-  border-radius: 12px; background: rgba(128,128,128,.08); padding: 8px 14px; margin-top: 10px;
+  border-radius: 12px; background: rgba(128,128,128,.08); padding: 10px 14px; margin-top: 6px;
   border: 1px solid rgba(128,128,128,.15);
 }
 details.adv-options summary {
   cursor: pointer; font-size: 13px; font-weight: 600; color: var(--cd-secondary); user-select: none;
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; gap: 6px; min-height: 28px;
 }
-details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
+@media (hover: hover) {
+  details.adv-options summary:hover { color: var(--primary-text-color, inherit); }
+}
 .adv-content { margin-top: 10px; display: grid; gap: 8px; }
 
 .btn.danger {
   background: rgba(244, 67, 54, 0.15); color: #f44336; border: 1px solid rgba(244, 67, 54, 0.3);
 }
-.btn.danger:hover {
-  background: rgba(244, 67, 54, 0.25);
+@media (hover: hover) {
+  .btn.danger:hover { background: rgba(244, 67, 54, 0.25); }
 }
 .icon-btn.danger {
-  color: #f44336; background: rgba(244, 67, 54, 0.1); border-radius: 8px;
+  color: #f44336; background: rgba(244, 67, 54, 0.1); border-radius: 10px;
 }
-.icon-btn.danger:hover {
-  background: rgba(244, 67, 54, 0.22);
+@media (hover: hover) {
+  .icon-btn.danger:hover { background: rgba(244, 67, 54, 0.22); }
 }
 
-/* ── Group & Room Modal Dialogs ── */
+/* ── Group & Room Modal Dialogs (Menus portal cleanly, so overflow stays hidden!) ── */
 .group-modal-dialog,
 .room-modal-dialog {
-  width: min(560px, calc(100vw - 24px)) !important;
+  width: min(560px, calc(100vw - 24px - var(--safe-left) - var(--safe-right)));
   height: auto !important;
-  min-height: auto !important;
-  max-height: min(90vh, calc(100dvh - 32px)) !important;
-}
-.group-modal-dialog {
-  overflow: visible !important;
-}
-.room-modal-dialog {
-  overflow: hidden !important;
-}
-.room-modal-dialog:has([data-open]) {
-  overflow: visible !important;
+  min-height: 0 !important;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px - var(--safe-top) - var(--safe-bottom));
+  overflow: hidden;
 }
 .group-modal-dialog .dialog-body,
 .room-modal-dialog .dialog-body {
-  min-height: auto !important;
-  padding: 16px 20px 20px !important;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 16px 20px 20px;
 }
-.group-modal-dialog .dialog-body {
-  overflow: visible !important;
-}
-.room-modal-dialog .dialog-body {
-  max-height: calc(100dvh - 180px);
-  overflow-y: auto !important;
-}
-.room-modal-dialog .dialog-body:has([data-open]) {
-  overflow: visible !important;
-}
+.group-modal-dialog .dialog-foot,
 .room-modal-dialog .dialog-foot {
   border-radius: 0 0 calc(var(--cd-radius) - 1px) calc(var(--cd-radius) - 1px);
 }
-.room-modal-dialog .cdd-menu,
-.room-modal-dialog .ip-dropdown {
-  max-height: min(250px, 42dvh);
-}
 
-/* ── Mobile Dialog, Touch & Selection Bar Responsive ── */
+/* ── Mobile Dialog, Safe-Area & Touch Responsive ── */
 @media (max-width: 650px) {
-  .page { padding: 0 10px 104px; }
-  .edit-mode-banner { padding: 10px 12px; gap: 10px; }
+  .page {
+    padding: var(--safe-top) calc(10px + var(--safe-right)) calc(92px + var(--safe-bottom)) calc(10px + var(--safe-left));
+  }
+  .greeting h1 { font-size: 22px; }
+  .edit-mode-banner { padding: 10px 12px; gap: 10px; flex-wrap: wrap; }
   .edit-mode-banner-info span { white-space: normal; line-height: 1.3; }
-  .edit-mode-banner-btn { padding: 8px 14px; min-height: 36px; }
+  .edit-mode-banner-btn { padding: 8px 14px; min-height: 40px; }
   .room-head { padding: 10px; gap: 8px; }
   .room-controls { gap: 4px; }
   .tile-main { gap: 8px; }
   .chevron-btn { width: 42px; height: 42px; }
-  .btn { min-height: 42px; touch-action: manipulation; }
+  .btn { min-height: 44px; touch-action: manipulation; }
+  .btn.small { min-height: 40px; }
 
-  .cdd-menu, .ep-dropdown, .ip-dropdown {
-    max-height: min(240px, 40dvh);
-  }
-  .cp-dropdown {
-    right: 0; left: auto; max-width: calc(100vw - 32px);
+  /* Prevent iOS Safari input auto-zoom (minimum 16px font-size on focused inputs) */
+  .search-bar input,
+  .ep-search input,
+  .cdd-search-input,
+  .ip-input,
+  .field > input[type=text],
+  .field > input[type=number],
+  .field > select,
+  .field > input:not([type]) {
+    font-size: 16px;
   }
 
   .btn-label-desktop { display: none !important; }
   .btn-label-mobile { display: inline !important; }
 
+  .wizard-selection-slot {
+    padding: 0 calc(10px + var(--safe-right)) 8px calc(10px + var(--safe-left));
+  }
   .selection-action-bar {
     padding: 8px 10px;
     gap: 8px;
-    margin: 8px 0 0;
   }
   .sel-info {
     width: 100%;
@@ -1205,37 +1353,100 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
     gap: 8px;
   }
   .sel-buttons button {
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 0;
     justify-content: center;
     white-space: nowrap;
     padding: 8px 10px;
   }
 
+  .win11-hero-badge {
+    width: 44px;
+    height: 44px;
+    margin: 0 auto 6px;
+  }
+  .win11-hero-badge ha-icon {
+    --mdc-icon-size: 24px;
+    width: 24px;
+    height: 24px;
+  }
+
   .overlay {
-    padding: 0 !important;
+    padding: max(12px, var(--safe-top)) max(10px, var(--safe-right)) max(12px, var(--safe-bottom)) max(10px, var(--safe-left));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
-  .dialog:not(.group-modal-dialog):not(.room-modal-dialog) {
-    width: 100vw !important;
-    height: 100vh !important;
-    height: 100dvh !important;
-    min-height: 100vh !important;
-    min-height: 100dvh !important;
-    max-height: 100vh !important;
-    max-height: 100dvh !important;
-    border-radius: 0 !important;
-    border: 0 !important;
+  .overlay:has(.dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog)) {
+    padding: 0;
   }
-  .dialog:not(.group-modal-dialog):not(.room-modal-dialog) .dialog-body {
-    padding: 14px 14px 70px !important;
-    min-height: 0 !important;
+  .dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog) {
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    max-height: 100vh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: 0;
+  }
+  .dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog) .dialog-head {
+    padding: calc(10px + var(--safe-top)) calc(10px + var(--safe-right)) 10px calc(16px + var(--safe-left));
+    border-radius: 0;
+  }
+  .dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog) .tabs {
+    padding: 4px calc(10px + var(--safe-right)) 0 calc(10px + var(--safe-left));
+  }
+  .dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog) .wizard-steps {
+    padding: 8px calc(12px + var(--safe-right)) 6px calc(12px + var(--safe-left));
+    gap: 6px;
+  }
+  .dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog) .dialog-body {
+    padding: 12px calc(14px + var(--safe-right)) 16px calc(14px + var(--safe-left));
+    min-height: 0;
   }
   .dialog .dialog-foot {
-    padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 10px calc(14px + var(--safe-right)) calc(10px + var(--safe-bottom)) calc(14px + var(--safe-left));
+    border-radius: 0;
   }
-  .device-list {
-    max-height: none !important;
+}
+
+@media (max-width: 480px) {
+  .device-card {
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    padding: 10px 12px;
   }
+  .device-card .d-icon {
+    width: 34px;
+    height: 34px;
+  }
+  .device-card .d-info {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+  .device-card .d-name {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .device-card-actions {
+    width: 100%;
+    justify-content: flex-end;
+    padding-top: 8px;
+    margin-top: 2px;
+    border-top: 1px solid rgba(128, 128, 128, .14);
+  }
+  .device-channels-wrap {
+    padding: 6px 8px 8px 16px;
+  }
+  .wizard-step { font-size: 10px; }
+}
+
+@media (max-height: 560px) {
+  .win11-hero-badge { display: none; }
+  .wizard-steps { padding-top: 6px; padding-bottom: 6px; }
 }
 
 /* ── Room Edit & Sensor Conflict Modals ── */
@@ -1746,12 +1957,267 @@ const ROOM_ICON_OPTIONS = [
   { value: 'mdi:dumbbell', label: 'Fitnessraum', icon: 'mdi:dumbbell' },
 ];
 const ROOM_SENSOR_TYPES = [
-  { value: 'temperature', label: 'Raumtemperatur', icon: 'mdi:thermometer', color: '#ff7043' },
+  { value: 'temperature', label: 'Temperatur', icon: 'mdi:thermometer', color: '#ff7043' },
   { value: 'humidity', label: 'Luftfeuchtigkeit', icon: 'mdi:water-percent', color: '#29b6f6' },
-  { value: 'motion', label: 'Anwesenheit / Bewegung', icon: 'mdi:motion-sensor', color: '#e91e63' },
-  { value: 'moisture', label: 'Feuchtigkeit / Wasserleck', icon: 'mdi:water-alert', color: '#26c6da' },
-  { value: 'ignore', label: 'Ignorieren (nicht anzeigen)', icon: 'mdi:eye-off-outline', color: '#9e9e9e' },
+  { value: 'motion', label: 'Anwesenheit', icon: 'mdi:motion-sensor', color: '#e91e63' },
+  { value: 'moisture', label: 'Feuchtigkeit', icon: 'mdi:water-alert', color: '#26c6da' },
+  { value: 'ignore', label: 'Ignorieren', icon: 'mdi:eye-off-outline', color: '#9e9e9e' },
 ];
+
+/**
+ * Parse a dashboard spec/channel key cleanly:
+ * - "d:<deviceId>:<entityId>" -> { prefix: 'd', deviceId, entityId, groupId: '' }
+ * - "e:<entityId>" / "l:<entityId>" -> { prefix, deviceId: '', entityId, groupId: '' }
+ * - "g:<groupId>" -> { prefix: 'g', deviceId: '', entityId: '', groupId }
+ * - "<deviceId>:<entityId>" -> { prefix: '', deviceId, entityId, groupId: '' }
+ * - "<entityId>" -> { prefix: '', deviceId: '', entityId: key, groupId: '' }
+ */
+function parseChannelKey(key) {
+  if (!key || typeof key !== 'string') {
+    return { prefix: '', deviceId: '', entityId: '', groupId: '' };
+  }
+  const parts = key.split(':');
+  const first = parts[0];
+  if (first === 'd') {
+    return { prefix: 'd', deviceId: parts[1] || '', entityId: parts.slice(2).join(':'), groupId: '' };
+  }
+  if (first === 'e' || first === 'l') {
+    return { prefix: first, deviceId: '', entityId: parts.slice(1).join(':'), groupId: '' };
+  }
+  if (first === 'g') {
+    return { prefix: 'g', deviceId: '', entityId: '', groupId: parts.slice(1).join(':') };
+  }
+  if (parts.length >= 2) {
+    return { prefix: '', deviceId: first, entityId: parts.slice(1).join(':'), groupId: '' };
+  }
+  return { prefix: '', deviceId: '', entityId: key, groupId: '' };
+}
+
+/** Preserve scroll position of a scroll container across synchronous DOM replacements. */
+function preserveScroll(scrollEl, fn) {
+  const top = scrollEl ? scrollEl.scrollTop : 0;
+  fn?.();
+  if (scrollEl && top > 0) {
+    scrollEl.scrollTop = top;
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        if (scrollEl.isConnected) scrollEl.scrollTop = top;
+      });
+    }
+  }
+}
+
+/**
+ * Portal and position a floating menu inside the nearest `.overlay` or shadowRoot
+ * using `visualViewport` bounds and auto flip-above when space below is tight.
+ * Returns a cleanup callback to restore `menuEl` and detach listeners.
+ */
+function positionFloatingMenu(anchorEl, menuEl, opts = {}) {
+  if (!anchorEl || !menuEl) return () => {};
+  const {
+    minWidth = 0,
+    maxWidth = null,
+    maxHeight = 280,
+    matchWidth = true,
+    alignRight = false,
+  } = opts;
+
+  const originalParent = menuEl.parentNode;
+  const originalNextSibling = menuEl.nextSibling;
+  const portalHost = anchorEl.closest?.('.overlay') || anchorEl.getRootNode?.() || originalParent;
+
+  menuEl.classList.add('cd-portal-menu');
+  if (portalHost && portalHost.appendChild && menuEl.parentNode !== portalHost) {
+    portalHost.appendChild(menuEl);
+  }
+
+  let closed = false;
+  const update = () => {
+    if (closed) return;
+    if (!anchorEl.isConnected || !menuEl.isConnected) return;
+
+    const rect = anchorEl.getBoundingClientRect();
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    const layoutW = (typeof document !== 'undefined' && document.documentElement?.clientWidth)
+      || (typeof window !== 'undefined' ? window.innerWidth : 1024);
+    const layoutH = (typeof document !== 'undefined' && document.documentElement?.clientHeight)
+      || (typeof window !== 'undefined' ? window.innerHeight : 768);
+
+    const visLeft = vv ? vv.offsetLeft : 0;
+    const visTop = vv ? vv.offsetTop : 0;
+    const visW = vv ? vv.width : layoutW;
+    const visH = vv ? vv.height : layoutH;
+    const visBottom = visTop + visH;
+
+    const spaceBelow = Math.max(0, visBottom - rect.bottom - 10);
+    const spaceAbove = Math.max(0, rect.top - visTop - 10);
+    const openUp = spaceBelow < Math.min(200, maxHeight) && spaceAbove > spaceBelow;
+    const availH = Math.max(120, Math.min(maxHeight, openUp ? spaceAbove : spaceBelow));
+
+    const targetW = matchWidth
+      ? Math.max(rect.width, minWidth || 0)
+      : Math.max(minWidth || 200, rect.width);
+    const clampedW = Math.max(160, Math.min(targetW, visW - 16, maxWidth || (visW - 16)));
+    const desiredLeft = alignRight ? (rect.right - clampedW) : rect.left;
+    const clampedLeft = Math.max(visLeft + 8, Math.min(desiredLeft, visLeft + visW - clampedW - 8));
+
+    menuEl.style.position = 'fixed';
+    menuEl.style.zIndex = '1500';
+    menuEl.style.left = `${Math.round(clampedLeft)}px`;
+    menuEl.style.right = 'auto';
+    menuEl.style.width = `${Math.round(clampedW)}px`;
+    menuEl.style.maxWidth = `${Math.round(visW - 16)}px`;
+    menuEl.style.maxHeight = `${Math.round(availH)}px`;
+
+    if (openUp) {
+      menuEl.style.top = 'auto';
+      menuEl.style.bottom = `${Math.max(8, Math.round(layoutH - rect.top + 6))}px`;
+      menuEl.dataset.placement = 'top';
+    } else {
+      menuEl.style.bottom = 'auto';
+      menuEl.style.top = `${Math.round(rect.bottom + 6)}px`;
+      menuEl.dataset.placement = 'bottom';
+    }
+  };
+
+  update();
+
+  const onViewportChange = () => update();
+  if (typeof window !== 'undefined') {
+    window.addEventListener('scroll', onViewportChange, { capture: true, passive: true });
+    window.addEventListener('resize', onViewportChange, { passive: true });
+    window.visualViewport?.addEventListener('resize', onViewportChange, { passive: true });
+    window.visualViewport?.addEventListener('scroll', onViewportChange, { passive: true });
+  }
+
+  return () => {
+    if (closed) return;
+    closed = true;
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('scroll', onViewportChange, { capture: true });
+      window.removeEventListener('resize', onViewportChange);
+      window.visualViewport?.removeEventListener('resize', onViewportChange);
+      window.visualViewport?.removeEventListener('scroll', onViewportChange);
+    }
+    menuEl.classList.remove('cd-portal-menu');
+    menuEl.style.position = '';
+    menuEl.style.zIndex = '';
+    menuEl.style.left = '';
+    menuEl.style.right = '';
+    menuEl.style.top = '';
+    menuEl.style.bottom = '';
+    menuEl.style.width = '';
+    menuEl.style.maxWidth = '';
+    menuEl.style.maxHeight = '';
+    delete menuEl.dataset.placement;
+    if (originalParent && originalParent.isConnected) {
+      if (originalNextSibling && originalNextSibling.parentNode === originalParent) {
+        originalParent.insertBefore(menuEl, originalNextSibling);
+      } else {
+        originalParent.appendChild(menuEl);
+      }
+    } else if (menuEl.parentNode) {
+      menuEl.remove();
+    }
+  };
+}
+
+/** Display a toast inside ShadowRoot above modal overlays and safe areas. */
+function showToast(anchorOrRoot, message, opts = {}) {
+  const { error = false, duration = 2600 } = opts;
+  const root = anchorOrRoot?.getRootNode?.() || anchorOrRoot;
+  if (!root || !root.appendChild) return;
+  try {
+    root.querySelectorAll?.('.toast').forEach((n) => n.remove());
+  } catch (_) { /* ignore */ }
+  const el = h('div', {
+    class: `toast${error ? ' error' : ''}`,
+    role: error ? 'alert' : 'status',
+  }, String(message || ''));
+  root.appendChild(el);
+  if (typeof setTimeout === 'function') {
+    setTimeout(() => { if (el.isConnected) el.remove(); }, duration);
+  }
+  return el;
+}
+
+/**
+ * In-DOM ShadowRoot confirmation dialog replacing native window.confirm().
+ * Resolves to true when confirmed, false when cancelled.
+ */
+function showConfirmDialog(anchorOrRoot, opts = {}) {
+  const {
+    title = 'Bestätigen',
+    message = '',
+    confirmLabel = 'Bestätigen',
+    cancelLabel = 'Abbrechen',
+    danger = true,
+  } = opts;
+  const root = anchorOrRoot?.getRootNode?.() || anchorOrRoot;
+  if (!root || !root.appendChild) return Promise.resolve(false);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let overlayEl = null;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        finish(false);
+      }
+    };
+    const finish = (val) => {
+      if (settled) return;
+      settled = true;
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('keydown', onKeyDown, true);
+      }
+      overlayEl?.remove();
+      resolve(val);
+    };
+
+    const confirmBtn = h('button', {
+      type: 'button',
+      class: `btn ${danger ? 'danger' : 'primary'}`,
+      onClick: () => finish(true),
+    }, confirmLabel);
+
+    const cancelBtn = h('button', {
+      type: 'button',
+      class: 'btn secondary',
+      onClick: () => finish(false),
+    }, cancelLabel);
+
+    const dialogEl = h('div', {
+      class: 'dialog confirm-modal-dialog',
+      role: 'alertdialog',
+      'aria-modal': 'true',
+      'aria-label': title,
+    },
+    h('div', { class: 'dialog-head' },
+      icon(danger ? 'mdi:alert-outline' : 'mdi:help-circle-outline'),
+      h('h2', {}, title),
+      h('button', {
+        type: 'button',
+        class: 'icon-btn',
+        'aria-label': 'Schließen',
+        onClick: () => finish(false),
+      }, icon('mdi:close'))),
+    message ? h('div', { class: 'dialog-body confirm-modal-body' },
+      h('p', { class: 'confirm-modal-msg' }, message)) : null,
+    h('div', { class: 'dialog-foot' },
+      h('div', { class: 'dialog-foot-actions' }, cancelBtn, confirmBtn)));
+
+    overlayEl = h('div', {
+      class: 'overlay confirm-overlay',
+      onClick: (e) => { if (e.target === overlayEl) finish(false); },
+    }, dialogEl);
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('keydown', onKeyDown, true);
+    }
+    root.appendChild(overlayEl);
+  });
+}
 // ─── END: lib/util.js ───
 
 
@@ -1773,7 +2239,8 @@ class ColorPicker {
     this.isOpen = false;
 
     this._onDocClick = (e) => {
-      if (!e.composedPath().includes(this.el)) this._close();
+      const path = e.composedPath?.() || [];
+      if (!path.includes(this.el) && !path.includes(this.dropdown)) this._close();
     };
 
     this._build();
@@ -1828,15 +2295,30 @@ class ColorPicker {
     this.dropdown.hidden = false;
     this.box.dataset.open = '';
     this._renderOptions();
-    
+    this._portalCleanup?.();
+    this._portalCleanup = positionFloatingMenu(this.box, this.dropdown, {
+      minWidth: 250,
+      maxHeight: 260,
+      matchWidth: false,
+      alignRight: true,
+    });
     setTimeout(() => document.addEventListener('pointerdown', this._onDocClick), 20);
   }
 
   _close() {
     if (!this.isOpen) return;
     this.isOpen = false;
+    this._portalCleanup?.();
+    this._portalCleanup = null;
     this.dropdown.hidden = true;
     delete this.box.dataset.open;
+    document.removeEventListener('pointerdown', this._onDocClick);
+  }
+
+  destroy() {
+    this._close();
+    this._portalCleanup?.();
+    this._portalCleanup = null;
     document.removeEventListener('pointerdown', this._onDocClick);
   }
 
@@ -1865,8 +2347,7 @@ class ColorPicker {
 
 
 // ─── START: components/custom_dropdown.js ───
-// CustomDropdown: beautiful bespoke select component replacing native browser <select>.
-// Features: custom styling, icons, color dots, optional search, keyboard & click-outside handling.
+// CustomDropdown: bespoke select component replacing native browser <select>.
 class CustomDropdown {
   /**
    * @param {{
@@ -1878,7 +2359,7 @@ class CustomDropdown {
    *   onChange: (val: string) => void
    * }} opts
    */
-  constructor({ options, items, value, placeholder = 'Bitte wählen...', disabled = false, searchable, onChange }) {
+  constructor({ options, items, value, placeholder = 'Auswählen', disabled = false, searchable, onChange }) {
     const raw = options || items || [];
     this.options = raw.map((o) => ({
       ...o,
@@ -1892,20 +2373,24 @@ class CustomDropdown {
     this.onChange = onChange;
     this.isOpen = false;
     this.searchQuery = '';
+    this._portalCleanup = null;
 
     this._onDocClick = (e) => {
       if (!this.isOpen) return;
-      if (!e.composedPath().includes(this.el)) {
+      const path = e.composedPath?.() || [];
+      if (!path.includes(this.el) && !path.includes(this.menu)) {
         this.close();
       }
     };
-    document.addEventListener('click', this._onDocClick);
 
     this._build();
   }
 
   destroy() {
-    document.removeEventListener('click', this._onDocClick);
+    this.close();
+    this._portalCleanup?.();
+    this._portalCleanup = null;
+    document.removeEventListener('pointerdown', this._onDocClick);
   }
 
   setDisabled(disabled) {
@@ -1927,8 +2412,9 @@ class CustomDropdown {
       label: String(o.label || o.name || ''),
     }));
     this.searchable = this.options.length > 5;
+    if (this.searchRow) this.searchRow.hidden = !this.searchable;
     this._updateSelected();
-    if (this.isOpen) this._renderMenu();
+    if (this.isOpen) this._renderList();
   }
 
   _build() {
@@ -1956,7 +2442,27 @@ class CustomDropdown {
       },
     }, this.iconEl, this.textEl, this.chevron);
 
-    this.menu = h('div', { class: 'cdd-menu', hidden: true });
+    this.searchInput = h('input', {
+      type: 'text',
+      class: 'cdd-search-input',
+      placeholder: 'Suchen',
+      autocomplete: 'off',
+      spellcheck: 'false',
+      onClick: (e) => e.stopPropagation(),
+      onInput: (e) => {
+        this.searchQuery = e.target.value;
+        this._renderList();
+      },
+      onKeydown: (e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          this.close();
+        }
+      },
+    });
+    this.searchRow = h('div', { class: 'cdd-search-row', hidden: !this.searchable }, icon('mdi:magnify'), this.searchInput);
+    this.listContainer = h('div', { class: 'cdd-list' });
+    this.menu = h('div', { class: 'cdd-menu', hidden: true }, this.searchRow, this.listContainer);
 
     this.el = h('div', { class: 'custom-dropdown' }, this.box, this.menu);
     this._updateSelected();
@@ -1998,99 +2504,79 @@ class CustomDropdown {
     this.box.setAttribute('aria-expanded', 'true');
     this.menu.hidden = false;
     this.searchQuery = '';
-    this._renderMenu();
+    if (this.searchInput) this.searchInput.value = '';
+    if (this.searchRow) this.searchRow.hidden = !this.searchable;
+    this._renderList();
+    this._portalCleanup?.();
+    this._portalCleanup = positionFloatingMenu(this.box, this.menu, {
+      maxHeight: 280,
+      matchWidth: true,
+    });
+    document.addEventListener('pointerdown', this._onDocClick);
 
-    if (this.searchInput) {
-      setTimeout(() => {
-        this.searchInput.focus();
-        const rect = this.menu.getBoundingClientRect();
-        if (rect.bottom > window.innerHeight - 30) {
-          this.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      }, 30);
-    } else {
-      setTimeout(() => {
-        const rect = this.menu.getBoundingClientRect();
-        if (rect.bottom > window.innerHeight - 30) {
-          this.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      }, 30);
+    if (this.searchable && this.searchInput && window.matchMedia?.('(pointer: fine)').matches) {
+      setTimeout(() => this.searchInput.focus(), 20);
     }
   }
 
   close() {
     if (!this.isOpen) return;
     this.isOpen = false;
+    this._portalCleanup?.();
+    this._portalCleanup = null;
     delete this.box.dataset.open;
     this.box.setAttribute('aria-expanded', 'false');
     this.menu.hidden = true;
+    document.removeEventListener('pointerdown', this._onDocClick);
   }
 
   _renderMenu() {
+    this._renderList();
+  }
+
+  _renderList() {
     const q = this.searchQuery.toLowerCase().trim();
     const filtered = q
       ? this.options.filter((o) => o.label.toLowerCase().includes(q) || (o.sub && o.sub.toLowerCase().includes(q)))
       : this.options;
 
-    const items = [];
-
-    if (this.searchable) {
-      this.searchInput = h('input', {
-        type: 'text',
-        class: 'cdd-search-input',
-        placeholder: 'Suchen...',
-        value: this.searchQuery,
-        onClick: (e) => e.stopPropagation(),
-        onInput: (e) => {
-          this.searchQuery = e.target.value;
-          this._renderMenu();
-        },
-      });
-      const searchRow = h('div', { class: 'cdd-search-row' }, icon('mdi:magnify'), this.searchInput);
-      items.push(searchRow);
-    }
-
-    const list = h('div', { class: 'cdd-list' });
-
     if (!filtered.length) {
-      list.append(h('div', { class: 'cdd-empty' }, 'Keine Optionen gefunden'));
-    } else {
-      for (const opt of filtered) {
-        const isSelected = opt.value === this.value;
-        const iconWrap = h('div', { class: 'cdd-item-icon' });
-        if (opt.icon) {
-          iconWrap.append(icon(opt.icon));
-          if (opt.color) iconWrap.style.color = opt.color;
-        } else if (opt.color) {
-          iconWrap.append(h('span', { class: 'cdd-dot', style: { background: opt.color } }));
-        } else {
-          iconWrap.style.display = 'none';
-        }
-
-        const labelWrap = h('div', { class: 'cdd-item-texts' },
-          h('div', { class: 'cdd-item-label' }, opt.label),
-          opt.sub ? h('div', { class: 'cdd-item-sub' }, opt.sub) : null);
-
-        const checkWrap = h('div', { class: 'cdd-item-check' });
-        if (isSelected) checkWrap.append(icon('mdi:check'));
-
-        const item = h('div', {
-          class: `cdd-item${isSelected ? ' selected' : ''}`,
-          onClick: (e) => {
-            e.stopPropagation();
-            this.value = opt.value;
-            this._updateSelected();
-            this.close();
-            this.onChange?.(opt.value);
-          },
-        }, iconWrap, labelWrap, checkWrap);
-
-        list.append(item);
-      }
+      this.listContainer.replaceChildren(h('div', { class: 'cdd-empty' }, 'Kein Treffer'));
+      return;
     }
 
-    items.push(list);
-    this.menu.replaceChildren(...items);
+    const listNodes = filtered.map((opt) => {
+      const isSelected = opt.value === this.value;
+      const iconWrap = h('div', { class: 'cdd-item-icon' });
+      if (opt.icon) {
+        iconWrap.append(icon(opt.icon));
+        if (opt.color) iconWrap.style.color = opt.color;
+      } else if (opt.color) {
+        iconWrap.append(h('span', { class: 'cdd-dot', style: { background: opt.color } }));
+      } else {
+        iconWrap.style.display = 'none';
+      }
+
+      const labelWrap = h('div', { class: 'cdd-item-texts' },
+        h('div', { class: 'cdd-item-label' }, opt.label),
+        opt.sub ? h('div', { class: 'cdd-item-sub' }, opt.sub) : null);
+
+      const checkWrap = h('div', { class: 'cdd-item-check' });
+      if (isSelected) checkWrap.append(icon('mdi:check'));
+
+      return h('div', {
+        class: `cdd-item${isSelected ? ' selected' : ''}`,
+        onClick: (e) => {
+          e.stopPropagation();
+          this.value = opt.value;
+          this._updateSelected();
+          this.close();
+          this.onChange?.(opt.value);
+        },
+      }, iconWrap, labelWrap, checkWrap);
+    });
+
+    this.listContainer.replaceChildren(...listNodes);
   }
 }
 // ─── END: components/custom_dropdown.js ───
@@ -2185,7 +2671,7 @@ function _buildPriorityEntries(priorityIcons) {
   return entries;
 }
 class IconPicker {
-  constructor({ hass, value = '', onChange, placeholder = 'Icon suchen (z. B. Lampe, mdi:bed)...', priorityIcons = null }) {
+  constructor({ hass, value = '', onChange, placeholder = 'Icon suchen', priorityIcons = null }) {
     this.hass = hass;
     this.value = value || '';
     this.onChange = onChange;
@@ -2198,7 +2684,8 @@ class IconPicker {
     this._renderedCount = 0;
 
     this._onDocClick = (e) => {
-      if (!e.composedPath().includes(this.el)) this._close();
+      const path = e.composedPath?.() || [];
+      if (!path.includes(this.el) && !path.includes(this.dropdown)) this._close();
     };
 
     this._build();
@@ -2243,7 +2730,7 @@ class IconPicker {
         e.stopPropagation();
         if (!this.isOpen) {
           this.searchQuery = '';
-          this._open(true);
+          this._open(false);
         }
       },
     });
@@ -2251,8 +2738,8 @@ class IconPicker {
     this.clearBtn = h('button', {
       type: 'button',
       class: 'ip-clear',
-      'aria-label': 'Eingabe löschen',
-      title: 'Löschen & alle Icons anzeigen',
+      'aria-label': 'Löschen',
+      title: 'Löschen',
       hidden: !this.value,
       onClick: (e) => {
         e.stopPropagation();
@@ -2264,7 +2751,7 @@ class IconPicker {
         this.onChange?.('');
         if (!this.isOpen) this._open(false);
         else this._renderGrid();
-        this.textInput.focus();
+        if (window.matchMedia?.('(pointer: fine)').matches) this.textInput.focus();
       },
     }, icon('mdi:close'));
 
@@ -2319,8 +2806,14 @@ class IconPicker {
     this.dropdown.hidden = false;
     this.box.dataset.open = '';
     this._renderGrid();
+    this._portalCleanup?.();
+    this._portalCleanup = positionFloatingMenu(this.box, this.dropdown, {
+      minWidth: 260,
+      maxHeight: 280,
+      matchWidth: true,
+    });
     setTimeout(() => {
-      if (selectInput) {
+      if (selectInput && window.matchMedia?.('(pointer: fine)').matches) {
         this.textInput.focus();
         if (this.textInput.value) this.textInput.select();
       }
@@ -2331,6 +2824,8 @@ class IconPicker {
   _close() {
     if (!this.isOpen) return;
     this.isOpen = false;
+    this._portalCleanup?.();
+    this._portalCleanup = null;
     this.dropdown.hidden = true;
     delete this.box.dataset.open;
     document.removeEventListener('pointerdown', this._onDocClick);
@@ -2338,6 +2833,8 @@ class IconPicker {
 
   destroy() {
     this._close();
+    this._portalCleanup?.();
+    this._portalCleanup = null;
     document.removeEventListener('pointerdown', this._onDocClick);
   }
 
@@ -2410,7 +2907,7 @@ class IconPicker {
         );
         return;
       }
-      this.grid.replaceChildren(h('div', { class: 'ip-empty' }, 'Keine Icons verfügbar'));
+      this.grid.replaceChildren(h('div', { class: 'ip-empty' }, 'Keine Icons'));
       return;
     }
 
@@ -2432,7 +2929,7 @@ const DOMAIN_LABELS_DE = {
   person: 'Personen', weather: 'Wetter', fan: 'Lüfter', valve: 'Ventile',
 };
 class EntityPicker {
-  constructor({ hass, value = '', onChange, filter, domain, placeholder = 'Entität suchen...', allowClear = true }) {
+  constructor({ hass, value = '', onChange, filter, domain, placeholder = 'Entität suchen', allowClear = true }) {
     this.hass = hass;
     this.value = value || '';
     this.onChange = onChange;
@@ -2444,10 +2941,12 @@ class EntityPicker {
     this.isOpen = false;
     this.searchQuery = '';
     this.selectedDomain = 'all';
+    this._portalCleanup = null;
 
-    // Use composedPath() so Shadow DOM retargeting never closes the dropdown on inner clicks
+    // Use composedPath() so Shadow DOM retargeting and portaled menus never trigger false closes
     this._onDocClick = (e) => {
-      if (!e.composedPath().includes(this.el)) this._close();
+      const path = e.composedPath?.() || [];
+      if (!path.includes(this.el) && !path.includes(this.dropdown)) this._close();
     };
 
     this._build();
@@ -2480,7 +2979,9 @@ class EntityPicker {
 
     // Dropdown popover
     this.searchInput = h('input', {
-      type: 'text', class: 'ep-search-input', placeholder: 'Name, Raum oder entity_id eintippen...',
+      type: 'text', class: 'ep-search-input', placeholder: 'Name oder entity_id',
+      autocomplete: 'off', spellcheck: 'false',
+      onClick: (e) => e.stopPropagation(),
       onInput: (e) => { this.searchQuery = e.target.value.toLowerCase().trim(); this._updateList(); },
       onKeydown: (e) => {
         if (e.key === 'Escape') { e.stopPropagation(); this._close(); }
@@ -2553,23 +3054,34 @@ class EntityPicker {
     this.searchInput.value = initialChar;
     this._renderDomainChips();
     this._updateList();
+    this._portalCleanup?.();
+    this._portalCleanup = positionFloatingMenu(this.box, this.dropdown, {
+      minWidth: 260,
+      maxHeight: 300,
+      matchWidth: true,
+    });
+    document.addEventListener('pointerdown', this._onDocClick);
 
-    setTimeout(() => {
-      this.searchInput.focus();
-      document.addEventListener('pointerdown', this._onDocClick);
-      const rect = this.dropdown.getBoundingClientRect();
-      if (rect.bottom > window.innerHeight - 30) {
-        this.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
-    }, 20);
+    if (initialChar || window.matchMedia?.('(pointer: fine)').matches) {
+      setTimeout(() => this.searchInput.focus(), 20);
+    }
   }
 
   _close() {
     if (!this.isOpen) return;
     this.isOpen = false;
+    this._portalCleanup?.();
+    this._portalCleanup = null;
     this.dropdown.hidden = true;
     delete this.box.dataset.open;
     this.box.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', this._onDocClick);
+  }
+
+  destroy() {
+    this._close();
+    this._portalCleanup?.();
+    this._portalCleanup = null;
     document.removeEventListener('pointerdown', this._onDocClick);
   }
 
@@ -2632,7 +3144,7 @@ class EntityPicker {
     if (!filtered.length) {
       this.listEl.replaceChildren(h('div', { class: 'empty', style: { padding: '20px 12px' } },
         icon('mdi:file-search-outline'),
-        h('div', { style: { fontSize: '12px', marginTop: '4px' } }, 'Keine passenden Entitäten gefunden')));
+        h('div', { style: { fontSize: '12px', marginTop: '4px' } }, 'Keine Entitäten')));
       return;
     }
 
@@ -2679,6 +3191,229 @@ class EntityPicker {
 // ─── END: components/entity_picker.js ───
 
 
+// ─── START: components/device_list.js ───
+const DEVICE_CATEGORIES = [
+  { id: 'leuchte', name: 'Leuchte', icon: 'mdi:lightbulb', color: '#ffc107', desc: 'Lampen, Spots & LED' },
+  { id: 'steckdose', name: 'Steckdose', icon: 'mdi:power-socket-eu', color: '#009688', desc: 'Zwischenstecker & Dosen' },
+  { id: 'schalter', name: 'Gerät / Relais', icon: 'mdi:power-plug', color: '#2196f3', desc: 'Schalter & Relais' },
+  { id: 'jalousie', name: 'Jalousie', icon: 'mdi:window-shutter', color: '#9c27b0', desc: 'Rollläden & Markisen' },
+  { id: 'wasserventil', name: 'Wasserventil', icon: 'mdi:water-pump', color: '#00bcd4', desc: 'Bewässerungsventile' },
+  { id: 'pumpe', name: 'Pumpe', icon: 'mdi:pump', color: '#03a9f4', desc: 'Wasserpumpen' },
+  { id: 'klima', name: 'Klima', icon: 'mdi:thermometer', color: '#ff9800', desc: 'Thermostate & Klima' },
+  { id: 'fernseher', name: 'Fernseher', icon: 'mdi:television', color: '#03a9f4', desc: 'TVs & Mediaplayer' },
+  { id: 'bewegungsmelder', name: 'Bewegungsmelder', icon: 'mdi:motion-sensor', color: '#e91e63', desc: 'Präsenz & Bewegung' },
+  { id: 'bodenmessgeraet', name: 'Bodenmessgerät', icon: 'mdi:sprout', color: '#4caf50', desc: 'Bodenfeuchte & Pflanzen' },
+  { id: 'raummessgeraet', name: 'Raummessgerät', icon: 'mdi:thermometer-lines', color: '#ff5722', desc: 'Temperatur & Klima' },
+];
+
+const CONTROLLABLE_DOMAINS = new Set([
+  'light', 'switch', 'cover', 'valve', 'climate', 'media_player', 'fan',
+]);
+
+/**
+ * Filter out configuration, diagnostic, and internal utility switches.
+ * Only genuine controllable actuators are treated as device channels.
+ */
+function isControllableActuator(e) {
+  if (!e || !e.entity_id) return false;
+  if (e.disabled_by) return false;
+  if (e.entity_category === 'config' || e.entity_category === 'diagnostic') return false;
+
+  const domain = domainOf(e.entity_id);
+  if (!CONTROLLABLE_DOMAINS.has(domain)) return false;
+
+  const id = (e.entity_id || '').toLowerCase();
+  const name = (e.name || e.original_name || '').toLowerCase();
+  const configPattern = /(?:overcharge|protection|kindersicherung|child_?lock|indicator|led_?mode|backlight|status_?led|restart|reboot|update|firmware|start_?zustand|start_?state|auto_?off|inching|pairing|identify|interlock|relay_mode|power_on_state)/;
+  if (configPattern.test(id) || configPattern.test(name)) return false;
+
+  return true;
+}
+
+/** Build a group card shared by DeviceWizard and Settings. */
+function createGroupCard({
+  group,
+  isSelected = false,
+  selectable = false,
+  subtitle = null,
+  onToggleSelect = null,
+  onCardClick = null,
+  onEdit = null,
+  onDelete = null,
+}) {
+  const cat = DEVICE_CATEGORIES.find((c) => c.id === group.category);
+  const catColor = cat?.color || '#ffc107';
+
+  const chk = selectable
+    ? h('button', {
+      class: 'sel-checkbox',
+      ...(isSelected ? { 'data-checked': '' } : {}),
+      type: 'button',
+      'aria-label': `${group.name} auswählen`,
+      onClick: (e) => { e.stopPropagation(); onToggleSelect?.(); },
+    }, isSelected ? icon('mdi:check') : null)
+    : null;
+
+  return h('div', {
+    class: 'device-card group-card',
+    ...(isSelected ? { 'data-selected': '' } : {}),
+    onClick: () => (onCardClick || onEdit)?.(),
+  },
+  chk,
+  h('div', { class: 'd-icon', style: { color: catColor } }, icon(group.icon || 'mdi:lightbulb-group')),
+  h('div', { class: 'd-info' },
+    h('div', { class: 'd-name' }, group.name || 'Gruppe'),
+    h('div', { class: 'd-meta' },
+      h('span', { class: 'badge-tag category', style: { '--badge-cat-color': catColor } },
+        icon('mdi:lightbulb-group'),
+        `Gruppe (${group.children?.length || 0})`),
+      subtitle ? h('span', {}, subtitle) : null)),
+  h('div', { class: 'device-card-actions' },
+    onEdit ? h('button', {
+      type: 'button',
+      class: 'btn secondary small',
+      title: 'Gruppe bearbeiten',
+      'aria-label': 'Bearbeiten',
+      onClick: (e) => { e.stopPropagation(); onEdit(); },
+    }, icon('mdi:pencil'), h('span', {}, 'Bearbeiten')) : null,
+    onDelete ? h('button', {
+      type: 'button',
+      class: 'icon-btn danger',
+      title: 'Gruppe auflösen',
+      'aria-label': 'Gruppe auflösen',
+      onClick: (e) => { e.stopPropagation(); onDelete(); },
+    }, icon('mdi:delete-outline')) : null));
+}
+
+/** Build a device card (+ expandable channel list) for Step 0 wizard view. */
+function createWizardDeviceElements({
+  device,
+  entities,
+  configuredCfg,
+  isSelected = false,
+  isExpanded = false,
+  selectedIds = null,
+  onToggleSelect,
+  onToggleChannelSelect,
+  onToggleExpand,
+  onConfigure,
+  onRemove,
+  onCardClick,
+}) {
+  const name = device.name_by_user || device.name || 'Gerät';
+  const mfg = [device.manufacturer, device.model].filter(Boolean).join(' · ');
+  const isConfigured = !!configuredCfg;
+
+  const devEntities = entities.filter((e) => e.device_id === device.id && !e.disabled_by);
+  const controllable = devEntities.filter(isControllableActuator);
+
+  const chk = h('button', {
+    class: 'sel-checkbox',
+    ...(isSelected ? { 'data-checked': '' } : {}),
+    type: 'button',
+    'aria-label': `${name} auswählen`,
+    onClick: (e) => { e.stopPropagation(); onToggleSelect?.(); },
+  }, isSelected ? icon('mdi:check') : null);
+
+  const badges = [];
+  if (isConfigured) {
+    const cat = DEVICE_CATEGORIES.find((c) => c.id === configuredCfg.category);
+    const catColor = cat?.color || 'var(--cd-accent)';
+    badges.push(h('span', {
+      class: 'badge-tag category',
+      style: { '--badge-cat-color': catColor },
+    }, icon(cat?.icon || 'mdi:check-circle'), cat?.name || configuredCfg.category));
+  } else if (controllable.length > 1) {
+    badges.push(h('button', {
+      class: 'btn-channels-toggle',
+      type: 'button',
+      title: isExpanded ? 'Kanäle einklappen' : 'Kanäle anzeigen',
+      onClick: (e) => { e.stopPropagation(); onToggleExpand?.(); },
+    }, icon(isExpanded ? 'mdi:chevron-up' : 'mdi:chevron-down'), `${controllable.length} Kanäle`));
+  } else if (controllable.length === 1) {
+    badges.push(h('span', { class: 'badge-tag' }, '1 Kanal'));
+  }
+
+  const actions = isConfigured
+    ? [
+      h('button', {
+        type: 'button',
+        class: 'btn secondary small',
+        title: 'Gerät bearbeiten',
+        'aria-label': 'Bearbeiten',
+        onClick: (e) => { e.stopPropagation(); onConfigure?.(); },
+      }, icon('mdi:pencil'), h('span', {}, 'Bearbeiten')),
+      h('button', {
+        type: 'button',
+        class: 'icon-btn danger',
+        title: 'Einrichtung aufheben',
+        'aria-label': 'Einrichtung aufheben',
+        onClick: (e) => { e.stopPropagation(); onRemove?.(); },
+      }, icon('mdi:delete-outline')),
+    ]
+    : [
+      h('button', {
+        type: 'button',
+        class: 'btn primary small',
+        title: 'Gerät einrichten',
+        'aria-label': 'Einrichten',
+        onClick: (e) => { e.stopPropagation(); onConfigure?.(); },
+      }, icon('mdi:plus'), h('span', {}, 'Einrichten')),
+    ];
+
+  const mainCard = h('div', {
+    class: 'device-card',
+    ...(isSelected ? { 'data-selected': '' } : {}),
+    onClick: () => (onCardClick || onConfigure)?.(),
+  },
+  chk,
+  h('div', { class: 'd-icon' }, icon('mdi:devices')),
+  h('div', { class: 'd-info' },
+    h('div', { class: 'd-name' }, name),
+    h('div', { class: 'd-meta' }, mfg ? h('span', { class: 'd-mfg' }, mfg) : null, ...badges)),
+  h('div', { class: 'device-card-actions' }, ...actions));
+
+  if (isExpanded && controllable.length > 1) {
+    const channelRows = controllable.map((e) => {
+      const chKey = `d:${device.id}:${e.entity_id}`;
+      const isChChecked = !!selectedIds?.has(chKey);
+      const chName = e.name || e.original_name || e.entity_id;
+      const isLight = domainOf(e.entity_id) === 'light';
+      return h('div', {
+        class: 'device-channel-row',
+        ...(isChChecked ? { 'data-selected': '' } : {}),
+        onClick: (ev) => { ev.stopPropagation(); onToggleChannelSelect?.(chKey); },
+      },
+      h('button', {
+        class: 'sel-checkbox',
+        ...(isChChecked ? { 'data-checked': '' } : {}),
+        type: 'button',
+        'aria-label': `${chName} auswählen`,
+        onClick: (ev) => { ev.stopPropagation(); onToggleChannelSelect?.(chKey); },
+      }, isChChecked ? icon('mdi:check') : null),
+      icon(isLight ? 'mdi:lightbulb' : 'mdi:power-plug'),
+      h('div', { class: 'device-channel-info' },
+        h('div', { class: 'device-channel-name' }, chName),
+        h('div', { class: 'device-channel-meta' }, e.entity_id)));
+    });
+    return [mainCard, h('div', { class: 'device-channels-wrap' }, ...channelRows)];
+  }
+
+  return [mainCard];
+}
+
+/** Build a room section wrapping `.device-cards` without creating a nested scrollbox. */
+function createDeviceRoomSection(areaName, cardElements, itemCount = cardElements.length) {
+  return h('div', { class: 'device-room-section' },
+    h('div', { class: 'device-room-header' },
+      icon(areaName === 'Ohne Raum' ? 'mdi:help-circle-outline' : 'mdi:home-outline'),
+      h('span', {}, areaName),
+      h('span', { class: 'room-count' }, `(${itemCount})`)),
+    h('div', { class: 'device-cards' }, ...cardElements));
+}
+// ─── END: components/device_list.js ───
+
+
 // ─── START: components/tile.js ───
 // Tile component: one entity as a HA-tile-like card (lights, switches, covers, climate, media, sensors).
 const COLOR_MODES = ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'];
@@ -2699,7 +3434,7 @@ class Tile {
     this.spec = spec;
     this.ctx = ctx;
     this.entityId = spec.entity_id;
-    this.deviceId = spec.device_id || (spec.key && spec.key.includes(':') && !spec.key.startsWith('e:') && !spec.key.startsWith('l:') ? spec.key.split(':')[0] : null) || spec.entity_id;
+    this.deviceId = spec.device_id || parseChannelKey(spec.key).deviceId || spec.entity_id;
     this.rawDomain = domainOf(spec.entity_id);
     const cat = effectiveCategory(spec);
     // Effective domain overrides raw domain for UI purposes
@@ -2812,10 +3547,11 @@ class Tile {
       type: 'range', class: 'slider', min: '1', max: '100', step: '1', 'aria-label': 'Helligkeit',
       style: { touchAction: 'none' },
     });
-    // Prevent vertical page scroll during slider touch interaction
+    // Prevent vertical page scroll & parent toggle during slider interaction
     this.slider.addEventListener('pointerdown', (e) => e.stopPropagation());
     this.slider.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
     this.slider.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
+    this.slider.addEventListener('click', (e) => e.stopPropagation());
     this.slider.addEventListener('input', () => {
       this._dragging = true;
       setSliderVal(this.slider, this.slider.value);
@@ -3059,7 +3795,7 @@ class GroupTile {
     this.iconBtn = h('button', {
       class: 'tile-icon group-icon-btn',
       'aria-label': `${this.spec.name} Schalten`,
-      title: 'Alle ein-/ausschalten',
+      title: 'Schalten',
       onClick: (e) => {
         e.stopPropagation();
         this._toggleMaster();
@@ -3090,7 +3826,7 @@ class GroupTile {
         class: 'mini-btn chevron-btn',
         'aria-label': 'Gruppe ausklappen',
         'aria-expanded': 'false',
-        title: 'Unterlampen anzeigen',
+        title: 'Unterlampen',
         onClick: (e) => {
           e.stopPropagation();
           this._toggleOpen();
@@ -3106,6 +3842,9 @@ class GroupTile {
       style: { touchAction: 'none' },
     });
     this.slider.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.slider.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+    this.slider.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
+    this.slider.addEventListener('click', (e) => e.stopPropagation());
     this.slider.addEventListener('input', () => {
       this._dragging = true;
       setSliderVal(this.slider, this.slider.value);
@@ -3309,27 +4048,27 @@ function average(hass, ids) {
 }
 
 /**
- * Smart 2-per-row layout algorithm respecting slider vs compact tiles.
- * - Naturally wide tiles (Media Player/TV, covers) get full width.
- * - Slider tiles: if 2 exist, paired side-by-side in 1 row; if 1 (or odd leftover), gets full width!
- * - Compact non-slider tiles: paired side-by-side with each other in rows!
- * - Master group tiles sit at the bottom in full width.
+ * Smart 2-per-row layout algorithm respecting slider vs compact tiles,
+ * keeping a strictly stable order regardless of active/on/off state.
+ * - Top wide tiles (Media Player/TV, covers) take full width.
+ * - Compact non-slider tiles are paired cleanly 2-per-row together.
+ * - Slider-capable tiles always take full row width (never paired with other tiles).
+ * - Group tiles sit at the bottom in full width.
  */
 function applySmartTileLayout(tiles, grid = null) {
   if (!tiles || !tiles.length) return;
 
   const topWide = [];
-  const bottomWide = [];
-  const sliderTiles = [];
   const compactTiles = [];
+  const sliderTiles = [];
+  const bottomWide = [];
 
   for (const t of tiles) {
-    if (t.isAlwaysWide) {
-      if (t.spec?.is_group || t.is_group === true || t.constructor?.name === 'GroupTile') {
-        bottomWide.push(t);
-      } else {
-        topWide.push(t);
-      }
+    const isGroup = t.spec?.is_group || t.is_group === true || t.constructor?.name === 'GroupTile';
+    if (isGroup) {
+      bottomWide.push(t);
+    } else if (t.isAlwaysWide) {
+      topWide.push(t);
     } else if (t.hasSlider) {
       sliderTiles.push(t);
     } else {
@@ -3337,23 +4076,10 @@ function applySmartTileLayout(tiles, grid = null) {
     }
   }
 
-  // Always wide tiles
   topWide.forEach((t) => t.setWide(true));
+  sliderTiles.forEach((t) => t.setWide(true));
   bottomWide.forEach((t) => t.setWide(true));
 
-  // Slider tiles:
-  // "wenn zwei geräte mit slider existieren das diese nebeneinander sind"
-  // "falls nur ein gerät mit slider es immer ein eigene zeile bekommt"
-  if (sliderTiles.length % 2 === 1) {
-    for (let i = 0; i < sliderTiles.length - 1; i++) {
-      sliderTiles[i].setWide(false);
-    }
-    sliderTiles[sliderTiles.length - 1].setWide(true);
-  } else {
-    sliderTiles.forEach((t) => t.setWide(false));
-  }
-
-  // Compact non-slider tiles: pair in 2s
   if (compactTiles.length % 2 === 1) {
     for (let i = 0; i < compactTiles.length - 1; i++) {
       compactTiles[i].setWide(false);
@@ -3403,7 +4129,7 @@ class GroupedCoverTile {
         e.stopPropagation();
         if (this.ctx?.isEditMode?.()) {
           const firstCover = this.coverSpecs[0];
-          const devId = firstCover?.device_id || (firstCover?.key?.includes(':') ? firstCover.key.split(':')[0] : null);
+          const devId = firstCover?.device_id || parseChannelKey(firstCover?.key).deviceId || null;
           if (devId) { this.ctx.onOpenDevice?.(devId); return; }
         }
         this.ctx.onOpenRoom?.(this.roomSpec.area_id);
@@ -3417,7 +4143,7 @@ class GroupedCoverTile {
       onClick: () => {
         if (this.ctx?.isEditMode?.()) {
           const firstCover = this.coverSpecs[0];
-          const devId = firstCover?.device_id || (firstCover?.key?.includes(':') ? firstCover.key.split(':')[0] : null);
+          const devId = firstCover?.device_id || parseChannelKey(firstCover?.key).deviceId || null;
           if (devId) { this.ctx.onOpenDevice?.(devId); return; }
         }
         this.ctx.onOpenRoom?.(this.roomSpec.area_id);
@@ -3434,7 +4160,7 @@ class GroupedCoverTile {
     this.btnDown = mk('mdi:arrow-down', 'Alle schließen', () => this._service('close'));
 
     this.btnDetail = h('button', {
-      class: 'mini-btn', 'aria-label': 'Details', title: 'Einzelne Rollläden anzeigen',
+      class: 'mini-btn', 'aria-label': 'Details', title: 'Details',
       onClick: (e) => { e.stopPropagation(); this.ctx.onOpenRoom?.(this.roomSpec.area_id); },
     }, icon('mdi:arrow-right'));
 
@@ -3450,7 +4176,7 @@ class GroupedCoverTile {
         e.stopPropagation();
         e.preventDefault();
         const firstCover = this.coverSpecs[0];
-        const devId = firstCover?.device_id || (firstCover?.key?.includes(':') ? firstCover.key.split(':')[0] : null) || firstCover?.entity_id;
+        const devId = firstCover?.device_id || parseChannelKey(firstCover?.key).deviceId || firstCover?.entity_id;
         if (devId) this.ctx.onOpenDevice?.(devId);
       }
     }, true);
@@ -3559,9 +4285,25 @@ class Room {
         } else if (g.key === 'cover') {
           matchingTiles = spec.tiles.filter((t) => effectiveCategory(t) === 'cover');
         }
+        const collectIds = (list) => {
+          const out = [];
+          const seen = new Set();
+          for (const t of list) {
+            const eids = t.is_group && Array.isArray(t.entity_ids)
+              ? t.entity_ids
+              : (t.entity_id ? [t.entity_id] : []);
+            for (const eid of eids) {
+              if (eid && !seen.has(eid)) {
+                seen.add(eid);
+                out.push(eid);
+              }
+            }
+          }
+          return out;
+        };
         return {
           ...g,
-          ids: matchingTiles.map((t) => t.entity_id),
+          ids: collectIds(matchingTiles),
         };
       })
       .filter((g) => g.ids.length > 0)
@@ -3576,7 +4318,7 @@ class Room {
 
     // Room detail view button (sub-menu navigation)
     this.detailBtn = h('button', {
-      class: 'ctrl-btn', 'aria-label': `${spec.name} Details`, title: `${spec.name} öffnen`,
+      class: 'ctrl-btn', 'aria-label': `${spec.name} Details`, title: 'Details',
       onClick: (e) => { e.stopPropagation(); this.ctx.onOpenRoom?.(this.spec.area_id); },
     }, icon('mdi:arrow-right'));
 
@@ -3769,9 +4511,22 @@ class RoomDetailView {
         if (g.key === 'light') matchingTiles = this.lightSpecs;
         else if (g.key === 'cover') matchingTiles = this.coverSpecs;
         else if (g.key === 'switch') matchingTiles = this.switchSpecs;
+        const ids = [];
+        const seen = new Set();
+        for (const t of matchingTiles) {
+          const eids = t.is_group && Array.isArray(t.entity_ids)
+            ? t.entity_ids
+            : (t.entity_id ? [t.entity_id] : []);
+          for (const eid of eids) {
+            if (eid && !seen.has(eid)) {
+              seen.add(eid);
+              ids.push(eid);
+            }
+          }
+        }
         return {
           ...g,
-          ids: matchingTiles.map((t) => t.entity_id),
+          ids,
         };
       })
       .filter((g) => g.ids.length > 0)
@@ -3878,6 +4633,7 @@ class RoomDetailView {
     slider.addEventListener('pointerdown', (e) => e.stopPropagation());
     slider.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
     slider.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
+    slider.addEventListener('click', (e) => e.stopPropagation());
 
     let dragging = false;
     slider.addEventListener('input', () => {
@@ -3911,7 +4667,7 @@ class RoomDetailView {
           class: 'cover-detail-info',
           onClick: () => {
             if (this.ctx?.isEditMode?.()) {
-              const devId = spec.device_id || (spec.key?.includes(':') ? spec.key.split(':')[0] : null) || spec.entity_id;
+              const devId = spec.device_id || parseChannelKey(spec.key).deviceId || spec.entity_id;
               if (devId) { this.ctx.onOpenDevice?.(devId); return; }
             }
           },
@@ -3932,7 +4688,7 @@ class RoomDetailView {
       if (this.ctx?.isEditMode?.()) {
         e.stopPropagation();
         e.preventDefault();
-        const devId = spec.device_id || (spec.key?.includes(':') ? spec.key.split(':')[0] : null) || spec.entity_id;
+        const devId = spec.device_id || parseChannelKey(spec.key).deviceId || spec.entity_id;
         if (devId) this.ctx.onOpenDevice?.(devId);
       }
     }, true);
@@ -4106,15 +4862,15 @@ class WarningDetailView {
     if (key === this._renderedKey) return;
     this._renderedKey = key;
 
-    this.countBadge.textContent = count === 1 ? '1 aktive Warnung' : `${count} aktive Warnungen`;
+    this.countBadge.textContent = count === 1 ? '1 Warnung' : `${count} Warnungen`;
     this.countBadge.style.color = count > 0 ? '#ff9800' : 'var(--primary-text-color, #fff)';
 
     if (count <= 0) {
       this.listEl.replaceChildren(
         h('div', { class: 'warning-empty' },
           h('div', { class: 'icon' }, icon('mdi:shield-check')),
-          h('div', { class: 'title' }, 'Keine aktuellen Warnungen'),
-          h('div', { class: 'sub' }, `Für ${regionName} liegen derzeit keine amtlichen Wetterwarnungen vor.`))
+          h('div', { class: 'title' }, 'Keine Warnungen'),
+          h('div', { class: 'sub' }, `${regionName}: Keine Meldungen`))
       );
       return;
     }
@@ -4257,7 +5013,7 @@ class SmokeAlerts {
       h('div', { class: 'a-icon' }, icon('mdi:fire-alert')),
       h('div', {},
         h('div', { class: 'a-title' }, hass.states[id].attributes.friendly_name || id),
-        h('div', { class: 'a-sub' }, 'In diesem Raum wurde Rauch gemeldet')))));
+        h('div', { class: 'a-sub' }, 'Rauch erkannt')))));
     this.el.hidden = ids.length === 0;
   }
 }
@@ -4504,17 +5260,34 @@ class Settings {
   }
 
   // ═══════════ Shell ═══════════
+  _track(picker) {
+    (this._pickers ||= []).push(picker);
+    return picker;
+  }
+
+  destroy() {
+    for (const p of (this._pickers || [])) {
+      try { p?.destroy?.(); } catch {}
+    }
+    this._pickers = [];
+  }
+
+  _close() {
+    this.destroy();
+    this.onClose();
+  }
+
   _build() {
     this.body = h('div', { class: 'dialog-body' });
     this.tabBar = h('div', { class: 'tabs' });
     this.saveBtn = h('button', { class: 'btn primary', onClick: () => this._save() }, icon('mdi:content-save'), 'Speichern');
-    this.el = h('div', { class: 'overlay', onClick: (e) => { if (e.target === this.el) this.onClose(); } },
-      h('div', { class: 'dialog', role: 'dialog', 'aria-label': 'Dashboard-Einstellungen' },
-        h('div', { class: 'dialog-head' }, h('h2', {}, 'Dashboard einrichten'),
-          h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: () => this.onClose() }, icon('mdi:close'))),
+    this.el = h('div', { class: 'overlay', onClick: (e) => { if (e.target === this.el) this._close(); } },
+      h('div', { class: 'dialog', role: 'dialog', 'aria-label': 'Einstellungen' },
+        h('div', { class: 'dialog-head' }, h('h2', {}, 'Einstellungen'),
+          h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: () => this._close() }, icon('mdi:close'))),
         this.tabBar, this.body,
         h('div', { class: 'dialog-foot' },
-          h('button', { class: 'btn', onClick: () => this.onClose() }, 'Abbrechen'), this.saveBtn)));
+          h('button', { class: 'btn', onClick: () => this._close() }, 'Abbrechen'), this.saveBtn)));
     this._renderTabs();
     this._renderBody();
   }
@@ -4528,6 +5301,7 @@ class Settings {
 
   _renderBody(keepScroll = false) {
     const top = this.body.scrollTop;
+    this.destroy();
     const render = this.tabs.find(([id]) => id === this.tab)[2];
     this.body.replaceChildren(...render());
     if (keepScroll) this.body.scrollTop = top;
@@ -4550,6 +5324,7 @@ class Settings {
     try {
       const res = await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
       if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
+      this.destroy();
       this.onSaved();
     } catch (err) {
       this.saveBtn.disabled = false;
@@ -4575,27 +5350,27 @@ class Settings {
   }
 
   _entity(obj, key, label, opts = {}) {
-    const picker = new EntityPicker({
+    const picker = this._track(new EntityPicker({
       hass: this.hass,
       value: obj[key] || '',
-      placeholder: opts.placeholder || 'Entität suchen...',
+      placeholder: opts.placeholder || 'Entität suchen',
       domain: opts.domain,
       filter: opts.filter,
       onChange: (val) => {
         if (val) obj[key] = val;
         else delete obj[key];
       },
-    });
+    }));
     return this._field(label, picker.el);
   }
 
   _select(obj, key, label, options, fallback = options[0][0]) {
     const val = obj[key] ?? fallback;
-    const cdd = new CustomDropdown({
+    const cdd = this._track(new CustomDropdown({
       options: options.map(([v, l]) => ({ value: v, label: l })),
       value: val,
       onChange: (v) => { obj[key] = v; },
-    });
+    }));
     return this._field(label, cdd.el);
   }
 
@@ -4628,19 +5403,19 @@ class Settings {
   }
 
   _color(obj, key, label) {
-    const picker = new ColorPicker({
+    const picker = this._track(new ColorPicker({
       value: obj[key] || '',
       label,
       onChange: (val) => {
         if (val) obj[key] = val;
         else delete obj[key];
       },
-    });
+    }));
     return this._field(label, picker.el);
   }
 
   _icon(obj, key, label, placeholder = 'mdi:...') {
-    const picker = new IconPicker({
+    const picker = this._track(new IconPicker({
       hass: this.hass,
       value: obj[key] || '',
       placeholder,
@@ -4648,7 +5423,7 @@ class Settings {
         if (val) obj[key] = val;
         else delete obj[key];
       },
-    });
+    }));
     return this._field(label, picker.el);
   }
 
@@ -4683,9 +5458,9 @@ class Settings {
     return [
       this._title('Begrüßung'),
       h('div', { class: 'fields' }, this._entity(this.draft, 'greeting_entity', 'Begrüßungs-Sensor (optional)')),
-      this._hint('• Leer = automatische Begrüßung (Tageszeit + Name)\n• Sensor-Status wird als Begrüßung angezeigt'),
+      this._hint('• Leer = Standard-Begrüßung\n• Sensorwert ersetzt Begrüßung'),
       this._title('Badges'),
-      this._hint('• Kleine Status-Kacheln unter der Begrüßung\n• Sichtbarkeit per Regel steuerbar'),
+      this._hint('• Status-Badges unter Begrüßung\n• Sichtbarkeit nach Regel'),
       this._list(this.draft.badges, {
         rowTitle: (b) => b.name || b.entity_id || 'Neues Badge',
         make: () => ({ entity_id: '', show_state: true, tap: 'more-info', visible_when: 'always' }),
@@ -4697,10 +5472,10 @@ class Settings {
           this._check(b, 'show_name', 'Name anzeigen'),
           this._check(b, 'show_state', 'Status anzeigen'),
           this._select(b, 'tap', 'Bei Tipp', TAP_OPTIONS),
-          this._text(b, 'path', 'Pfad (bei „Seite öffnen“)', { placeholder: '/lovelace/solar' }),
-          this._text(b, 'service', 'Dienst (bei „Dienst ausführen“)', { placeholder: 'input_boolean.turn_on' }),
+          this._text(b, 'path', 'Pfad („Seite“)', { placeholder: '/lovelace/solar' }),
+          this._text(b, 'service', 'Dienst („Dienst“)', { placeholder: 'input_boolean.turn_on' }),
           this._select(b, 'visible_when', 'Sichtbar', VISIBLE_OPTIONS, 'always'),
-          this._text(b, 'visible_value', 'Vergleichswert', { placeholder: '0  /  unavailable, off' }),
+          this._text(b, 'visible_value', 'Vergleichswert', { placeholder: '0 / unavailable, off' }),
         ],
         addLabel: 'Badge hinzufügen',
       }),
@@ -4719,13 +5494,13 @@ class Settings {
         this._entity(d.warning, 'entity_id', 'Warnstufen-Sensor'),
         this._text(d.warning, 'headline_attribute', 'Attribut für Überschrift', { placeholder: 'warning_1_headline' }),
         this._text(d.warning, 'path', 'Pfad bei Tipp', { placeholder: '/dashboard-warnungen/dash-warnungen' })),
-      this._hint('• Anzeige ab Warnstufe > 0\n• Rauchmelder-Alarm automatisch aktiv (alle Rauchmelder)'),
+      this._hint('• Anzeige ab Warnstufe > 0\n• Rauchmelder immer aktiv'),
       this._title('Ankündigung'),
       h('div', { class: 'fields' },
         this._entity(d.announce, 'entity_id', 'Skript / Entität'),
         this._text(d.announce, 'name', 'Anzeigename'),
         this._icon(d.announce, 'icon', 'Icon'),
-        this._entity(d.announce, 'chips_visible_entity', 'Chips nur sichtbar wenn verfügbar (z. B. Drucker)')),
+        this._entity(d.announce, 'chips_visible_entity', 'Chip-Verfügbarkeit (Sensor)')),
       this._list(d.announce.chips, {
         rowTitle: (c) => c.entity_id || 'Chip',
         make: () => ({ entity_id: '', icon: '' }),
@@ -4733,7 +5508,7 @@ class Settings {
         addLabel: 'Chip hinzufügen',
       }),
       this._title('Personen'),
-      this._hint('• Anzeige nur bei Status „Zuhause“\n• Nur für gewählte Benutzer sichtbar'),
+      this._hint('• Anzeige nur „Zuhause“\n• Pro Benutzer filterbar'),
       this._list(d.persons, {
         rowTitle: (p) => p.entity_id || 'Person',
         make: () => ({ entity_id: '', users: [] }),
@@ -4753,13 +5528,13 @@ class Settings {
       h('div', { class: 'fields' },
         this._csv(d.trash, 'calendar_entities', 'Kalender (kommagetrennt)', 'calendar.muellplan'),
         this._text(d.trash, 'next_days', 'Vorschau (Tage)', { type: 'number' })),
-      this._hint('• Terminname enthält Muster → Tonne\n• Standard = Hochwertiges 3D-Vektor-Design (Gelb, Blau, Braun, Grau usw.)\n• Eigenes Bild nur optional erforderlich'),
+      this._hint('• Muster im Terminnamen → Tonne\n• Standard: 3D-Vektortonne\n• Eigenes Bild optional'),
       this._list(d.trash.patterns, {
         rowTitle: (p) => p.pattern || 'Tonne',
         make: () => ({ pattern: '', icon: 'mdi:trash-can-outline', color: 'grey', picture: '' }),
         fields: (p) => {
           const previewWrap = h('div', { class: 'trash-preview-box' }, renderTrashBin(p.color || 'grey', 42));
-          const colorField = new ColorPicker({
+          const colorField = this._track(new ColorPicker({
             value: p.color || 'grey',
             label: 'Farbe',
             allowAuto: false,
@@ -4767,9 +5542,9 @@ class Settings {
               p.color = val || 'grey';
               previewWrap.replaceChildren(renderTrashBin(p.color, 42));
             },
-          });
+          }));
           return [
-            this._text(p, 'pattern', 'Muster im Terminnamen (z. B. Leichtverpackungen)'),
+            this._text(p, 'pattern', 'Termin-Muster'),
             this._field('Farbe', colorField.el),
             this._icon(p, 'icon', 'Fallback-Icon'),
             this._text(p, 'picture', 'Eigenes Bild (optional)', { placeholder: '/local/custom-icons/...' }),
@@ -4785,7 +5560,7 @@ class Settings {
     this.draft.nav ||= [];
     return [
       this._title('Untere Leiste'),
-      this._hint('• Schnellzugriff-Buttons am unteren Rand\n• Pfad = beliebige HA-Seite'),
+      this._hint('• Untere Schnellzugriff-Leiste\n• Beliebiger HA-Pfad'),
       this._list(this.draft.nav, {
         rowTitle: (n) => n.name || n.path || 'Button',
         make: () => ({ name: '', icon: 'mdi:home', path: '' }),
@@ -4801,7 +5576,7 @@ class Settings {
   _tabRooms() {
     const move = (arr, i, dir) => { const j = i + dir; if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; this._renderBody(true); };
     return [
-      this._hint('• Reihenfolge der Räume und Kacheln\n• Ausblenden pro Kachel\n• Sichtbarkeit pro Raum/Kachel für Benutzer'),
+      this._hint('• Raum- & Kachel-Reihenfolge\n• Kacheln ein-/ausblenden\n• Benutzer-Sichtbarkeit'),
       ...this.rooms.map((room, ri) => {
         const rc = (this.draft.rooms[room.area_id] ||= {});
         rc.expanded_users ||= [];
@@ -4825,7 +5600,7 @@ class Settings {
               this._miniBtn(t.hidden ? 'mdi:eye-off' : 'mdi:eye', t.hidden ? 'Einblenden' : 'Ausblenden', false,
                 () => { t.hidden = !t.hidden; this._renderBody(true); })),
             ),
-            h('div', { class: 'hint', style: { marginTop: '8px' } }, 'Benutzer-Sichtbarkeit einzelner Kacheln:'),
+            h('div', { class: 'hint', style: { marginTop: '8px' } }, 'Sichtbarkeit pro Kachel:'),
             ...room.tiles.map((t) => h('details', { class: 'sub' },
               h('summary', {}, `${t.name || t.entity_id}${t.users.length ? ` · ${t.users.length} Benutzer` : ''}`),
               this._usersField(t.users, 'Sichtbar für')))));
@@ -4835,10 +5610,10 @@ class Settings {
 
   _tabExtra() {
     this.draft.extra_tiles ||= [];
-    const areaOptions = [['', 'Automatisch (Raum der Entität)'], ...this.areas.map((a) => [a.area_id, a.name])];
+    const areaOptions = [['', 'Automatisch'], ...this.areas.map((a) => [a.area_id, a.name])];
     return [
       this._title('Zusatz-Kacheln'),
-      this._hint('• Entitäten ohne Gerät (Helfer, Skripte, Klima …)\n• Werden einem Raum zugewiesen\n• Bleiben bei Umbenennung verknüpft (eindeutige ID)'),
+      this._hint('• Entitäten ohne Gerät (Helfer, Skripte, Klima)\n• Raumzuweisung per ID'),
       this._list(this.draft.extra_tiles, {
         rowTitle: (e) => e.name || e.entity_id || 'Neue Kachel',
         make: () => ({ entity_id: '', area_id: '' }),
@@ -4863,8 +5638,8 @@ class Settings {
       h('button', { class: 'btn', type: 'button', onClick: () => { presets.push([255, 160, 60]); render(); } }, icon('mdi:plus'), 'Farbe'));
     render();
     return [
-      this._title('Farb-Voreinstellungen für Lichter'),
-      this._hint('• Erscheinen bei farbfähigen Lichtern\n• Tipp = Farbe setzen'),
+      this._title('Licht-Farbpresets'),
+      this._hint('• Auswahl bei Farblampen\n• Tipp = Farbe setzen'),
       wrap,
     ];
   }
@@ -4874,8 +5649,8 @@ class Settings {
     const wrap = h('div', { class: 'settings-devices-tab' });
     this._renderDevicesTab(wrap);
     return [
-      this._title('Geräteverwaltung'),
-      this._hint('• Alle für das Companion Dashboard eingerichteten Geräte im Überblick\n• Gerätename, Raum und Kategorie bearbeiten\n• Einrichtung aufheben oder neue Geräte hinzufügen'),
+      this._title('Geräte'),
+      this._hint('• Eingerichtete Geräte & Gruppen\n• Name, Raum, Kategorie editierbar'),
       wrap,
     ];
   }
@@ -4894,18 +5669,18 @@ class Settings {
       const areaMap = new Map((areas || []).map((a) => [a.area_id, a.name]));
 
       const configuredIds = Object.keys(configuredMap);
-      if (!configuredIds.length) {
+      if (!configuredIds.length && !Object.keys(groupsMap).length) {
         wrap.replaceChildren(
           h('div', { class: 'empty' },
             icon('mdi:devices'),
-            h('div', { style: { fontWeight: '600', margin: '8px 0 4px' } }, 'Noch keine Geräte eingerichtet'),
-            h('div', { class: 'hint' }, 'Richte dein erstes Gerät über den Einrichtungsassistenten ein.'),
+            h('div', { style: { fontWeight: '600', margin: '8px 0 4px' } }, 'Keine Geräte eingerichtet'),
+            h('div', { class: 'hint' }, 'Erstes Gerät über Assistent einrichten'),
             h('div', { style: { marginTop: '14px' } },
               h('button', {
                 class: 'btn primary',
                 type: 'button',
                 onClick: () => this.onOpenDevice?.(null),
-              }, icon('mdi:plus-circle-outline'), 'Neues Gerät einrichten')))
+              }, icon('mdi:plus-circle-outline'), 'Gerät einrichten')))
         );
         return;
       }
@@ -4924,8 +5699,14 @@ class Settings {
           return !searchQ || name.includes(searchQ) || area.includes(searchQ) || mfg.includes(searchQ) || model.includes(searchQ);
         });
 
-        if (!filtered.length) {
-          listEl.replaceChildren(h('div', { class: 'empty' }, icon('mdi:magnify'), h('div', {}, 'Keine passenden Geräte gefunden')));
+        const filteredGroups = Object.values(groupsMap).filter((g) => {
+          const gName = (g.name || '').toLowerCase();
+          const area = (areaMap.get(g.area_id) || '').toLowerCase();
+          return !searchQ || gName.includes(searchQ) || area.includes(searchQ);
+        });
+
+        if (!filtered.length && !filteredGroups.length) {
+          listEl.replaceChildren(h('div', { class: 'empty' }, icon('mdi:magnify'), h('div', {}, 'Keine Treffer')));
           return;
         }
 
@@ -4938,8 +5719,8 @@ class Settings {
           groups.get(areaName).push(id);
         }
 
-        // Include rooms from groups
-        for (const g of Object.values(groupsMap)) {
+        // Include rooms from matching groups
+        for (const g of filteredGroups) {
           const areaName = areaMap.get(g.area_id) || 'Ohne Raum';
           if (!groups.has(areaName)) groups.set(areaName, []);
         }
@@ -4958,49 +5739,33 @@ class Settings {
             return nameA.localeCompare(nameB);
           });
 
-          // Groups in this room
-          const roomGroups = Object.values(groupsMap).filter((g) => {
-            const aName = areaMap.get(g.area_id) || 'Ohne Raum';
-            return aName === areaName;
-          });
+          const roomGroups = filteredGroups.filter((g) => (areaMap.get(g.area_id) || 'Ohne Raum') === areaName);
 
-          const groupCards = roomGroups.map((g) => {
-            const cat = DEVICE_CATEGORIES.find((c) => c.id === g.category);
-            const catColor = cat?.color || '#ffc107';
-            return h('div', { class: 'device-card group-card' },
-              h('div', { class: 'd-icon', style: { color: catColor } }, icon(g.icon || 'mdi:lightbulb-group')),
-              h('div', { class: 'd-info' },
-                h('div', { class: 'd-name' }, g.name),
-                h('div', { class: 'd-meta' },
-                  h('span', { class: 'badge-tag category', style: { '--badge-cat-color': catColor } },
-                    icon('mdi:lightbulb-group'), `Gruppe (${g.children?.length || 0} Elemente)`))),
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-                h('button', {
-                  class: 'btn secondary small',
-                  type: 'button',
-                  title: 'Gruppe bearbeiten',
-                  'aria-label': 'Bearbeiten',
-                  onClick: () => {
-                    this.onOpenGroup?.(g.id);
-                  },
-                }, icon('mdi:pencil'), 'Bearbeiten'),
-                h('button', {
-                  class: 'icon-btn danger',
-                  type: 'button',
-                  title: 'Gruppe auflösen',
-                  onClick: async () => {
-                    const conf = window.confirm(`Gruppe „${g.name}“ auflösen?\n\nDie enthaltenen Geräte bleiben erhalten.`);
-                    if (!conf) return;
-                    try {
-                      await this.hass.callWS({ type: 'smarthome_companion/groups/delete', group_id: g.id });
-                      delete groupsMap[g.id];
-                      this._renderDevicesTab(wrap);
-                    } catch (err) {
-                      alert(`Fehler beim Auflösen: ${err.message || err}`);
-                    }
-                  },
-                }, icon('mdi:delete-outline'))));
-          });
+          const groupCards = roomGroups.map((g) => createGroupCard({
+            group: g,
+            onEdit: () => this.onOpenGroup?.(g.id),
+            onDelete: async () => {
+              const conf = await showConfirmDialog(this.el, {
+                title: 'Gruppe auflösen?',
+                message: `Gruppe „${g.name}“ auflösen?\n• Enthaltene Geräte bleiben erhalten`,
+                confirmLabel: 'Auflösen',
+                danger: true,
+              });
+              if (!conf) return;
+              try {
+                await this.hass.callWS({ type: 'smarthome_companion/groups/delete', group_id: g.id });
+                delete groupsMap[g.id];
+                showToast(this.el, 'Gruppe aufgelöst');
+                if (!configuredIds.length && !Object.keys(groupsMap).length) {
+                  this._renderDevicesTab(wrap);
+                } else {
+                  preserveScroll(this.body, updateList);
+                }
+              } catch (err) {
+                showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
+              }
+            },
+          }));
 
           const cards = ids.map((id) => {
             const cfg = configuredMap[id];
@@ -5013,60 +5778,70 @@ class Settings {
             const catIcon = cat?.icon || 'mdi:devices';
             const catColor = cat?.color || 'var(--cd-accent)';
 
-            const badges = [];
-            badges.push(h('span', {
-              class: 'badge-tag category',
-              style: { '--badge-cat-color': catColor },
-            }, icon(catIcon), catName));
+            const badges = [
+              h('span', {
+                class: 'badge-tag category',
+                style: { '--badge-cat-color': catColor },
+              }, icon(catIcon), catName),
+            ];
 
             return h('div', { class: 'device-card' },
               h('div', { class: 'd-icon', style: { color: catColor } }, icon(catIcon)),
               h('div', { class: 'd-info' },
                 h('div', { class: 'd-name' }, name),
-                h('div', { class: 'd-meta' }, mfg ? h('span', {}, mfg) : null, ...badges)),
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+                h('div', { class: 'd-meta' }, mfg ? h('span', { class: 'd-mfg' }, mfg) : null, ...badges)),
+              h('div', { class: 'device-card-actions' },
                 h('button', {
                   class: 'btn secondary small',
                   type: 'button',
                   title: 'Gerät bearbeiten',
+                  'aria-label': 'Bearbeiten',
                   onClick: () => this.onOpenDevice?.(id),
-                }, icon('mdi:pencil'), 'Bearbeiten'),
+                }, icon('mdi:pencil'), h('span', {}, 'Bearbeiten')),
                 h('button', {
                   class: 'icon-btn danger',
                   type: 'button',
-                  title: 'Companion-Einrichtung aufheben',
+                  title: 'Einrichtung aufheben',
+                  'aria-label': 'Einrichtung aufheben',
                   onClick: async () => {
-                    const conf = window.confirm(`Companion-Einrichtung für „${name}“ aufheben?\n\nDas Gerät bleibt in Home Assistant erhalten.`);
+                    const conf = await showConfirmDialog(this.el, {
+                      title: 'Einrichtung aufheben?',
+                      message: `Einrichtung für „${name}“ aufheben?\n• Gerät bleibt in Home Assistant erhalten`,
+                      confirmLabel: 'Aufheben',
+                      danger: true,
+                    });
                     if (!conf) return;
                     try {
                       await this.hass.callWS({ type: 'smarthome_companion/devices/remove', device_id: id });
                       delete configuredMap[id];
-                      this._renderDevicesTab(wrap);
+                      const idx = configuredIds.indexOf(id);
+                      if (idx >= 0) configuredIds.splice(idx, 1);
+                      showToast(this.el, 'Einrichtung aufgehoben');
+                      if (!configuredIds.length && !Object.keys(groupsMap).length) {
+                        this._renderDevicesTab(wrap);
+                      } else {
+                        preserveScroll(this.body, updateList);
+                      }
                     } catch (err) {
-                      alert(`Fehler beim Aufheben: ${err.message || err}`);
+                      showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
                     }
                   },
                 }, icon('mdi:delete-outline'))));
           });
 
           const totalCount = groupCards.length + cards.length;
-          return h('div', { class: 'device-room-section' },
-            h('div', { class: 'device-room-header' },
-              icon(areaName === 'Ohne Raum' ? 'mdi:help-circle-outline' : 'mdi:home-outline'),
-              h('span', {}, areaName),
-              h('span', { class: 'room-count' }, `(${totalCount})`)),
-            h('div', { class: 'device-list' }, ...groupCards, ...cards));
+          return createDeviceRoomSection(areaName, [...groupCards, ...cards], totalCount);
         });
 
         listEl.replaceChildren(...sections);
       };
 
       const searchInput = h('input', {
-        type: 'text', placeholder: 'Gerätename, Raum, Modell oder Kategorie suchen...',
+        type: 'text', placeholder: 'Suchen (Name, Raum, Modell)',
         onInput: (e) => { searchQ = e.target.value.toLowerCase().trim(); updateList(); },
       });
-      const topRow = h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' } },
-        h('div', { class: 'search-bar', style: { flex: 1 } }, icon('mdi:magnify'), searchInput),
+      const topRow = h('div', { class: 'devices-toolbar' },
+        h('div', { class: 'search-bar' }, icon('mdi:magnify'), searchInput),
         h('button', {
           class: 'btn primary',
           type: 'button',
@@ -5076,7 +5851,7 @@ class Settings {
       updateList();
       wrap.replaceChildren(topRow, listEl);
     } catch (err) {
-      wrap.replaceChildren(h('div', { class: 'empty' }, icon('mdi:alert'), h('div', {}, `Fehler beim Laden: ${err.message || err}`)));
+      wrap.replaceChildren(h('div', { class: 'empty' }, icon('mdi:alert'), h('div', {}, `Fehler: ${err.message || err}`)));
     }
   }
 }
@@ -5126,7 +5901,7 @@ function buildSensorPrefBlock({ hass, type, entityIds, currentPref, onChange }) 
 
   const container = h('div', { class: 'sensor-pref-card' });
 
-  const render = () => {
+  const render = () => preserveScroll(container.closest?.('.dialog-body'), () => {
     const modeRow = h('div', { class: 'sensor-mode-tabs' },
       h('button', {
         type: 'button',
@@ -5182,10 +5957,10 @@ function buildSensorPrefBlock({ hass, type, entityIds, currentPref, onChange }) 
     });
 
     const hintText = mode === 'single'
-      ? 'Nur der ausgewählte Sensor wird in der Raumkachel angezeigt.'
+      ? '• Nur ausgewählter Sensor aktiv'
       : (isBinary
-        ? 'Ausgewählte Sensoren werden gemeinsam für die Meldung berücksichtigt.'
-        : `${selected.length} von ${entityIds.length} Sensoren fließen in den Durchschnittswert ein.`);
+        ? '• Auswahl kombiniert gemeldet'
+        : `• Durchschnitt aus ${selected.length} von ${entityIds.length} Sensoren`);
 
     container.replaceChildren(
       h('div', { class: 'sensor-pref-head' },
@@ -5197,7 +5972,7 @@ function buildSensorPrefBlock({ hass, type, entityIds, currentPref, onChange }) 
       h('div', { class: 'hint', style: { marginBottom: '8px' } }, hintText),
       h('div', { class: 'sensor-choice-list' }, ...rows),
     );
-  };
+  });
 
   render();
   return container;
@@ -5225,6 +6000,10 @@ class SensorConflictModal {
     this._build();
   }
 
+  destroy() {
+    this.el?.remove();
+  }
+
   _build() {
     const blocks = this.conflicts.map((c) => buildSensorPrefBlock({
       hass: this.hass,
@@ -5238,23 +6017,23 @@ class SensorConflictModal {
       type: 'button',
       class: 'btn primary',
       onClick: () => this._submit(),
-    }, icon('mdi:check'), 'Auswahl übernehmen');
+    }, icon('mdi:check'), 'Übernehmen');
 
     this.el = h('div', { class: 'overlay', style: { zIndex: '1010' } },
       h('div', { class: 'dialog room-modal-dialog' },
         h('div', { class: 'dialog-head' },
           icon('mdi:tune-variant'),
-          h('h2', {}, `Mehrere Sensoren in „${this.areaName}“`)),
+          h('h2', {}, `Sensoren: ${this.areaName}`)),
         h('div', { class: 'dialog-body' },
           h('div', { class: 'hint', style: { marginBottom: '10px' } },
-            'In diesem Raum sind mehrere Sensoren desselben Typs vorhanden. Wähle aus, ob ein einzelner Sensor exklusiv oder ein Durchschnitt ausgewählter Sensoren angezeigt werden soll.'),
+            '• Mehrere Sensoren gleichen Typs\n• Einzelsensor oder Durchschnitt wählen'),
           ...blocks),
         h('div', { class: 'dialog-foot', style: { justifyContent: 'flex-end' } },
           h('div', { class: 'dialog-foot-actions' },
             h('button', {
               type: 'button',
               class: 'btn',
-              onClick: () => { this.el.remove(); this.onCancel?.(); },
+              onClick: () => { this.destroy(); this.onCancel?.(); },
             }, 'Standard (Alle)'),
             this.saveBtn))));
   }
@@ -5265,17 +6044,18 @@ class SensorConflictModal {
     this.saveBtn.disabled = true;
     try {
       await this.onSave?.(this.prefs);
-      this.el.remove();
-    } catch (_) {
+      this.destroy();
+    } catch (err) {
       this._saving = false;
       this.saveBtn.disabled = false;
+      showToast(this.el, `Fehler: ${err?.message || err}`, { error: true });
     }
   }
 }
 
 /**
  * Room Edit Modal opened when clicking a room header in Dashboard Edit Mode.
- * Allows changing the room icon (via existing CustomDropdown) and sensor conflict/average preferences.
+ * Allows changing the room icon and sensor conflict/average preferences.
  */
 class RoomEditModal {
   constructor({ hass, roomSpec, onSaved, onClose }) {
@@ -5290,13 +6070,18 @@ class RoomEditModal {
     this._build();
   }
 
+  destroy() {
+    this.iconPicker?.destroy();
+    this.el?.remove();
+  }
+
   _build() {
     const isUnassigned = this.roomSpec.area_id === '__none__';
     this.nameInput = h('input', {
       type: 'text',
       value: this.roomName,
       disabled: isUnassigned,
-      placeholder: 'Raumname...',
+      placeholder: 'Raumname',
       onInput: (e) => { this.roomName = e.target.value; },
     });
 
@@ -5305,7 +6090,7 @@ class RoomEditModal {
       hass: this.hass,
       value: this.selectedIcon,
       priorityIcons: ROOM_ICON_OPTIONS,
-      placeholder: 'Raum-Icon wählen (z. B. Wohnzimmer, mdi:sofa)...',
+      placeholder: 'Raum-Icon suchen',
       onChange: (val) => {
         const nextIcon = (val && val.includes(':')) ? val : 'mdi:home-outline';
         this.selectedIcon = nextIcon;
@@ -5340,7 +6125,7 @@ class RoomEditModal {
                 h('div', { class: 'sensor-choice-name' }, _entityLabel(this.hass, eid)),
                 h('div', { class: 'sensor-choice-id' }, eid))));
         })
-      : [h('div', { class: 'hint' }, 'Diesem Raum sind aktuell keine Raumsensoren zugewiesen. Sensoren können über „Gerät hinzufügen“ eingerichtet werden.')];
+      : [h('div', { class: 'hint' }, 'Keine Raumsensoren zugewiesen')];
 
     this.saveBtn = h('button', {
       type: 'button',
@@ -5362,7 +6147,7 @@ class RoomEditModal {
     h('div', { class: 'dialog room-modal-dialog' },
       h('div', { class: 'dialog-head' },
         this.headIcon,
-        h('h2', {}, `Raum bearbeiten: ${this.roomSpec.name}`),
+        h('h2', {}, `Raum: ${this.roomSpec.name}`),
         h('button', {
           type: 'button', class: 'icon-btn', 'aria-label': 'Schließen',
           onClick: () => this._close(),
@@ -5371,8 +6156,8 @@ class RoomEditModal {
         isUnassigned ? null : h('div', { class: 'section-title' }, 'Raumname'),
         isUnassigned ? null : h('div', { class: 'field', style: { marginBottom: '10px' } }, this.nameInput),
         h('div', { class: 'section-title' }, 'Raum-Icon'),
-        h('div', { class: 'field', style: { marginBottom: '10px', zIndex: '20' } }, this.iconPicker.el),
-        h('div', { class: 'section-title' }, 'Raumsensoren & Durchschnitt'),
+        h('div', { class: 'field', style: { marginBottom: '10px' } }, this.iconPicker.el),
+        h('div', { class: 'section-title' }, 'Raumsensoren'),
         ...sensorBlocks),
       h('div', { class: 'dialog-foot' },
         h('div', { class: 'dialog-foot-actions' }, deleteBtn),
@@ -5382,36 +6167,19 @@ class RoomEditModal {
   }
 
   _close() {
-    this.iconPicker?.destroy();
-    this.el.remove();
+    this.destroy();
     this.onClose?.();
   }
 
-  _confirmDelete() {
-    const confirmOverlay = h('div', {
-      class: 'overlay',
-      style: { zIndex: '1020' },
-      onClick: (e) => { if (e.target === confirmOverlay) confirmOverlay.remove(); },
-    },
-    h('div', { class: 'dialog room-modal-dialog', style: { maxWidth: '440px' } },
-      h('div', { class: 'dialog-head' },
-        icon('mdi:alert-outline'),
-        h('h2', {}, 'Raum löschen?')),
-      h('div', { class: 'dialog-body' },
-        h('div', { class: 'hint', style: { fontSize: '14px', color: 'var(--primary-text-color, #fff)', lineHeight: '1.5' } },
-          `Möchtest du den Raum „${this.roomSpec.name}“ wirklich löschen?\n\nDer Raum wird entfernt, alle zugeordneten Geräte und Sensoren bleiben erhalten und werden automatisch nach „Nicht zugeordnet“ verschoben.`)),
-      h('div', { class: 'dialog-foot', style: { justifyContent: 'flex-end' } },
-        h('div', { class: 'dialog-foot-actions' },
-          h('button', { type: 'button', class: 'btn', onClick: () => confirmOverlay.remove() }, 'Abbrechen'),
-          h('button', {
-            type: 'button',
-            class: 'btn danger',
-            onClick: async () => {
-              confirmOverlay.remove();
-              await this._deleteRoom();
-            },
-          }, icon('mdi:delete-outline'), 'Endgültig löschen')))));
-    this.el.append(confirmOverlay);
+  async _confirmDelete() {
+    const conf = await showConfirmDialog(this.el, {
+      title: 'Raum löschen?',
+      message: `Raum „${this.roomSpec.name}“ löschen?\n• Zugewiesene Geräte bleiben erhalten\n• Verschiebung nach „Nicht zugeordnet“`,
+      confirmLabel: 'Löschen',
+      danger: true,
+    });
+    if (!conf) return;
+    await this._deleteRoom();
   }
 
   async _deleteRoom() {
@@ -5444,12 +6212,12 @@ class RoomEditModal {
         await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
       }
 
-      this.iconPicker?.destroy();
-      this.el.remove();
+      this.destroy();
       this.onSaved?.();
     } catch (err) {
       this._saving = false;
       console.error('[RoomEditModal] delete failed', err);
+      showToast(this.el, `Fehler: ${err?.message || err}`, { error: true });
     }
   }
 
@@ -5503,13 +6271,13 @@ class RoomEditModal {
         if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
       }
 
-      this.iconPicker?.destroy();
-      this.el.remove();
+      this.destroy();
       this.onSaved?.();
     } catch (err) {
       this._saving = false;
       this.saveBtn.disabled = false;
       console.error('[RoomEditModal] save failed', err);
+      showToast(this.el, `Fehler: ${err?.message || err}`, { error: true });
     }
   }
 }
@@ -5517,42 +6285,6 @@ class RoomEditModal {
 
 
 // ─── START: components/device_wizard.js ───
-const DEVICE_CATEGORIES = [
-  { id: 'leuchte', name: 'Leuchte', icon: 'mdi:lightbulb', color: '#ffc107', desc: 'Lampen, Spots & LED-Streifen' },
-  { id: 'steckdose', name: 'Steckdose', icon: 'mdi:power-socket-eu', color: '#009688', desc: 'Zwischenstecker & Dosen' },
-  { id: 'schalter', name: 'Gerät / Relais', icon: 'mdi:power-plug', color: '#2196f3', desc: 'Allgemeine Schalter' },
-  { id: 'jalousie', name: 'Jalousie', icon: 'mdi:window-shutter', color: '#9c27b0', desc: 'Rollläden & Markisen' },
-  { id: 'wasserventil', name: 'Wasserventil', icon: 'mdi:water-pump', color: '#00bcd4', desc: 'Bewässerungsventile' },
-  { id: 'pumpe', name: 'Pumpe', icon: 'mdi:pump', color: '#03a9f4', desc: 'Garten- & Wasserpumpen' },
-  { id: 'klima', name: 'Klima', icon: 'mdi:thermometer', color: '#ff9800', desc: 'Thermostate & Klima' },
-  { id: 'fernseher', name: 'Fernseher', icon: 'mdi:television', color: '#03a9f4', desc: 'TVs & Mediaplayer' },
-  { id: 'bewegungsmelder', name: 'Bewegungsmelder', icon: 'mdi:motion-sensor', color: '#e91e63', desc: 'Präsenz- & Bewegung' },
-  { id: 'bodenmessgeraet', name: 'Bodenmessgerät', icon: 'mdi:sprout', color: '#4caf50', desc: 'Bodenfeuchte & Pflanzen' },
-  { id: 'raummessgeraet', name: 'Raummessgerät', icon: 'mdi:thermometer-lines', color: '#ff5722', desc: 'Raumluft- & Temperatursensoren' },
-];
-
-const CONTROLLABLE_DOMAINS = new Set(['light', 'switch', 'cover', 'valve', 'climate', 'media_player', 'fan']);
-
-/**
- * Filter out configuration, diagnostic, and internal utility switches (e.g. Overcharge protection, Child lock, LED mode).
- * Only genuine controllable actuators should be treated as device channels.
- */
-function isControllableActuator(e) {
-  if (!e || !e.entity_id) return false;
-  if (e.disabled_by) return false;
-  if (e.entity_category === 'config' || e.entity_category === 'diagnostic') return false;
-
-  const domain = domainOf(e.entity_id);
-  if (!CONTROLLABLE_DOMAINS.has(domain)) return false;
-
-  // Pattern filter for configuration and diagnostic switches
-  const id = (e.entity_id || '').toLowerCase();
-  const name = (e.name || e.original_name || '').toLowerCase();
-  const configPattern = /(?:overcharge|protection|kindersicherung|child_?lock|indicator|led_?mode|backlight|status_?led|restart|reboot|update|firmware|start_?zustand|start_?state|auto_?off|inching|pairing|identify|interlock|relay_mode|power_on_state)/;
-  if (configPattern.test(id) || configPattern.test(name)) return false;
-
-  return true;
-}
 class DeviceWizard {
   /**
    * @param {{hass:object, initialDeviceId?:string, onClose:Function, onSaved:Function}} opts
@@ -5565,8 +6297,8 @@ class DeviceWizard {
     this.onClose = onClose;
     this.onSaved = onSaved;
 
-    this.step = 0; // 0=Gerät, 1=Details, 2=Kanäle, 3=Übersicht
-    this.steps = ['Gerät', 'Details', 'Kanäle & Messung', 'Übersicht'];
+    this.step = 0; // 0=Gerät, 1=Details, 2=Kanäle, 3=Prüfen
+    this.steps = ['Gerät', 'Details', 'Kanäle', 'Prüfen'];
 
     this.devices = [];
     this.entities = [];
@@ -5599,25 +6331,37 @@ class DeviceWizard {
     this._load();
   }
 
+  destroy() {
+    this._cleanupDropdowns();
+    this.el?.remove();
+  }
+
+  _closeWizard() {
+    this._cleanupDropdowns();
+    this.onClose?.();
+  }
+
   _build() {
     this.body = h('div', { class: 'dialog-body' });
     this.stepBar = h('div', { class: 'wizard-steps' });
+    this.selectionSlot = h('div', { class: 'wizard-selection-slot' });
     this.foot = h('div', { class: 'dialog-foot' });
 
     this.dialog = h('div', { class: 'dialog', role: 'dialog', 'aria-label': 'Gerät einrichten', hidden: !!this.initialGroupId },
       h('div', { class: 'dialog-head' },
         icon('mdi:plus-circle-outline'),
         h('h2', {}, 'Gerät einrichten'),
-        h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: () => this.onClose() }, icon('mdi:close'))),
+        h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: () => this._closeWizard() }, icon('mdi:close'))),
       this.stepBar,
       this.body,
+      this.selectionSlot,
       this.foot);
 
-    this.el = h('div', { class: 'overlay', onClick: (e) => { if (e.target === this.el) this.onClose(); } }, this.dialog);
+    this.el = h('div', { class: 'overlay', onClick: (e) => { if (e.target === this.el) this._closeWizard(); } }, this.dialog);
   }
 
   async _load() {
-    this.body.replaceChildren(h('div', { class: 'empty' }, icon('mdi:loading'), h('div', { style: { marginTop: '8px' } }, 'Lade Geräte...')));
+    this.body.replaceChildren(h('div', { class: 'empty' }, icon('mdi:loading'), h('div', { style: { marginTop: '8px' } }, 'Lade Geräte')));
     try {
       const [devs, ents, areas, setup, dash] = await Promise.all([
         this.hass.callWS({ type: 'config/device_registry/list' }),
@@ -5636,13 +6380,17 @@ class DeviceWizard {
       this._dashboardConfig = dash?.config || {};
 
       if (this.initialDeviceId) {
-        let id = this.initialDeviceId;
-        if (id.includes(':') && !id.startsWith('e:') && !id.startsWith('l:')) {
-          id = id.split(':')[0];
+        const parsed = parseChannelKey(this.initialDeviceId);
+        const lookupId = parsed.deviceId || parsed.entityId || this.initialDeviceId;
+        let target = this.devices.find((d) => d.id === lookupId);
+        if (!target && parsed.entityId) {
+          const ent = this.entities.find((e) => e.entity_id === parsed.entityId);
+          if (ent?.device_id) {
+            target = this.devices.find((d) => d.id === ent.device_id);
+          }
         }
-        let target = this.devices.find((d) => d.id === id);
         if (!target) {
-          const ent = this.entities.find((e) => e.entity_id === id);
+          const ent = this.entities.find((e) => e.entity_id === lookupId);
           if (ent?.device_id) {
             target = this.devices.find((d) => d.id === ent.device_id);
           }
@@ -5662,12 +6410,14 @@ class DeviceWizard {
 
       this._render();
     } catch (err) {
-      this.body.replaceChildren(h('div', { class: 'empty' }, icon('mdi:alert'), h('div', {}, `Fehler beim Laden: ${err.message || err}`)));
+      this.body.replaceChildren(h('div', { class: 'empty' }, icon('mdi:alert'), h('div', {}, `Ladefehler: ${err.message || err}`)));
     }
   }
 
   _render() {
     this._cleanupDropdowns();
+    this.selectionSlot.replaceChildren();
+    if (this.body) this.body.scrollTop = 0;
     if (this.isCelebration) {
       this._renderCelebration();
       return;
@@ -5706,22 +6456,22 @@ class DeviceWizard {
 
     const leftActions = [];
     if (isFirst || (this.initialDeviceId && this.step === 1)) {
-      leftActions.push(h('button', { class: 'btn', onClick: () => this.onClose() }, 'Abbrechen'));
+      leftActions.push(h('button', { class: 'btn', onClick: () => this._closeWizard() }, 'Abbrechen'));
       if (!isFirst && isConfigured) {
         leftActions.push(h('button', {
           class: 'btn danger',
-          title: 'Companion-Einrichtung für dieses Gerät aufheben',
+          title: 'Einrichtung aufheben',
           onClick: () => this._removeDevice(this.selectedDevice.id, this.customName),
-        }, icon('mdi:delete-outline'), 'Einrichtung aufheben'));
+        }, icon('mdi:delete-outline'), 'Entfernen'));
       }
     } else {
       leftActions.push(h('button', { class: 'btn', onClick: () => { this.step--; this._render(); } }, icon('mdi:chevron-left'), 'Zurück'));
       if (isConfigured) {
         leftActions.push(h('button', {
           class: 'btn danger',
-          title: 'Companion-Einrichtung für dieses Gerät aufheben',
+          title: 'Einrichtung aufheben',
           onClick: () => this._removeDevice(this.selectedDevice.id, this.customName),
-        }, icon('mdi:delete-outline'), 'Einrichtung aufheben'));
+        }, icon('mdi:delete-outline'), 'Entfernen'));
       }
     }
 
@@ -5740,7 +6490,7 @@ class DeviceWizard {
       rightActions.push(h('button', {
         class: 'btn success', disabled: this._saving,
         onClick: () => this._save(),
-      }, icon('mdi:check'), this._saving ? 'Wird gespeichert...' : 'Fertigstellen'));
+      }, icon('mdi:check'), this._saving ? 'Speichert...' : 'Speichern'));
     }
 
     const leftWrap = h('div', { class: 'dialog-foot-actions' }, ...leftActions);
@@ -5749,10 +6499,14 @@ class DeviceWizard {
   }
 
   async _removeDevice(deviceId, name) {
-    const devName = name || this.customName || 'diesem Gerät';
-    const confirmed = window.confirm(
-      `Soll die Companion-Einrichtung von „${devName}“ wirklich aufgehoben werden?\n\nDas Gerät bleibt in Home Assistant bestehen, wird aber nicht mehr als Companion-Gerät geführt.`
-    );
+    const devName = name || this.customName || 'Gerät';
+    const confirmed = await showConfirmDialog(this.el, {
+      title: 'Einrichtung aufheben',
+      message: `„${devName}“ entfernen? HA-Gerät bleibt bestehen.`,
+      confirmLabel: 'Entfernen',
+      cancelLabel: 'Abbrechen',
+      danger: true,
+    });
     if (!confirmed) return;
 
     try {
@@ -5764,6 +6518,7 @@ class DeviceWizard {
 
       delete this.configuredDevices[deviceId];
       if (this.directMode) {
+        this._cleanupDropdowns();
         this.onSaved(null);
         return;
       }
@@ -5775,50 +6530,49 @@ class DeviceWizard {
       this._render();
       this.onSaved(null);
     } catch (err) {
-      alert(`Fehler beim Aufheben der Einrichtung: ${err.message || err}`);
+      showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
     }
+  }
+
+  _isCandidateDevice(d) {
+    if (d.disabled_by || d.entry_type === 'service') return false;
+    const devEntities = this.entities.filter((e) => e.device_id === d.id && !e.disabled_by);
+    const controllable = devEntities.filter(isControllableActuator);
+    const sensors = devEntities.filter((e) => ['sensor', 'binary_sensor'].includes(domainOf(e.entity_id)));
+    if (!controllable.length && !sensors.length) return false;
+    const name = (d.name_by_user || d.name || '').toLowerCase();
+    const mfg = (d.manufacturer || '').toLowerCase();
+    const model = (d.model || '').toLowerCase();
+    const isSystem = (
+      name.includes('hacs') || mfg.includes('hacs') ||
+      name.includes('forecast') || mfg.includes('met.no') ||
+      name.includes('bluetooth') || mfg.includes('bluetooth') || name.startsWith('hci') ||
+      name.includes('plugin') || model.includes('plugin') ||
+      mfg.includes('integration') || model.includes('integration') ||
+      name === 'sun'
+    );
+    if (isSystem && !controllable.length) return false;
+    return true;
   }
 
   // ═══════════════ STEP 0: Gerät auswählen ═══════════════
   _renderStep0() {
-    const isCandidate = (d) => {
-      if (d.disabled_by || d.entry_type === 'service') return false;
-      const devEntities = this.entities.filter((e) => e.device_id === d.id && !e.disabled_by);
-      const controllable = devEntities.filter(isControllableActuator);
-      const sensors = devEntities.filter((e) => ['sensor', 'binary_sensor'].includes(domainOf(e.entity_id)));
-      if (!controllable.length && !sensors.length) return false;
-      const name = (d.name_by_user || d.name || '').toLowerCase();
-      const mfg = (d.manufacturer || '').toLowerCase();
-      const model = (d.model || '').toLowerCase();
-      const isSystem = (
-        name.includes('hacs') || mfg.includes('hacs') ||
-        name.includes('forecast') || mfg.includes('met.no') ||
-        name.includes('bluetooth') || mfg.includes('bluetooth') || name.startsWith('hci') ||
-        name.includes('plugin') || model.includes('plugin') ||
-        mfg.includes('integration') || model.includes('integration') ||
-        name === 'sun'
-      );
-      if (isSystem && !controllable.length) return false;
-      return true;
-    };
-    const candidates = this.devices.filter(isCandidate);
+    const candidates = this.devices.filter((d) => this._isCandidateDevice(d));
     const configuredCount = candidates.filter((d) => !!this.configuredDevices[d.id]).length;
     const unconfiguredCount = candidates.length - configuredCount;
     const allCount = candidates.length;
 
-    const hero = h('div', { class: 'win11-hero-badge', style: { '--hero-color': '#2196F3' } }, icon('mdi:devices'));
-
     const searchInput = h('input', {
-      type: 'text', placeholder: 'Gerät suchen (Name, Hersteller, Modell, Raum)...', value: this.searchQuery,
+      type: 'text', placeholder: 'Gerät oder Raum suchen', value: this.searchQuery,
       onInput: (e) => { this.searchQuery = e.target.value.toLowerCase().trim(); this._updateDeviceList(); },
     });
     const searchWrap = h('div', { class: 'search-bar' }, icon('mdi:magnify'), searchInput);
 
     const filterChips = h('div', { class: 'filter-chips' },
       ...[
-        ['unconfigured', `Nicht eingerichtet (${unconfiguredCount})`],
-        ['configured', `Bereits eingerichtet (${configuredCount})`],
-        ['all', `Alle Geräte (${allCount})`],
+        ['unconfigured', `Offen (${unconfiguredCount})`],
+        ['configured', `Eingerichtet (${configuredCount})`],
+        ['all', `Alle (${allCount})`],
       ].map(([id, label]) => h('button', {
         class: 'filter-chip', ...(id === this.statusFilter ? { 'data-active': '' } : {}),
         onClick: () => { this.statusFilter = id; this._renderStep0(); },
@@ -5828,9 +6582,6 @@ class DeviceWizard {
     this._updateDeviceList();
 
     this.body.replaceChildren(
-      hero,
-      h('div', { class: 'hint', style: { textAlign: 'center', marginBottom: '12px' } },
-        'Wähle das Gerät aus, das im Dashboard eingerichtet oder bearbeitet werden soll:'),
       searchWrap,
       filterChips,
       this.deviceListEl);
@@ -5841,38 +6592,23 @@ class DeviceWizard {
     const q = this.searchQuery;
 
     const filtered = this.devices.filter((d) => {
-      if (d.disabled_by) return false;
-      if (d.entry_type === 'service') return false;
-
-      const devEntities = this.entities.filter((e) => e.device_id === d.id && !e.disabled_by);
-      const controllable = devEntities.filter(isControllableActuator);
-      const sensors = devEntities.filter((e) => ['sensor', 'binary_sensor'].includes(domainOf(e.entity_id)));
-      if (!controllable.length && !sensors.length) return false;
-
-      const name = (d.name_by_user || d.name || '').toLowerCase();
-      const mfg = (d.manufacturer || '').toLowerCase();
-      const model = (d.model || '').toLowerCase();
-      const isSystem = (
-        name.includes('hacs') || mfg.includes('hacs') ||
-        name.includes('forecast') || mfg.includes('met.no') ||
-        name.includes('bluetooth') || mfg.includes('bluetooth') || name.startsWith('hci') ||
-        name.includes('plugin') || model.includes('plugin') ||
-        mfg.includes('integration') || model.includes('integration') ||
-        name === 'sun'
-      );
-      if (isSystem && !controllable.length) return false;
+      if (!this._isCandidateDevice(d)) return false;
 
       const isConfigured = !!this.configuredDevices[d.id];
       if (this.statusFilter === 'unconfigured' && isConfigured) return false;
       if (this.statusFilter === 'configured' && !isConfigured) return false;
 
       if (!q) return true;
+      const name = (d.name_by_user || d.name || '').toLowerCase();
+      const mfg = (d.manufacturer || '').toLowerCase();
+      const model = (d.model || '').toLowerCase();
       const area = (areaMap.get(d.area_id) || '').toLowerCase();
       return name.includes(q) || mfg.includes(q) || model.includes(q) || area.includes(q);
     });
 
     if (!filtered.length) {
-      this.deviceListEl.replaceChildren(h('div', { class: 'empty' }, icon('mdi:devices'), h('div', {}, 'Keine passenden Geräte gefunden')));
+      this.deviceListEl.replaceChildren(h('div', { class: 'empty' }, icon('mdi:devices'), h('div', {}, 'Keine Geräte')));
+      this.selectionSlot.replaceChildren();
       return;
     }
 
@@ -5883,8 +6619,10 @@ class DeviceWizard {
       groups.get(areaName).push(d);
     }
 
-    // Also include rooms from groups
+    // Also include rooms from groups (when filter shows configured/all and matches or no query)
     for (const g of Object.values(this.groups)) {
+      if (q && !(g.name || '').toLowerCase().includes(q) && !(areaMap.get(g.area_id) || '').toLowerCase().includes(q)) continue;
+      if (this.statusFilter === 'unconfigured') continue;
       const areaName = areaMap.get(g.area_id) || 'Ohne Raum';
       if (!groups.has(areaName)) groups.set(areaName, []);
     }
@@ -5895,6 +6633,14 @@ class DeviceWizard {
       return a.localeCompare(b);
     });
 
+    const toggleSelectId = (id) => {
+      preserveScroll(this.body, () => {
+        if (this.selectedDevices.has(id)) this.selectedDevices.delete(id);
+        else this.selectedDevices.add(id);
+        this._updateDeviceList();
+      });
+    };
+
     const sections = sortedGroupNames.map((areaName) => {
       const devs = groups.get(areaName) || [];
       devs.sort((a, b) => {
@@ -5903,158 +6649,50 @@ class DeviceWizard {
         return nameA.localeCompare(nameB);
       });
 
-      // Existing Groups for this room
       const roomGroups = Object.values(this.groups).filter((g) => {
+        if (q && !(g.name || '').toLowerCase().includes(q) && !(areaMap.get(g.area_id) || '').toLowerCase().includes(q)) return false;
         const aName = areaMap.get(g.area_id) || 'Ohne Raum';
         return aName === areaName;
       });
 
-      const groupCards = roomGroups.map((g) => {
-        const isChecked = this.selectedDevices.has(g.id);
-        const chk = h('button', {
-          class: 'sel-checkbox', ...(isChecked ? { 'data-checked': '' } : {}),
-          type: 'button', 'aria-label': `${g.name} auswählen`,
-          onClick: (e) => {
-            e.stopPropagation();
-            if (this.selectedDevices.has(g.id)) this.selectedDevices.delete(g.id);
-            else this.selectedDevices.add(g.id);
-            this._updateDeviceList();
-          },
-        }, isChecked ? icon('mdi:check') : null);
+      const groupCards = roomGroups.map((g) => createGroupCard({
+        group: g,
+        selectable: true,
+        isSelected: this.selectedDevices.has(g.id),
+        onToggleSelect: () => toggleSelectId(g.id),
+        onCardClick: () => toggleSelectId(g.id),
+        onEdit: () => this._openGroupModal(g),
+        onDelete: () => this._removeGroup(g.id, g.name),
+      }));
 
-        const cat = DEVICE_CATEGORIES.find((c) => c.id === g.category);
-        const catColor = cat?.color || '#ffc107';
-
-        return h('div', {
-          class: 'device-card group-card', ...(isChecked ? { 'data-selected': '' } : {}),
-          onClick: () => {
-            if (this.selectedDevices.has(g.id)) this.selectedDevices.delete(g.id);
-            else this.selectedDevices.add(g.id);
-            this._updateDeviceList();
-          },
-        },
-        chk,
-        h('div', { class: 'd-icon', style: { color: catColor } }, icon(g.icon || 'mdi:lightbulb-group')),
-        h('div', { class: 'd-info' },
-          h('div', { class: 'd-name' }, g.name),
-          h('div', { class: 'd-meta' },
-            h('span', { class: 'badge-tag category', style: { '--badge-cat-color': catColor } },
-              icon('mdi:lightbulb-group'), `Gruppe (${g.children?.length || 0} Elemente)`))),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
-          h('button', {
-            class: 'btn secondary small',
-            title: 'Gruppe bearbeiten',
-            'aria-label': 'Bearbeiten',
-            onClick: (e) => {
-              e.stopPropagation();
-              this._openGroupModal(g);
-            },
-          }, icon('mdi:pencil'), 'Bearbeiten'),
-          h('button', {
-            class: 'icon-btn danger', title: 'Gruppe auflösen',
-            onClick: (e) => {
-              e.stopPropagation();
-              this._removeGroup(g.id, g.name);
-            },
-          }, icon('mdi:delete-outline'))));
-      });
-
-      const devCards = devs.map((d) => {
-        const name = d.name_by_user || d.name || 'Unbenanntes Gerät';
-        const mfg = [d.manufacturer, d.model].filter(Boolean).join(' · ');
-        const isConfigured = !!this.configuredDevices[d.id];
-        const cfg = this.configuredDevices[d.id];
-
-        const devEntities = this.entities.filter((e) => e.device_id === d.id && !e.disabled_by);
-        const controllable = devEntities.filter(isControllableActuator);
-
-        const isChecked = this.selectedDevices.has(d.id);
-        const chk = h('button', {
-          class: 'sel-checkbox', ...(isChecked ? { 'data-checked': '' } : {}),
-          type: 'button', 'aria-label': `${name} auswählen`,
-          onClick: (e) => {
-            e.stopPropagation();
-            if (this.selectedDevices.has(d.id)) this.selectedDevices.delete(d.id);
-            else this.selectedDevices.add(d.id);
-            this._updateDeviceList();
-          },
-        }, isChecked ? icon('mdi:check') : null);
-
-        const badges = [];
-        if (isConfigured) {
-          const cat = DEVICE_CATEGORIES.find((c) => c.id === cfg.category);
-          const catColor = cat?.color || 'var(--cd-accent)';
-          badges.push(h('span', {
-            class: 'badge-tag category',
-            style: { '--badge-cat-color': catColor },
-          }, icon(cat?.icon || 'mdi:check-circle'), cat?.name || cfg.category));
-        } else if (controllable.length > 1) {
-          const isExp = this._expandedDeviceChannels.has(d.id);
-          badges.push(h('button', {
-            class: 'btn-channels-toggle',
-            type: 'button',
-            title: isExp ? 'Kanäle einklappen' : 'Kanäle anzeigen',
-            onClick: (e) => {
-              e.stopPropagation();
-              if (isExp) this._expandedDeviceChannels.delete(d.id);
+      const devCards = devs.flatMap((d) => {
+        const name = d.name_by_user || d.name || 'Gerät';
+        return createWizardDeviceElements({
+          device: d,
+          entities: this.entities,
+          configuredCfg: this.configuredDevices[d.id],
+          isSelected: this.selectedDevices.has(d.id),
+          isExpanded: this._expandedDeviceChannels.has(d.id),
+          selectedIds: this.selectedDevices,
+          onToggleSelect: () => toggleSelectId(d.id),
+          onToggleChannelSelect: (chKey) => toggleSelectId(chKey),
+          onToggleExpand: () => {
+            preserveScroll(this.body, () => {
+              if (this._expandedDeviceChannels.has(d.id)) this._expandedDeviceChannels.delete(d.id);
               else this._expandedDeviceChannels.add(d.id);
               this._updateDeviceList();
-            },
-          }, icon(isExp ? 'mdi:chevron-up' : 'mdi:chevron-down'), `${controllable.length} Kanäle`));
-        } else if (controllable.length === 1) {
-          badges.push(h('span', { class: 'badge-tag' }, '1 steuerbar'));
-        }
-
-        const actions = [];
-        if (isConfigured) {
-          actions.push(
-            h('button', {
-              class: 'btn secondary small',
-              title: 'Gerät bearbeiten',
-              'aria-label': 'Bearbeiten',
-              onClick: (e) => {
-                e.stopPropagation();
-                this.selectedDevice = d;
-                this._initDevice();
-                this.step = 1;
-                this._render();
-              },
-            }, icon('mdi:pencil'), 'Bearbeiten'),
-            h('button', {
-              class: 'icon-btn danger',
-              title: 'Companion-Einrichtung aufheben',
-              'aria-label': 'Einrichtung aufheben',
-              onClick: (e) => {
-                e.stopPropagation();
-                this._removeDevice(d.id, name);
-              },
-            }, icon('mdi:delete-outline'))
-          );
-        } else {
-          actions.push(
-            h('button', {
-              class: 'btn primary small',
-              title: 'Gerät einrichten',
-              'aria-label': 'Einrichten',
-              onClick: (e) => {
-                e.stopPropagation();
-                this.selectedDevice = d;
-                this._initDevice();
-                this.step = 1;
-                this._render();
-              },
-            }, icon('mdi:plus'), 'Einrichten')
-          );
-        }
-
-        const mainCard = h('div', {
-          class: 'device-card',
-          ...(isChecked ? { 'data-selected': '' } : {}),
-          onClick: () => {
+            });
+          },
+          onConfigure: () => {
+            this.selectedDevice = d;
+            this._initDevice();
+            this.step = 1;
+            this._render();
+          },
+          onRemove: () => this._removeDevice(d.id, name),
+          onCardClick: () => {
             if (this.selectedDevices.size > 0) {
-              if (this.selectedDevices.has(d.id)) this.selectedDevices.delete(d.id);
-              else this.selectedDevices.add(d.id);
-              this._updateDeviceList();
+              toggleSelectId(d.id);
               return;
             }
             this.selectedDevice = d;
@@ -6062,71 +6700,23 @@ class DeviceWizard {
             this.step = 1;
             this._render();
           },
-        },
-        chk,
-        h('div', { class: 'd-icon' }, icon('mdi:devices')),
-        h('div', { class: 'd-info' },
-          h('div', { class: 'd-name' }, name),
-          h('div', { class: 'd-meta' }, mfg ? h('span', {}, mfg) : null, ...badges)),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, ...actions));
-
-        const isExp = this._expandedDeviceChannels.has(d.id);
-        if (isExp && controllable.length > 1) {
-          const channelRows = controllable.map((e) => {
-            const chKey = `d:${d.id}:${e.entity_id}`;
-            const isChChecked = this.selectedDevices.has(chKey);
-            const chName = e.name || e.original_name || e.entity_id;
-            const isLight = domainOf(e.entity_id) === 'light';
-            return h('div', {
-              class: 'device-channel-row', ...(isChChecked ? { 'data-selected': '' } : {}),
-              onClick: (ev) => {
-                ev.stopPropagation();
-                if (this.selectedDevices.has(chKey)) this.selectedDevices.delete(chKey);
-                else this.selectedDevices.add(chKey);
-                this._updateDeviceList();
-              },
-            },
-            h('button', {
-              class: 'sel-checkbox', ...(isChChecked ? { 'data-checked': '' } : {}),
-              type: 'button', 'aria-label': `${chName} auswählen`,
-              onClick: (ev) => {
-                ev.stopPropagation();
-                if (this.selectedDevices.has(chKey)) this.selectedDevices.delete(chKey);
-                else this.selectedDevices.add(chKey);
-                this._updateDeviceList();
-              },
-            }, isChChecked ? icon('mdi:check') : null),
-            icon(isLight ? 'mdi:lightbulb' : 'mdi:power-plug'),
-            h('div', { class: 'device-channel-info' },
-              h('div', { class: 'device-channel-name' }, chName),
-              h('div', { class: 'device-channel-meta' }, e.entity_id)));
-          });
-          return [mainCard, h('div', { class: 'device-channels-wrap' }, ...channelRows)];
-        }
-
-        return [mainCard];
+        });
       });
 
-      const devCardElements = devCards.flat();
-      const totalCount = groupCards.length + devCards.length;
-      return h('div', { class: 'device-room-section' },
-        h('div', { class: 'device-room-header' },
-          icon(areaName === 'Ohne Raum' ? 'mdi:help-circle-outline' : 'mdi:home-outline'),
-          h('span', {}, areaName),
-          h('span', { class: 'room-count' }, `(${totalCount})`)),
-        h('div', { class: 'device-list' }, ...groupCards, ...devCardElements));
+      const totalCount = groupCards.length + devs.length;
+      return createDeviceRoomSection(areaName, [...groupCards, ...devCards], totalCount);
     });
 
-    const children = [...sections];
+    this.deviceListEl.replaceChildren(...sections);
 
     if (this.selectedDevices.size > 0) {
       const selectedList = Array.from(this.selectedDevices);
       const names = selectedList.map((id) => {
         if (this.groups[id]) return this.groups[id].name;
         if (id.startsWith('d:')) {
-          const parts = id.split(':', 2);
-          const ent = this.entities.find((e) => e.entity_id === parts[2]);
-          return ent?.name || ent?.original_name || parts[2];
+          const parsed = parseChannelKey(id);
+          const ent = this.entities.find((e) => e.entity_id === parsed.entityId);
+          return ent?.name || ent?.original_name || parsed.entityId || id;
         }
         const d = this.devices.find((dev) => dev.id === id);
         return d?.name_by_user || d?.name || id;
@@ -6142,8 +6732,13 @@ class DeviceWizard {
         h('button', {
           class: 'btn secondary small',
           type: 'button',
-          onClick: () => { this.selectedDevices.clear(); this._updateDeviceList(); },
-        }, 'Abbrechen')
+          onClick: () => {
+            preserveScroll(this.body, () => {
+              this.selectedDevices.clear();
+              this._updateDeviceList();
+            });
+          },
+        }, 'Abbrechen'),
       ];
 
       if (isSingleGroup) {
@@ -6152,7 +6747,7 @@ class DeviceWizard {
             class: 'btn secondary small',
             type: 'button',
             onClick: () => this._openGroupModal(this.groups[singleId]),
-          }, icon('mdi:pencil'), 'Gruppe bearbeiten'),
+          }, icon('mdi:pencil'), 'Bearbeiten'),
           h('button', {
             class: 'btn danger small',
             type: 'button',
@@ -6166,7 +6761,7 @@ class DeviceWizard {
               class: 'btn primary small',
               type: 'button',
               onClick: () => this._openAddToGroupModal(selectedList),
-            }, icon('mdi:plus-box-multiple'), 'Zu bestehender Gruppe hinzufügen')
+            }, icon('mdi:plus-box-multiple'), '+ Gruppe')
           );
         }
         buttons.push(
@@ -6174,20 +6769,19 @@ class DeviceWizard {
             class: 'btn primary small',
             type: 'button',
             disabled: true,
-            title: 'Mindestens 2 Geräte oder Gruppen zum Gruppieren auswählen',
+            title: 'Mind. 2 Elemente wählen',
             style: { opacity: '0.45', cursor: 'not-allowed' },
-          }, icon('mdi:lightbulb-group'), 'Neue Gruppe (mind. 2)')
+          }, icon('mdi:lightbulb-group'), 'Gruppe (ab 2)')
         );
       } else {
-        // >= 2 items
         buttons.push(
           h('button', {
             class: 'btn primary small',
             type: 'button',
             onClick: () => this._openGroupModal(),
           }, icon(allGroups ? 'mdi:folder-multiple' : 'mdi:lightbulb-group'),
-            h('span', { class: 'btn-label-desktop' }, allGroups ? 'Als Hauptgruppe zusammenfassen' : 'Als Gruppe zusammenfassen'),
-            h('span', { class: 'btn-label-mobile' }, allGroups ? 'Hauptgruppe' : 'Gruppieren'))
+            h('span', { class: 'btn-label-desktop' }, allGroups ? 'Hauptgruppe' : 'Gruppieren'),
+            h('span', { class: 'btn-label-mobile' }, allGroups ? 'Hauptgruppe' : 'Gruppe'))
         );
         if (hasExistingGroups && !allGroups) {
           buttons.push(
@@ -6196,29 +6790,29 @@ class DeviceWizard {
               type: 'button',
               onClick: () => this._openAddToGroupModal(selectedList),
             }, icon('mdi:plus-box-multiple'),
-              h('span', { class: 'btn-label-desktop' }, 'Zu bestehender Gruppe hinzufügen'),
+              h('span', { class: 'btn-label-desktop' }, '+ Gruppe'),
               h('span', { class: 'btn-label-mobile' }, '+ Gruppe'))
           );
         }
       }
 
-      const bar = h('div', { class: 'selection-action-bar' },
-        h('div', { class: 'sel-info' },
-          h('span', { class: 'sel-count' }, `${selectedList.length} ausgewählt`),
-          h('span', { class: 'sel-names' }, names)),
-        h('div', { class: 'sel-buttons' }, ...buttons)
+      this.selectionSlot.replaceChildren(
+        h('div', { class: 'selection-action-bar' },
+          h('div', { class: 'sel-info' },
+            h('span', { class: 'sel-count' }, `${selectedList.length} ausgewählt`),
+            h('span', { class: 'sel-names' }, names)),
+          h('div', { class: 'sel-buttons' }, ...buttons))
       );
-      children.push(bar);
+    } else {
+      this.selectionSlot.replaceChildren();
     }
-
-    this.deviceListEl.replaceChildren(...children);
   }
 
   _openAddToGroupModal(selectedIds) {
     const existingGroups = Object.values(this.groups);
     if (!existingGroups.length) return;
 
-    const overlay = h('div', { class: 'overlay', style: { zIndex: '999' } });
+    const overlay = h('div', { class: 'overlay', style: { zIndex: '1200' } });
     const groupCards = existingGroups.map((g) => {
       const cat = DEVICE_CATEGORIES.find((c) => c.id === g.category);
       const catColor = cat?.color || '#ffc107';
@@ -6243,7 +6837,7 @@ class DeviceWizard {
             this._load();
             this.onSaved?.(null);
           } catch (err) {
-            alert(`Fehler beim Aktualisieren der Gruppe: ${err.message || err}`);
+            showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
           }
         },
       },
@@ -6252,22 +6846,23 @@ class DeviceWizard {
         h('div', { class: 'd-name' }, g.name),
         h('div', { class: 'd-meta' },
           h('span', { class: 'badge-tag category', style: { '--badge-cat-color': catColor } },
-            icon('mdi:lightbulb-group'), `Gruppe (${g.children?.length || 0} Elemente)${roomTxt}`))),
+            icon('mdi:lightbulb-group'), `Gruppe (${g.children?.length || 0})${roomTxt}`))),
       h('div', { style: { display: 'flex', alignItems: 'center' } }, icon('mdi:chevron-right')));
     });
 
-    const dialog = h('div', { class: 'dialog group-modal-dialog', style: { maxWidth: '480px', width: 'min(480px, 94vw)' } },
+    const dialog = h('div', { class: 'dialog group-modal-dialog' },
       h('div', { class: 'dialog-head' },
         icon('mdi:plus-box-multiple'),
-        h('h2', {}, 'Zu Gruppe hinzufügen'),
-        h('button', { class: 'icon-btn', onClick: () => overlay.remove() }, icon('mdi:close'))),
-      h('div', { class: 'dialog-body', style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
-        h('div', { class: 'hint', style: { marginBottom: '4px' } }, `Wähle die Gruppe, zu der die ${selectedIds.length} ausgewählte(n) Element(e) hinzugefügt werden sollen:`),
-        h('div', { style: { maxHeight: '340px', overflowY: 'auto' } }, ...groupCards)),
+        h('h2', {}, 'Zu Gruppe'),
+        h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: () => overlay.remove() }, icon('mdi:close'))),
+      h('div', { class: 'dialog-body', style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+        h('div', { class: 'hint' }, `${selectedIds.length} Element(e) hinzufügen`),
+        ...groupCards),
       h('div', { class: 'dialog-foot' },
         h('div', { class: 'dialog-foot-actions' },
           h('button', { class: 'btn', onClick: () => overlay.remove() }, 'Abbrechen')))
     );
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
     overlay.appendChild(dialog);
     this.el.appendChild(overlay);
   }
@@ -6285,8 +6880,8 @@ class DeviceWizard {
       for (const id of selectedIds) {
         if (this.groups[id]?.area_id) { defaultArea = this.groups[id].area_id; }
         else if (id.startsWith('d:')) {
-          const parts = id.split(':', 2);
-          const dev = this.devices.find((d) => d.id === parts[1]);
+          const parsed = parseChannelKey(id);
+          const dev = this.devices.find((d) => d.id === parsed.deviceId);
           if (dev?.area_id) defaultArea = dev.area_id;
         } else {
           const dev = this.devices.find((d) => d.id === id);
@@ -6309,13 +6904,13 @@ class DeviceWizard {
     let selectedArea = defaultArea;
     let selectedCat = detectedCat;
 
-    const overlay = h('div', { class: 'overlay', style: { zIndex: '999' } });
+    const overlay = h('div', { class: 'overlay', style: { zIndex: '1200' } });
     const nameInput = h('input', {
       type: 'text',
       class: 'dialog-input',
       value: groupName,
-      placeholder: 'z. B. Deckenlampen',
-      style: { width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(128,128,128,.3)', background: 'var(--cd-tile-bg)', color: '#fff', boxSizing: 'border-box' },
+      placeholder: 'Gruppenname',
+      style: { width: '100%', minHeight: '42px', padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(128,128,128,.3)', background: 'var(--cd-tile-bg)', color: 'var(--primary-text-color, inherit)', font: 'inherit', boxSizing: 'border-box' },
       onInput: (e) => { groupName = e.target.value.trim(); },
     });
 
@@ -6331,7 +6926,7 @@ class DeviceWizard {
     const iconPicker = new IconPicker({
       hass: this.hass,
       value: selectedIcon,
-      placeholder: 'Icon auswählen (z. B. mdi:lightbulb-group)...',
+      placeholder: 'Icon suchen',
       onChange: (v) => {
         selectedIcon = v;
         isCustomIcon = true;
@@ -6341,14 +6936,14 @@ class DeviceWizard {
     const areaDd = new CustomDropdown({
       options: areaOptions,
       value: selectedArea,
-      placeholder: 'Raum auswählen...',
+      placeholder: 'Raum',
       onChange: (v) => { selectedArea = v; },
     });
 
     const catDd = new CustomDropdown({
       options: catOptions,
       value: selectedCat,
-      placeholder: 'Kategorie auswählen...',
+      placeholder: 'Kategorie',
       onChange: (v) => {
         selectedCat = v;
         if (!isCustomIcon) {
@@ -6364,16 +6959,16 @@ class DeviceWizard {
     const getLabelForId = (id) => {
       if (this.groups[id]) return `${this.groups[id].name} (Gruppe)`;
       if (id.startsWith('d:')) {
-        const parts = id.split(':', 2);
-        const ent = this.entities.find((e) => e.entity_id === parts[2]);
-        return ent?.name || ent?.original_name || parts[2];
+        const parsed = parseChannelKey(id);
+        const ent = this.entities.find((e) => e.entity_id === parsed.entityId);
+        return ent?.name || ent?.original_name || parsed.entityId || id;
       }
       const dev = this.devices.find((d) => d.id === id);
       return dev?.name_by_user || dev?.name || id;
     };
 
-    const countHeader = h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, `Ausgewählte Elemente (${selectedIds.length}):`);
-    const tagsContainer = h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '130px', overflowY: 'auto' } });
+    const countHeader = h('div', { class: 'field-label', style: { marginBottom: '6px' } }, `Elemente (${selectedIds.length})`);
+    const tagsContainer = h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px' } });
 
     const renderTags = () => {
       const tags = selectedIds.map((id) => {
@@ -6394,20 +6989,17 @@ class DeviceWizard {
         );
       });
       tagsContainer.replaceChildren(...tags);
-      countHeader.textContent = `Ausgewählte Elemente (${selectedIds.length}):`;
+      countHeader.textContent = `Elemente (${selectedIds.length})`;
     };
     renderTags();
 
-    // Inline picker to add unselected items
     const availableToAdd = [];
-    // Groups
     for (const [gid, g] of Object.entries(this.groups)) {
       if (existingGroup && gid === existingGroup.id) continue;
       if (!selectedIds.includes(gid)) {
         availableToAdd.push({ value: gid, label: `${g.name} (Gruppe)`, icon: 'mdi:folder-multiple' });
       }
     }
-    // Devices
     for (const d of this.devices) {
       if (!selectedIds.includes(d.id)) {
         const dName = d.name_by_user || d.name || d.id;
@@ -6421,7 +7013,7 @@ class DeviceWizard {
       addDd = new CustomDropdown({
         options: availableToAdd,
         value: '',
-        placeholder: '+ Element hinzufügen...',
+        placeholder: '+ Element hinzufügen',
         onChange: (val) => {
           if (val && !selectedIds.includes(val)) {
             selectedIds.push(val);
@@ -6433,13 +7025,17 @@ class DeviceWizard {
       addDropdownWrap = h('div', { style: { marginTop: '6px' } }, addDd.el);
     }
 
-    const closeGroupModal = () => {
-      overlay.remove();
+    const destroyPickers = () => {
       areaDd.destroy();
       catDd.destroy();
       addDd?.destroy();
-      iconPicker._close();
-      if (isDirect) this.onClose?.();
+      iconPicker.destroy();
+    };
+
+    const closeGroupModal = () => {
+      overlay.remove();
+      destroyPickers();
+      if (isDirect) this._closeWizard();
     };
     if (isDirect) {
       overlay.style.background = 'transparent';
@@ -6450,25 +7046,17 @@ class DeviceWizard {
       if (e.target === overlay) closeGroupModal();
     });
 
-    const dialog = h('div', { class: 'dialog group-modal-dialog', style: { maxWidth: '520px', width: 'min(520px, 94vw)' } },
+    const dialog = h('div', { class: 'dialog group-modal-dialog' },
       h('div', { class: 'dialog-head' },
         icon(isMultiGroup ? 'mdi:folder-multiple' : 'mdi:lightbulb-group'),
-        h('h2', {}, existingGroup ? 'Gruppe bearbeiten' : (isMultiGroup ? 'Hauptgruppe erstellen' : 'Gruppe erstellen')),
-        h('button', { class: 'icon-btn', onClick: closeGroupModal }, icon('mdi:close'))),
-      h('div', { class: 'dialog-body', style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
+        h('h2', {}, existingGroup ? 'Gruppe bearbeiten' : (isMultiGroup ? 'Hauptgruppe' : 'Neue Gruppe')),
+        h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: closeGroupModal }, icon('mdi:close'))),
+      h('div', { class: 'dialog-body', style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+        h('div', { class: 'field' }, 'Gruppenname', nameInput),
+        h('div', { class: 'field' }, 'Raum', areaDd.el),
+        h('div', { class: 'field' }, 'Kategorie', catDd.el),
+        h('div', { class: 'field' }, 'Icon', iconPicker.el),
         h('div', {},
-          h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Gruppen-Name:'),
-          nameInput),
-        h('div', { style: { position: 'relative', zIndex: '30' } },
-          h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Raum:'),
-          areaDd.el),
-        h('div', { style: { position: 'relative', zIndex: '20' } },
-          h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Kategorie:'),
-          catDd.el),
-        h('div', { style: { position: 'relative', zIndex: '15' } },
-          h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Symbol / Icon:'),
-          iconPicker.el),
-        h('div', { style: { position: 'relative', zIndex: '10' } },
           countHeader,
           tagsContainer,
           addDropdownWrap)),
@@ -6482,21 +7070,18 @@ class DeviceWizard {
               const removed = await this._removeGroup(existingGroup.id, existingGroup.name, true);
               if (removed) {
                 overlay.remove();
-                areaDd.destroy();
-                catDd.destroy();
-                addDd?.destroy();
-                iconPicker._close();
+                destroyPickers();
                 if (isDirect) this.onSaved?.(null);
                 else this._load();
               }
             },
-          }, icon('mdi:delete-outline'), 'Gruppe auflösen') : null),
+          }, icon('mdi:delete-outline'), 'Auflösen') : null),
         h('div', { class: 'dialog-foot-actions' },
           h('button', {
             class: 'btn primary',
             onClick: async () => {
-              if (!groupName) { alert('Bitte einen Namen eingeben'); return; }
-              if (selectedIds.length === 0) { alert('Bitte mindestens ein Element zur Gruppe hinzufügen'); return; }
+              if (!groupName) { showToast(this.el, 'Name fehlt', { error: true }); return; }
+              if (selectedIds.length === 0) { showToast(this.el, 'Mind. 1 Element wählen', { error: true }); return; }
               try {
                 await this.hass.callWS({
                   type: 'smarthome_companion/groups/save',
@@ -6510,18 +7095,15 @@ class DeviceWizard {
                   },
                 });
                 overlay.remove();
-                areaDd.destroy();
-                catDd.destroy();
-                addDd?.destroy();
-                iconPicker._close();
+                destroyPickers();
                 this.selectedDevices.clear();
                 if (isDirect) this.onSaved?.(null);
                 else this._load();
               } catch (err) {
-                alert(`Fehler beim Speichern der Gruppe: ${err.message || err}`);
+                showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
               }
             },
-          }, icon('mdi:check'), 'Gruppe speichern')))
+          }, icon('mdi:check'), 'Speichern')))
     );
 
     overlay.appendChild(dialog);
@@ -6529,17 +7111,24 @@ class DeviceWizard {
   }
 
   async _removeGroup(groupId, groupName, skipReload = false) {
-    const conf = window.confirm(`Gruppe „${groupName}“ auflösen?\n\nDie enthaltenen Geräte bleiben erhalten.`);
+    const conf = await showConfirmDialog(this.el, {
+      title: 'Gruppe auflösen',
+      message: `Gruppe „${groupName}“ auflösen? Geräte bleiben erhalten.`,
+      confirmLabel: 'Auflösen',
+      cancelLabel: 'Abbrechen',
+      danger: true,
+    });
     if (!conf) return false;
     try {
       await this.hass.callWS({ type: 'smarthome_companion/groups/delete', group_id: groupId });
       delete this.groups[groupId];
+      this.selectedDevices.delete(groupId);
       if (!skipReload) {
         this._load();
       }
       return true;
     } catch (err) {
-      alert(`Fehler beim Auflösen der Gruppe: ${err.message || err}`);
+      showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
       return false;
     }
   }
@@ -6722,7 +7311,7 @@ class DeviceWizard {
     const areaDropdown = new CustomDropdown({
       options: areaOptions,
       value: this.selectedAreaId,
-      placeholder: 'Raum auswählen...',
+      placeholder: 'Raum',
       onChange: (val) => {
         this.selectedAreaId = val;
         if (this._isNewRoomForDevice(val)) {
@@ -6737,7 +7326,7 @@ class DeviceWizard {
             this.customName = stripped;
           }
         }
-        this._renderStep1();
+        preserveScroll(this.body, () => this._renderStep1());
       },
     });
     this._dropdowns.push(areaDropdown);
@@ -6749,15 +7338,15 @@ class DeviceWizard {
         hass: this.hass,
         value: this.roomIcon || 'mdi:home-outline',
         priorityIcons: ROOM_ICON_OPTIONS,
-        placeholder: 'Raum-Icon wählen (z. B. Wohnzimmer, mdi:sofa)...',
+        placeholder: 'Raum-Icon suchen',
         onChange: (val) => { this.roomIcon = val || 'mdi:home-outline'; },
       });
       this._dropdowns.push(roomIconPicker);
-      roomIconField = h('div', { class: 'field', style: { position: 'relative', zIndex: '16' } }, 'Raum-Icon (neuer Raum)', roomIconPicker.el);
+      roomIconField = h('div', { class: 'field' }, 'Raum-Icon', roomIconPicker.el);
     }
 
     const nameInput = h('input', {
-      type: 'text', value: this.customName, placeholder: 'Gerätename...',
+      type: 'text', value: this.customName, placeholder: 'Gerätename',
       onInput: (e) => { this.customName = e.target.value; },
     });
 
@@ -6765,7 +7354,7 @@ class DeviceWizard {
     const devIconPicker = new IconPicker({
       hass: this.hass,
       value: this.customIcon || curCat.icon,
-      placeholder: 'Icon auswählen (z. B. mdi:lightbulb)...',
+      placeholder: 'Icon suchen',
       onChange: (val) => {
         this.customIcon = val;
       },
@@ -6783,7 +7372,7 @@ class DeviceWizard {
             if (!this.customIcon) {
               devIconPicker._setValue(c.icon);
             }
-            this._render();
+            preserveScroll(this.body, () => this._render());
           },
         },
         icon(c.icon),
@@ -6795,14 +7384,13 @@ class DeviceWizard {
 
     this.body.replaceChildren(
       hero,
-      h('div', { class: 'section-title' }, 'Geräteinformationen'),
+      h('div', { class: 'section-title' }, 'Details'),
       h('div', { class: 'fields' },
-        h('div', { class: 'field' }, 'Anzeigename im Dashboard', nameInput),
-        h('div', { class: 'field' }, 'Raum (Bereich)', areaDropdown.el),
+        h('div', { class: 'field' }, 'Name', nameInput),
+        h('div', { class: 'field' }, 'Raum', areaDropdown.el),
         roomIconField,
-        h('div', { class: 'field', style: { position: 'relative', zIndex: '15' } }, 'Symbol / Icon', devIconPicker.el)),
-      h('div', { class: 'section-title', style: { marginTop: '16px' } }, 'Haupt-Kategorie'),
-      h('div', { class: 'hint' }, 'Bestimmt das Standard-Icon und das Verhalten im Dashboard:'),
+        h('div', { class: 'field' }, 'Icon', devIconPicker.el)),
+      h('div', { class: 'section-title', style: { marginTop: '12px' } }, 'Kategorie'),
       catGrid);
   }
 
@@ -6821,7 +7409,7 @@ class DeviceWizard {
       });
 
       const autoBadge = (s.type === s.detectedType && s.type !== 'ignore')
-        ? h('span', { class: 'badge-tag ok auto-badge' }, icon('mdi:check-circle'), 'Automatisch erkannt')
+        ? h('span', { class: 'badge-tag ok auto-badge' }, icon('mdi:check-circle'), 'Auto')
         : null;
 
       const typeDd = new CustomDropdown({
@@ -6838,24 +7426,23 @@ class DeviceWizard {
       this._dropdowns.push(typeDd);
 
       card.append(
-        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' } },
           h('div', { style: { minWidth: '0', flex: '1' } },
             h('div', { style: { fontWeight: '600', fontSize: '14px' } }, s.name),
-            h('div', { class: 'hint', style: { fontSize: '11px' } }, s.entity_id)),
+            h('div', { class: 'hint', style: { fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.entity_id)),
           h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
             autoBadge,
             h('span', { class: 'badge-tag' }, liveVal))),
         h('div', { class: 'field' },
-          h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Sensor-Typ auf Raumkachel')),
+          h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Typ auf Raumkachel')),
           typeDd.el));
 
       return card;
     });
 
-    return h('div', { style: { marginTop: '18px' } },
-      h('div', { class: 'section-title' }, 'Raumsensoren & Messwerte'),
-      h('div', { class: 'hint', style: { marginBottom: '10px' } },
-        'Lege fest, welche Sensorwerte auf der Raumkachel angezeigt oder ignoriert werden sollen:'),
+    return h('div', { style: { marginTop: '14px' } },
+      h('div', { class: 'section-title' }, 'Raumsensoren'),
+      h('div', { class: 'hint', style: { marginBottom: '8px' } }, 'Werte für Raumkachel wählen'),
       ...cards);
   }
 
@@ -6868,23 +7455,21 @@ class DeviceWizard {
     if (!this.channels.length && !sensorSection) {
       this.body.replaceChildren(h('div', { class: 'empty' },
         icon('mdi:alert-circle-outline'),
-        h('div', { style: { fontWeight: '600' } }, 'Keine steuerbaren Entitäten oder Sensoren gefunden'),
-        h('div', { class: 'hint' }, 'Dieses Gerät hat keine passenden Entitäten in Home Assistant.')));
+        h('div', { style: { fontWeight: '600' } }, 'Keine Entitäten'),
+        h('div', { class: 'hint' }, 'Keine passenden Kanäle/Sensoren')));
       return;
     }
 
     const curCat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
     const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color || 'var(--cd-accent)', '--hero-color': curCat.color || 'var(--cd-accent)' } }, icon(curCat.icon || 'mdi:tune-vertical'));
 
-    const header = h('div', { style: { textAlign: 'center', marginBottom: '14px' } },
-      h('h3', { style: { margin: '0 0 4px', fontSize: '18px', fontWeight: '700' } },
-        !this.channels.length ? 'Raumsensoren konfigurieren' : (isMulti ? 'Kanäle & Messung' : 'Messung & Simulation')),
+    const header = h('div', { style: { textAlign: 'center', marginBottom: '8px' } },
+      h('h3', { style: { margin: '0 0 2px', fontSize: '17px', fontWeight: '700' } },
+        !this.channels.length ? 'Raumsensoren' : (isMulti ? 'Kanäle & Messung' : 'Messung & Simulation')),
       h('div', { class: 'hint' },
         !this.channels.length
-          ? 'Sensor-Typen prüfen, bei Bedarf überschreiben oder unerwünschte Entitäten ignorieren'
-          : (isMulti
-            ? 'Mehrkanal-Gerät: Kanäle separat konfigurieren und zuordnen'
-            : 'Optionale Leistungsmessung (Watt) und automatische Anwesenheitssimulation')));
+          ? 'Sensortyp für Raumkachel'
+          : (isMulti ? 'Kanäle einzeln zuordnen' : 'Leistung & Simulation')));
 
     if (!this.channels.length) {
       this.body.replaceChildren(hero, header, sensorSection);
@@ -6892,32 +7477,32 @@ class DeviceWizard {
     }
 
     if (!isMulti) {
-      // SINGLE ENTITY: No duplicate channel name, no duplicate category, no confusing disable switch!
       const ch = this.channels[0];
 
       const powerPicker = new EntityPicker({
         hass: this.hass,
         value: ch.power || '',
-        placeholder: 'sensor.xxx_power (optional)',
+        placeholder: 'Watt-Sensor (optional)',
         domain: 'sensor',
         onChange: (val) => {
           ch.power = val;
           this.powerEntityId = val;
         },
       });
+      this._dropdowns.push(powerPicker);
 
       const isAutoPower = ch.power && ch.power === this.powerEntityId;
       const powerBadge = isAutoPower
-        ? h('span', { class: 'badge-tag ok auto-badge', style: { marginLeft: '8px' } }, icon('mdi:check-circle'), 'Automatisch erkannt')
+        ? h('span', { class: 'badge-tag ok auto-badge', style: { marginLeft: '8px' } }, icon('mdi:check-circle'), 'Auto')
         : null;
 
-      const powerCard = h('div', { class: 'row-card', style: { padding: '16px 20px', gap: '12px' } },
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
-          h('div', { class: 'feature-icon', style: { color: '#ffb74d', display: 'grid', placeItems: 'center', width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(255,183,77,0.15)' } }, icon('mdi:flash')),
-          h('div', { style: { flex: 1 } },
-            h('div', { style: { fontWeight: '600', fontSize: '15px', display: 'flex', alignItems: 'center' } },
-              'Leistungssensor (Watt)', powerBadge),
-            h('div', { class: 'hint', style: { marginTop: '2px' } }, 'Zeigt den aktuellen Stromverbrauch live auf der Kachel an'))),
+      const powerCard = h('div', { class: 'row-card', style: { padding: '14px 16px', gap: '10px' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+          h('div', { class: 'feature-icon', style: { color: '#ffb74d', display: 'grid', placeItems: 'center', width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(255,183,77,0.15)', flex: 'none' } }, icon('mdi:flash')),
+          h('div', { style: { flex: '1', minWidth: '0' } },
+            h('div', { style: { fontWeight: '600', fontSize: '14px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' } },
+              'Leistung (Watt)', powerBadge),
+            h('div', { class: 'hint', style: { marginTop: '2px' } }, 'Live-Verbrauch auf Kachel'))),
         powerPicker.el);
 
       const simCard = h('div', {
@@ -6933,7 +7518,7 @@ class DeviceWizard {
       h('div', { class: 'feature-icon' }, icon('mdi:home-clock')),
       h('div', { class: 'feature-info' },
         h('div', { class: 'feature-title' }, 'Anwesenheitssimulation'),
-        h('div', { class: 'feature-desc' }, 'Zufälliges automatisches Schalten bei Abwesenheit zum Einbruchschutz')),
+        h('div', { class: 'feature-desc' }, 'Zufallsschalten bei Abwesenheit')),
       h('div', { class: 'switch-ui' }));
 
       this.body.replaceChildren(...[hero, header, powerCard, simCard, sensorSection].filter(Boolean));
@@ -6947,7 +7532,7 @@ class DeviceWizard {
 
     const channelCards = this.channels.map((ch, idx) => {
       const nameInput = h('input', {
-        type: 'text', value: ch.name, placeholder: `Kanal ${idx + 1} Name...`, disabled: !ch.enabled,
+        type: 'text', value: ch.name, placeholder: `Kanal ${idx + 1}`, disabled: !ch.enabled,
         onInput: (e) => { ch.name = e.target.value; },
       });
 
@@ -6962,10 +7547,11 @@ class DeviceWizard {
       const powerPicker = new EntityPicker({
         hass: this.hass,
         value: ch.power || '',
-        placeholder: 'sensor.xxx_power (optional)',
+        placeholder: 'Watt-Sensor (optional)',
         domain: 'sensor',
         onChange: (val) => { ch.power = val; },
       });
+      this._dropdowns.push(powerPicker);
 
       const simCard = h('div', {
         class: `feature-card${ch.presence_simulation && ch.enabled ? ' active' : ''}`,
@@ -6981,12 +7567,12 @@ class DeviceWizard {
       h('div', { class: 'feature-icon' }, icon('mdi:home-clock')),
       h('div', { class: 'feature-info' },
         h('div', { class: 'feature-title' }, 'Anwesenheitssimulation'),
-        h('div', { class: 'feature-desc' }, 'Zufälliges automatisches Schalten bei Abwesenheit zum Einbruchschutz')),
+        h('div', { class: 'feature-desc' }, 'Zufallsschalten bei Abwesenheit')),
       h('div', { class: 'switch-ui' }));
 
       const isAutoPower = ch.power && ch.power === this.powerEntityId;
       const powerBadge = isAutoPower
-        ? h('span', { class: 'badge-tag ok auto-badge' }, icon('mdi:check-circle'), 'Automatisch erkannt')
+        ? h('span', { class: 'badge-tag ok auto-badge' }, icon('mdi:check-circle'), 'Auto')
         : null;
 
       const enabledToggle = h('div', {
@@ -6995,14 +7581,17 @@ class DeviceWizard {
         onClick: (e) => {
           e.stopPropagation();
           ch.enabled = !ch.enabled;
-          this._renderStep2();
+          preserveScroll(this.body, () => this._renderStep2());
         },
       });
 
       const headCard = h('div', {
         class: 'channel-head',
         style: { cursor: 'pointer' },
-        onClick: () => { ch.enabled = !ch.enabled; this._renderStep2(); },
+        onClick: () => {
+          ch.enabled = !ch.enabled;
+          preserveScroll(this.body, () => this._renderStep2());
+        },
       },
       enabledToggle,
       h('div', { class: 'ch-title' }, ch.name || ch.entity_id),
@@ -7014,14 +7603,14 @@ class DeviceWizard {
         headCard,
         h('div', { class: 'fields' },
           h('div', { class: 'field' },
-            h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Kanal-Name')),
+            h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Kanalname')),
             nameInput),
           h('div', { class: 'field' },
             h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Kategorie')),
             catDropdown.el),
           h('div', { class: 'field' },
             h('div', { class: 'field-head' },
-              h('span', { class: 'field-label' }, 'Leistungssensor (Watt)'),
+              h('span', { class: 'field-label' }, 'Leistung (Watt)'),
               powerBadge),
             powerPicker.el)),
         simCard);
@@ -7030,21 +7619,19 @@ class DeviceWizard {
     this.body.replaceChildren(...[hero, header, ...channelCards, sensorSection].filter(Boolean));
   }
 
-  // ═══════════════ STEP 3: Zusammenfassung & Speichern ═══════════════
+  // ═══════════════ STEP 3: Prüfen & Speichern ═══════════════
   _renderStep3() {
     const area = this.areas.find((a) => a.area_id === this.selectedAreaId);
     const areaName = area?.name || 'Kein Raum';
     const cat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
     const activeChannels = this.channels.filter((c) => c.enabled);
 
-    // Reliable Hero Badge with Category Icon and glowing ring
     const hero = h('div', { class: 'win11-hero-badge', style: { color: cat.color, '--hero-color': cat.color } }, icon(cat.icon || 'mdi:check-circle'));
 
-    const header = h('div', { style: { textAlign: 'center', marginBottom: '14px' } },
-      h('h3', { style: { margin: '0 0 4px', fontSize: '18px', fontWeight: '700' } }, 'Fast fertig!'),
-      h('div', { class: 'hint' }, 'Überprüfe die Einstellungen vor dem Speichern'));
+    const header = h('div', { style: { textAlign: 'center', marginBottom: '10px' } },
+      h('h3', { style: { margin: '0 0 2px', fontSize: '17px', fontWeight: '700' } }, 'Prüfen'),
+      h('div', { class: 'hint' }, 'Auswahl kontrollieren & speichern'));
 
-    // Live visual preview card
     const hasSim = activeChannels.some((c) => c.presence_simulation);
     const hasPower = activeChannels.some((c) => c.power);
 
@@ -7054,14 +7641,13 @@ class DeviceWizard {
     },
     h('div', { class: 'win11-preview-icon' }, icon(cat.icon)),
     h('div', { class: 'win11-preview-info' },
-      h('div', { class: 'win11-preview-name' }, this.customName || 'Mein Gerät'),
+      h('div', { class: 'win11-preview-name' }, this.customName || 'Gerät'),
       h('div', { class: 'win11-preview-meta' },
         h('span', { class: 'badge-tag category', style: { '--badge-cat-color': cat.color } }, icon(cat.icon), cat.name),
         h('span', { class: 'badge-tag area' }, icon('mdi:map-marker'), areaName),
-        hasPower ? h('span', { class: 'badge-tag', style: { color: '#ffb74d' } }, icon('mdi:flash'), 'Leistungsmessung') : null,
+        hasPower ? h('span', { class: 'badge-tag', style: { color: '#ffb74d' } }, icon('mdi:flash'), 'Leistung') : null,
         hasSim ? h('span', { class: 'badge-tag', style: { color: '#ce93d8' } }, icon('mdi:home-clock'), 'Simulation') : null)));
 
-    // Home Assistant sync card: Hidden inside collapsible <details>, default active
     const syncCard = h('div', {
       class: `feature-card${this.renameInHA ? ' active' : ''}`,
       style: { '--feat-color': '#2196f3', cursor: 'pointer' },
@@ -7074,21 +7660,20 @@ class DeviceWizard {
     },
     h('div', { class: 'feature-icon' }, icon('mdi:home-assistant')),
     h('div', { class: 'feature-info' },
-      h('div', { class: 'feature-title' }, 'In Home Assistant synchronisieren (Standard: Aktiv)'),
-      h('div', { class: 'feature-desc' }, 'Aktualisiert Gerätename und Raumzuweisung direkt in den HA-Registries')),
+      h('div', { class: 'feature-title' }, 'HA-Synchronisierung'),
+      h('div', { class: 'feature-desc' }, 'Name & Raum in HA übernehmen')),
     h('div', { class: 'switch-ui' }));
 
     const syncAccordion = h('details', { class: 'adv-options' },
-      h('summary', {}, icon('mdi:cog-outline'), 'Erweiterte Optionen: Home Assistant Synchronisierung'),
+      h('summary', {}, icon('mdi:cog-outline'), 'Optionen: HA-Sync'),
       h('div', { class: 'adv-content' }, syncCard));
 
-    // Channel details (only shown if multi-channel)
     const channelSummary = this.channels.length > 1
-      ? h('div', { class: 'row-card', style: { marginTop: '12px' } },
-        h('div', { style: { fontWeight: '600', fontSize: '13px' } }, `Kanäle (${activeChannels.length} aktiv)`),
+      ? h('div', { class: 'row-card', style: { marginTop: '8px' } },
+        h('div', { style: { fontWeight: '600', fontSize: '13px' } }, `Kanäle (${activeChannels.length})`),
         h('div', { class: 'hint' }, activeChannels.map((c) => {
           const cCat = DEVICE_CATEGORIES.find((catItem) => catItem.id === c.category);
-          return `• ${c.name} (${c.entity_id}) – ${cCat?.name || c.category}`;
+          return `• ${c.name} (${cCat?.name || c.category})`;
         }).join('\n')))
       : null;
 
@@ -7103,22 +7688,23 @@ class DeviceWizard {
     this.body.replaceChildren(...items);
   }
 
-  // ═══════════════ POST-SAVE CELEBRATION (Windows 11 Setup Vibe) ═══════════════
+  // ═══════════════ POST-SAVE CELEBRATION ═══════════════
   _renderCelebration() {
+    this._cleanupDropdowns();
+    this.selectionSlot.replaceChildren();
     this.stepBar.hidden = true;
     this.foot.hidden = true;
     this.dialog.style.setProperty('--hero-color', '#10b981');
 
-    const cat = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory) || DEVICE_CATEGORIES[0];
     const area = this.areas.find((a) => a.area_id === this.selectedAreaId);
     const areaName = area?.name || 'Dashboard';
 
     const celebration = h('div', { class: 'win11-celebration' },
       h('div', { class: 'win11-success-badge' }, icon('mdi:check')),
-      h('h2', { style: { margin: '8px 0 2px', fontSize: '22px', fontWeight: '700', color: 'var(--primary-text-color, #fff)' } }, 'Alles bereit!'),
-      h('div', { class: 'hint', style: { fontSize: '15px', maxWidth: '440px', lineHeight: '1.5', color: 'rgba(255,255,255,0.85)' } },
-        `Gerät „${this.customName}“ wurde erfolgreich im Raum „${areaName}“ eingerichtet.`),
-      h('div', { style: { display: 'flex', gap: '12px', marginTop: '18px' } },
+      h('h2', { style: { margin: '6px 0 2px', fontSize: '20px', fontWeight: '700', color: 'var(--primary-text-color, inherit)' } }, 'Fertig'),
+      h('div', { class: 'hint', style: { fontSize: '14px', maxWidth: '400px' } },
+        `„${this.customName}“ · ${areaName}`),
+      h('div', { style: { display: 'flex', gap: '10px', marginTop: '14px', flexWrap: 'wrap', justifyContent: 'center' } },
         this.directMode ? null : h('button', {
           class: 'btn secondary',
           onClick: () => {
@@ -7127,14 +7713,14 @@ class DeviceWizard {
             this.selectedDevice = null;
             this._render();
           },
-        }, icon('mdi:plus'), 'Weiteres Gerät einrichten'),
+        }, icon('mdi:plus'), 'Weiteres Gerät'),
         h('button', {
           class: 'btn primary',
           onClick: () => {
-            this.onClose();
+            this._closeWizard();
             this.onSaved(null);
           },
-        }, icon(this.directMode ? 'mdi:check' : 'mdi:view-dashboard'), this.directMode ? 'Fertig' : 'Zum Dashboard')));
+        }, icon(this.directMode ? 'mdi:check' : 'mdi:view-dashboard'), this.directMode ? 'Fertig' : 'Dashboard')));
 
     this.body.replaceChildren(celebration);
   }
@@ -7387,6 +7973,12 @@ class CompanionDashboardPanel extends HTMLElement {
     this._unsub = null;
     this._ro?.disconnect();
     this._ro = null;
+    this._roomModal?.destroy?.();
+    this._roomModal = null;
+    this._wizard?.destroy?.();
+    this._wizard = null;
+    this._settings?.destroy?.();
+    this._settings = null;
     this._initialised = false;
     cancelAnimationFrame(this._raf);
   }
@@ -7568,10 +8160,10 @@ class CompanionDashboardPanel extends HTMLElement {
 
   _layoutRooms() {
     if (!this._roomsWrap || !this._rooms?.length) return;
-    const width = this._roomsWrap.clientWidth || this._content?.clientWidth || window.innerWidth || 1000;
-    const colWidth = 350;
+    const winW = (typeof window !== 'undefined' ? window.innerWidth : 0) || 1000;
+    const width = this._roomsWrap.clientWidth || this._content?.clientWidth || winW;
     const gap = 12;
-    const colCount = Math.max(1, Math.min(this._rooms.length, Math.floor((width + gap) / (colWidth + gap))));
+    const colCount = Math.max(1, Math.min(this._rooms.length, Math.floor((width + gap) / 360)));
 
     if (colCount === this._colCount && this._roomsCols?.length === colCount) return;
     this._colCount = colCount;
@@ -7587,8 +8179,8 @@ class CompanionDashboardPanel extends HTMLElement {
     const isAdmin = !!this._data?.user?.is_admin;
     return h('div', { class: 'card empty' },
       icon('mdi:devices'),
-      h('div', { style: { fontWeight: '600', margin: '8px 0 4px', color: 'var(--primary-text-color)' } }, 'Noch keine Geräte im Dashboard'),
-      h('div', { class: 'hint' }, '• Geräte über den Zauberstab oben rechts einrichten\n• Räume kommen automatisch aus Home Assistant\n• Zusatz-Kacheln über „Dashboard einrichten“'),
+      h('div', { style: { fontWeight: '600', margin: '8px 0 4px', color: 'var(--primary-text-color)' } }, 'Keine Geräte eingerichtet'),
+      h('div', { class: 'hint' }, '• Einrichtung über + oben rechts\n• Räume aus Home Assistant\n• Zusatz-Kacheln in Einstellungen'),
       isAdmin ? h('div', { style: { marginTop: '16px' } },
         h('button', { class: 'btn primary', onClick: () => this._openWizard() }, icon('mdi:plus-circle-outline'), 'Gerät einrichten')) : null);
   }
@@ -7673,7 +8265,7 @@ class CompanionDashboardPanel extends HTMLElement {
         this._editBanner = h('div', { class: 'edit-mode-banner' },
           h('div', { class: 'edit-mode-banner-info' },
             icon('mdi:pencil'),
-            h('span', {}, 'Bearbeitungsmodus aktiv: Klicke ein Gerät oder einen Raum zum Konfigurieren')),
+            h('span', {}, 'Bearbeitungsmodus: Kachel oder Raum tippen')),
           h('button', {
             class: 'edit-mode-banner-btn',
             type: 'button',
@@ -7689,7 +8281,7 @@ class CompanionDashboardPanel extends HTMLElement {
   // ── room edit modal ──
   _openRoomEdit(roomSpec) {
     if (!this._hass || !roomSpec) return;
-    this._roomModal?.el.remove();
+    this._roomModal?.destroy?.();
     this._roomModal = new RoomEditModal({
       hass: this._hass,
       roomSpec,
@@ -7705,17 +8297,20 @@ class CompanionDashboardPanel extends HTMLElement {
 
   // ── device wizard ──
   _openWizard(deviceId = null, groupId = null) {
-    this._wizard?.el.remove();
+    this._wizard?.destroy?.();
     this._wizard = new DeviceWizard({
       hass: this._hass,
       initialDeviceId: deviceId,
       initialGroupId: groupId,
-      onClose: () => { this._wizard?.el.remove(); this._wizard = null; },
-      onSaved: (err) => {
-        if (err) { this._toast(`Fehler: ${err.message || err}`); return; }
-        this._wizard?.el.remove();
+      onClose: () => {
+        this._wizard?.destroy?.();
         this._wizard = null;
-        this._toast('Erfolgreich gespeichert');
+      },
+      onSaved: (err) => {
+        if (err) { this._toast(`Fehler: ${err.message || err}`, true); return; }
+        this._wizard?.destroy?.();
+        this._wizard = null;
+        this._toast('Gespeichert');
         this._serialized = null;
         this._load();
       },
@@ -7730,30 +8325,29 @@ class CompanionDashboardPanel extends HTMLElement {
         this._hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true }),
         this._hass.callWS({ type: 'smarthome_companion/dashboard/users' }),
       ]);
-      this._settings?.el.remove();
+      this._settings?.destroy?.();
       this._settings = new Settings({
         hass: this._hass,
         config: edit.config,
         layout: edit.layout,
         users: users.users,
-        onClose: () => { this._settings?.el.remove(); this._settings = null; },
+        onClose: () => {
+          this._settings?.destroy?.();
+          this._settings = null;
+        },
         onOpenDevice: (devId) => {
-          this._settings?.el.remove();
+          this._settings?.destroy?.();
           this._settings = null;
           this._openWizard(devId);
         },
         onOpenGroup: (groupId) => {
-          this._settings?.el.remove();
+          this._settings?.destroy?.();
           this._settings = null;
-          this._openWizard();
-          setTimeout(() => {
-            const wiz = this._wizard;
-            if (wiz && wiz.groups[groupId]) wiz._openGroupModal(wiz.groups[groupId]);
-          }, 350);
+          this._openWizard(null, groupId);
         },
         onSaved: (err) => {
-          if (err) { this._toast(`Fehler: ${err.message || err}`); return; }
-          this._settings?.el.remove();
+          if (err) { this._toast(`Fehler: ${err.message || err}`, true); return; }
+          this._settings?.destroy?.();
           this._settings = null;
           this._toast('Gespeichert');
           this._serialized = null;
@@ -7762,14 +8356,12 @@ class CompanionDashboardPanel extends HTMLElement {
       });
       this.shadowRoot.append(this._settings.el);
     } catch (err) {
-      this._toast(`Einstellungen nicht verfügbar: ${err.message || err}`);
+      this._toast(`Einstellungen nicht verfügbar: ${err.message || err}`, true);
     }
   }
 
-  _toast(text) {
-    const el = h('div', { class: 'toast' }, text);
-    this.shadowRoot.append(el);
-    setTimeout(() => el.remove(), 3200);
+  _toast(text, error = false) {
+    showToast(this.shadowRoot, text, { error });
   }
 }
 

@@ -2,7 +2,7 @@
 // Self-contained: no HACS cards required. The layout is resolved by the backend on every load,
 // so renamed entities / re-configured devices never leave dead tiles behind.
 import { STYLES } from './lib/styles.js';
-import { h, icon, debounce } from './lib/util.js';
+import { h, icon, debounce, showToast } from './lib/util.js';
 import { Room } from './components/room.js';
 import { RoomDetailView } from './components/room_detail.js';
 import { WarningDetailView } from './components/warning_detail.js';
@@ -54,6 +54,12 @@ class CompanionDashboardPanel extends HTMLElement {
     this._unsub = null;
     this._ro?.disconnect();
     this._ro = null;
+    this._roomModal?.destroy?.();
+    this._roomModal = null;
+    this._wizard?.destroy?.();
+    this._wizard = null;
+    this._settings?.destroy?.();
+    this._settings = null;
     this._initialised = false;
     cancelAnimationFrame(this._raf);
   }
@@ -235,10 +241,10 @@ class CompanionDashboardPanel extends HTMLElement {
 
   _layoutRooms() {
     if (!this._roomsWrap || !this._rooms?.length) return;
-    const width = this._roomsWrap.clientWidth || this._content?.clientWidth || window.innerWidth || 1000;
-    const colWidth = 350;
+    const winW = (typeof window !== 'undefined' ? window.innerWidth : 0) || 1000;
+    const width = this._roomsWrap.clientWidth || this._content?.clientWidth || winW;
     const gap = 12;
-    const colCount = Math.max(1, Math.min(this._rooms.length, Math.floor((width + gap) / (colWidth + gap))));
+    const colCount = Math.max(1, Math.min(this._rooms.length, Math.floor((width + gap) / 360)));
 
     if (colCount === this._colCount && this._roomsCols?.length === colCount) return;
     this._colCount = colCount;
@@ -254,8 +260,8 @@ class CompanionDashboardPanel extends HTMLElement {
     const isAdmin = !!this._data?.user?.is_admin;
     return h('div', { class: 'card empty' },
       icon('mdi:devices'),
-      h('div', { style: { fontWeight: '600', margin: '8px 0 4px', color: 'var(--primary-text-color)' } }, 'Noch keine Geräte im Dashboard'),
-      h('div', { class: 'hint' }, '• Geräte über den Zauberstab oben rechts einrichten\n• Räume kommen automatisch aus Home Assistant\n• Zusatz-Kacheln über „Dashboard einrichten“'),
+      h('div', { style: { fontWeight: '600', margin: '8px 0 4px', color: 'var(--primary-text-color)' } }, 'Keine Geräte eingerichtet'),
+      h('div', { class: 'hint' }, '• Einrichtung über + oben rechts\n• Räume aus Home Assistant\n• Zusatz-Kacheln in Einstellungen'),
       isAdmin ? h('div', { style: { marginTop: '16px' } },
         h('button', { class: 'btn primary', onClick: () => this._openWizard() }, icon('mdi:plus-circle-outline'), 'Gerät einrichten')) : null);
   }
@@ -340,7 +346,7 @@ class CompanionDashboardPanel extends HTMLElement {
         this._editBanner = h('div', { class: 'edit-mode-banner' },
           h('div', { class: 'edit-mode-banner-info' },
             icon('mdi:pencil'),
-            h('span', {}, 'Bearbeitungsmodus aktiv: Klicke ein Gerät oder einen Raum zum Konfigurieren')),
+            h('span', {}, 'Bearbeitungsmodus: Kachel oder Raum tippen')),
           h('button', {
             class: 'edit-mode-banner-btn',
             type: 'button',
@@ -356,7 +362,7 @@ class CompanionDashboardPanel extends HTMLElement {
   // ── room edit modal ──
   _openRoomEdit(roomSpec) {
     if (!this._hass || !roomSpec) return;
-    this._roomModal?.el.remove();
+    this._roomModal?.destroy?.();
     this._roomModal = new RoomEditModal({
       hass: this._hass,
       roomSpec,
@@ -372,17 +378,20 @@ class CompanionDashboardPanel extends HTMLElement {
 
   // ── device wizard ──
   _openWizard(deviceId = null, groupId = null) {
-    this._wizard?.el.remove();
+    this._wizard?.destroy?.();
     this._wizard = new DeviceWizard({
       hass: this._hass,
       initialDeviceId: deviceId,
       initialGroupId: groupId,
-      onClose: () => { this._wizard?.el.remove(); this._wizard = null; },
-      onSaved: (err) => {
-        if (err) { this._toast(`Fehler: ${err.message || err}`); return; }
-        this._wizard?.el.remove();
+      onClose: () => {
+        this._wizard?.destroy?.();
         this._wizard = null;
-        this._toast('Erfolgreich gespeichert');
+      },
+      onSaved: (err) => {
+        if (err) { this._toast(`Fehler: ${err.message || err}`, true); return; }
+        this._wizard?.destroy?.();
+        this._wizard = null;
+        this._toast('Gespeichert');
         this._serialized = null;
         this._load();
       },
@@ -397,30 +406,29 @@ class CompanionDashboardPanel extends HTMLElement {
         this._hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true }),
         this._hass.callWS({ type: 'smarthome_companion/dashboard/users' }),
       ]);
-      this._settings?.el.remove();
+      this._settings?.destroy?.();
       this._settings = new Settings({
         hass: this._hass,
         config: edit.config,
         layout: edit.layout,
         users: users.users,
-        onClose: () => { this._settings?.el.remove(); this._settings = null; },
+        onClose: () => {
+          this._settings?.destroy?.();
+          this._settings = null;
+        },
         onOpenDevice: (devId) => {
-          this._settings?.el.remove();
+          this._settings?.destroy?.();
           this._settings = null;
           this._openWizard(devId);
         },
         onOpenGroup: (groupId) => {
-          this._settings?.el.remove();
+          this._settings?.destroy?.();
           this._settings = null;
-          this._openWizard();
-          setTimeout(() => {
-            const wiz = this._wizard;
-            if (wiz && wiz.groups[groupId]) wiz._openGroupModal(wiz.groups[groupId]);
-          }, 350);
+          this._openWizard(null, groupId);
         },
         onSaved: (err) => {
-          if (err) { this._toast(`Fehler: ${err.message || err}`); return; }
-          this._settings?.el.remove();
+          if (err) { this._toast(`Fehler: ${err.message || err}`, true); return; }
+          this._settings?.destroy?.();
           this._settings = null;
           this._toast('Gespeichert');
           this._serialized = null;
@@ -429,14 +437,12 @@ class CompanionDashboardPanel extends HTMLElement {
       });
       this.shadowRoot.append(this._settings.el);
     } catch (err) {
-      this._toast(`Einstellungen nicht verfügbar: ${err.message || err}`);
+      this._toast(`Einstellungen nicht verfügbar: ${err.message || err}`, true);
     }
   }
 
-  _toast(text) {
-    const el = h('div', { class: 'toast' }, text);
-    this.shadowRoot.append(el);
-    setTimeout(() => el.remove(), 3200);
+  _toast(text, error = false) {
+    showToast(this.shadowRoot, text, { error });
   }
 }
 
