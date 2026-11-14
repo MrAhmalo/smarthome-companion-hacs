@@ -1233,18 +1233,15 @@ export class DeviceWizard {
     const isNewRoom = this._isNewRoomForDevice(this.selectedAreaId);
     let roomIconField = null;
     if (isNewRoom) {
-      const roomIconOpts = ROOM_ICON_OPTIONS.some((o) => o.value === this.roomIcon)
-        ? ROOM_ICON_OPTIONS
-        : [{ value: this.roomIcon, label: this.roomIcon, icon: this.roomIcon }, ...ROOM_ICON_OPTIONS];
-      const roomIconDropdown = new CustomDropdown({
-        options: roomIconOpts,
+      const roomIconPicker = new IconPicker({
+        hass: this.hass,
         value: this.roomIcon || 'mdi:home-outline',
-        searchable: true,
-        placeholder: 'Raum-Icon wählen...',
-        onChange: (val) => { this.roomIcon = val; },
+        priorityIcons: ROOM_ICON_OPTIONS,
+        placeholder: 'Raum-Icon wählen (z. B. Wohnzimmer, mdi:sofa)...',
+        onChange: (val) => { this.roomIcon = val || 'mdi:home-outline'; },
       });
-      this._dropdowns.push(roomIconDropdown);
-      roomIconField = h('div', { class: 'field', style: { position: 'relative', zIndex: '16' } }, 'Raum-Icon (neuer Raum)', roomIconDropdown.el);
+      this._dropdowns.push(roomIconPicker);
+      roomIconField = h('div', { class: 'field', style: { position: 'relative', zIndex: '16' } }, 'Raum-Icon (neuer Raum)', roomIconPicker.el);
     }
 
     const nameInput = h('input', {
@@ -1261,6 +1258,7 @@ export class DeviceWizard {
         this.customIcon = val;
       },
     });
+    this._dropdowns.push(devIconPicker);
 
     const catGrid = h('div', { class: 'cat-grid' },
       ...DEVICE_CATEGORIES.map((c) => {

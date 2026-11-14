@@ -68,15 +68,38 @@ async function _loadFullMdiCatalog(hass) {
   return _mdiLoadPromise;
 }
 
+const INITIAL_BATCH_SIZE = 160;
+const SCROLL_BATCH_SIZE = 160;
+
+function _buildPriorityEntries(priorityIcons) {
+  if (!Array.isArray(priorityIcons) || !priorityIcons.length) return [];
+  const entries = [];
+  const seen = new Set();
+  for (const item of priorityIcons) {
+    const ic = typeof item === 'string' ? item : (item?.icon || item?.value);
+    if (!ic || seen.has(ic)) continue;
+    seen.add(ic);
+    const label = (typeof item === 'object' && (item?.label || item?.name))
+      ? (item.label || item.name)
+      : ic.replace(/^mdi:/, '');
+    const tags = (typeof item === 'object' && item?.cat) ? item.cat.toLowerCase() : '';
+    entries.push({ icon: ic, label, search: `${ic} ${label} ${tags}`.toLowerCase() });
+  }
+  return entries;
+}
+
 export class IconPicker {
-  constructor({ hass, value = '', onChange, placeholder = 'Icon suchen (z. B. Lampe, mdi:bed)...' }) {
+  constructor({ hass, value = '', onChange, placeholder = 'Icon suchen (z. B. Lampe, mdi:bed)...', priorityIcons = null }) {
     this.hass = hass;
     this.value = value || '';
     this.onChange = onChange;
     this.placeholder = placeholder;
+    this.priorityEntries = _buildPriorityEntries(priorityIcons);
     this.isOpen = false;
     this.searchQuery = '';
     this._catalog = _mdiCatalog || _buildBaseCatalog(hass).list;
+    this._filteredCatalog = [];
+    this._renderedCount = 0;
 
     this._onDocClick = (e) => {
       if (!e.composedPath().includes(this.el)) this._close();
@@ -158,9 +181,11 @@ export class IconPicker {
 
     this.box = h('div', { class: 'ip-box' }, this.previewIcon, this.textInput, this.clearBtn, this.toggleBtn);
 
-    this.statusEl = h('div', { class: 'ip-status' });
-    this.grid = h('div', { class: 'ip-grid' });
-    this.dropdown = h('div', { class: 'ip-dropdown', hidden: true }, this.statusEl, this.grid);
+    this.grid = h('div', {
+      class: 'ip-grid',
+      onScroll: () => this._onGridScroll(),
+    });
+    this.dropdown = h('div', { class: 'ip-dropdown', hidden: true }, this.grid);
 
     this.el = h('div', { class: 'icon-picker' }, this.box, this.dropdown);
     this._updatePreview();
@@ -215,50 +240,87 @@ export class IconPicker {
     document.removeEventListener('pointerdown', this._onDocClick);
   }
 
+  destroy() {
+    this._close();
+    document.removeEventListener('pointerdown', this._onDocClick);
+  }
+
+  _getCatalog() {
+    if (!this.priorityEntries.length) return this._catalog;
+    const priorityMap = new Map(this.priorityEntries.map((e) => [e.icon, e]));
+    const merged = this.priorityEntries.map((prio) => {
+      const catEntry = this._catalog.find((c) => c.icon === prio.icon);
+      if (!catEntry) return prio;
+      return {
+        icon: prio.icon,
+        label: prio.label,
+        search: `${prio.search} ${catEntry.search}`.trim(),
+      };
+    });
+    for (const entry of this._catalog) {
+      if (!priorityMap.has(entry.icon)) merged.push(entry);
+    }
+    return merged;
+  }
+
+  _makeChip(entry, customLabel = null) {
+    const isSel = this.value === entry.icon;
+    const label = customLabel ?? entry.label;
+    return h('button', {
+      type: 'button',
+      class: `ip-chip${isSel ? ' active' : ''}`,
+      title: `${label} (${entry.icon})`,
+      onClick: (e) => { e.stopPropagation(); this._setValue(entry.icon); },
+    }, icon(entry.icon), h('span', { class: 'ip-chip-name' }, label));
+  }
+
+  _onGridScroll() {
+    if (this._renderedCount >= this._filteredCatalog.length) return;
+    const { scrollTop, clientHeight, scrollHeight } = this.grid;
+    if (scrollTop + clientHeight >= scrollHeight - 240) {
+      this._appendBatch(SCROLL_BATCH_SIZE);
+    }
+  }
+
+  _appendBatch(count) {
+    const total = this._filteredCatalog.length;
+    if (this._renderedCount >= total) return;
+    const nextEnd = Math.min(this._renderedCount + count, total);
+    const frag = document.createDocumentFragment();
+    for (let i = this._renderedCount; i < nextEnd; i++) {
+      frag.appendChild(this._makeChip(this._filteredCatalog[i]));
+    }
+    this._renderedCount = nextEnd;
+    this.grid.appendChild(frag);
+  }
+
   _renderGrid() {
     const q = this.searchQuery;
+    const catalog = this._getCatalog();
     const filtered = q
-      ? this._catalog.filter((entry) => entry.search.includes(q))
-      : this._catalog;
+      ? catalog.filter((entry) => entry.search.includes(q))
+      : catalog;
 
-    const maxVisible = 80;
-    const visible = filtered.slice(0, maxVisible);
+    this._filteredCatalog = filtered;
+    this._renderedCount = 0;
+    this.grid.scrollTop = 0;
 
-    if (q) {
-      this.statusEl.textContent = filtered.length > maxVisible
-        ? `${maxVisible} von ${filtered.length} Treffern – weiter tippen zum Eingrenzen`
-        : `${filtered.length} Treffer`;
-    } else {
-      this.statusEl.textContent = `${this._catalog.length} Icons verfügbar · Direkt oben tippen zum Suchen`;
-    }
-
-    const items = visible.map((entry) => {
-      const isSel = this.value === entry.icon;
-      return h('button', {
-        type: 'button',
-        class: `ip-chip${isSel ? ' active' : ''}`,
-        title: `${entry.label} (${entry.icon})`,
-        onClick: (e) => { e.stopPropagation(); this._setValue(entry.icon); },
-      }, icon(entry.icon), h('span', { class: 'ip-chip-name' }, entry.label));
-    });
-
-    if (q) {
-      const customMdi = `mdi:${q.replace(/\s+/g, '-')}`;
-      if (!visible.some((entry) => entry.icon === customMdi)) {
-        items.unshift(h('button', {
-          type: 'button',
-          class: 'ip-chip',
-          title: customMdi,
-          onClick: (e) => { e.stopPropagation(); this._setValue(customMdi); },
-        }, icon(customMdi), h('span', { class: 'ip-chip-name' }, customMdi)));
+    if (!filtered.length) {
+      if (q) {
+        const slug = q.replace(/^mdi:/i, '').replace(/\s+/g, '-');
+        const customMdi = `mdi:${slug}`;
+        this.grid.replaceChildren(
+          this._makeChip({ icon: customMdi, label: customMdi }, customMdi)
+        );
+        return;
       }
-    }
-
-    if (!items.length) {
-      this.grid.replaceChildren(h('div', { class: 'ip-empty' }, 'Kein Icon gefunden – direkt „mdi:name“ eingeben'));
+      this.grid.replaceChildren(h('div', { class: 'ip-empty' }, 'Keine Icons verfügbar'));
       return;
     }
 
-    this.grid.replaceChildren(...items);
+    this.grid.replaceChildren();
+    // When searching, render up to 240 immediately and stream the rest seamlessly on scroll
+    // so every matching available icon can be browsed without lag.
+    this._appendBatch(q ? 240 : INITIAL_BATCH_SIZE);
   }
 }

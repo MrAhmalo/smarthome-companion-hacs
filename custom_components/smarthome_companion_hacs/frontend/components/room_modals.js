@@ -2,7 +2,7 @@
 import {
   h, icon, ROOM_ICON_OPTIONS, ROOM_SENSOR_TYPES,
 } from '../lib/util.js';
-import { CustomDropdown } from './custom_dropdown.js';
+import { IconPicker } from './icon_picker.js';
 
 function _sensorMeta(type) {
   return ROOM_SENSOR_TYPES.find((t) => t.value === type) || {
@@ -217,16 +217,17 @@ export class RoomEditModal {
       onInput: (e) => { this.roomName = e.target.value; },
     });
 
-    const iconOptions = ROOM_ICON_OPTIONS.some((o) => o.value === this.selectedIcon)
-      ? ROOM_ICON_OPTIONS
-      : [{ value: this.selectedIcon, label: `Aktuell (${this.selectedIcon})`, icon: this.selectedIcon }, ...ROOM_ICON_OPTIONS];
-
-    this.iconDropdown = new CustomDropdown({
-      options: iconOptions,
+    this.headIcon = icon(this.selectedIcon);
+    this.iconPicker = new IconPicker({
+      hass: this.hass,
       value: this.selectedIcon,
-      searchable: true,
-      placeholder: 'Raum-Icon wählen...',
-      onChange: (val) => { this.selectedIcon = val; },
+      priorityIcons: ROOM_ICON_OPTIONS,
+      placeholder: 'Raum-Icon wählen (z. B. Wohnzimmer, mdi:sofa)...',
+      onChange: (val) => {
+        const nextIcon = (val && val.includes(':')) ? val : 'mdi:home-outline';
+        this.selectedIcon = nextIcon;
+        this.headIcon?.setAttribute('icon', nextIcon);
+      },
     });
 
     const allSensors = this.roomSpec.all_sensors || {};
@@ -277,7 +278,7 @@ export class RoomEditModal {
     },
     h('div', { class: 'dialog room-modal-dialog' },
       h('div', { class: 'dialog-head' },
-        icon(this.selectedIcon),
+        this.headIcon,
         h('h2', {}, `Raum bearbeiten: ${this.roomSpec.name}`),
         h('button', {
           type: 'button', class: 'icon-btn', 'aria-label': 'Schließen',
@@ -287,7 +288,7 @@ export class RoomEditModal {
         isUnassigned ? null : h('div', { class: 'section-title' }, 'Raumname'),
         isUnassigned ? null : h('div', { class: 'field', style: { marginBottom: '10px' } }, this.nameInput),
         h('div', { class: 'section-title' }, 'Raum-Icon'),
-        h('div', { class: 'field', style: { marginBottom: '10px', zIndex: '20' } }, this.iconDropdown.el),
+        h('div', { class: 'field', style: { marginBottom: '10px', zIndex: '20' } }, this.iconPicker.el),
         h('div', { class: 'section-title' }, 'Raumsensoren & Durchschnitt'),
         ...sensorBlocks),
       h('div', { class: 'dialog-foot' },
@@ -298,7 +299,7 @@ export class RoomEditModal {
   }
 
   _close() {
-    this.iconDropdown?.destroy();
+    this.iconPicker?.destroy();
     this.el.remove();
     this.onClose?.();
   }
@@ -360,7 +361,7 @@ export class RoomEditModal {
         await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
       }
 
-      this.iconDropdown?.destroy();
+      this.iconPicker?.destroy();
       this.el.remove();
       this.onSaved?.();
     } catch (err) {
@@ -419,7 +420,7 @@ export class RoomEditModal {
         if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
       }
 
-      this.iconDropdown?.destroy();
+      this.iconPicker?.destroy();
       this.el.remove();
       this.onSaved?.();
     } catch (err) {

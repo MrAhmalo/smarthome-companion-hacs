@@ -490,8 +490,8 @@ input[type=range].slider::-moz-range-thumb {
   display: flex; flex-direction: column;
   border-radius: var(--cd-radius);
   background: var(--cd-card);
-  box-shadow: 0 16px 56px rgba(0, 0, 0, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 16px 56px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(128, 128, 128, 0.22);
   overflow: hidden;
   position: relative;
 }
@@ -511,7 +511,7 @@ input[type=range].slider::-moz-range-thumb {
 .row-head .row-title { flex: 1; font-weight: 600; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fields { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 .field { display: grid; gap: 6px; font-size: 12px; color: var(--cd-secondary); min-width: 0; position: relative; }
-.field:has([data-open]), .row-card:has([data-open]), .channel-card:has([data-open]) { position: relative; z-index: 100; }
+.field:has([data-open]), .row-card:has([data-open]), .channel-card:has([data-open]) { position: relative; z-index: 999 !important; }
 .field-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 22px; }
 .field-label { font-size: 12px; font-weight: 600; color: var(--cd-secondary); white-space: nowrap; }
 .field > input[type=text], .field > input[type=number], .field > select, .field > input:not([type]) {
@@ -560,12 +560,12 @@ input[type=range].slider::-moz-range-thumb {
 }
 .device-channels-wrap {
   display: grid; gap: 4px; padding: 6px 10px 8px 36px; margin-top: -4px;
-  background: rgba(0,0,0,.25); border-radius: 0 0 12px 12px;
+  background: var(--cd-tile-bg); border-radius: 0 0 12px 12px;
   border-left: 2px solid var(--cd-accent);
 }
 .device-channel-row {
   display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px;
-  background: var(--cd-tile-bg); cursor: pointer; border: 1.5px solid transparent;
+  background: var(--cd-card); cursor: pointer; border: 1.5px solid transparent;
   transition: border-color .15s, background .15s;
 }
 .device-channel-row:hover { background: color-mix(in srgb, var(--primary-text-color, #fff) 8%, transparent); }
@@ -578,10 +578,10 @@ input[type=range].slider::-moz-range-thumb {
 .device-channel-meta { font-size: 11px; color: var(--cd-secondary); }
 .btn-channels-toggle {
   display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 8px;
-  background: rgba(255,255,255,.08); color: var(--primary-text-color, #fff); font-size: 11px; font-weight: 600;
-  border: 0; cursor: pointer; transition: background .15s;
+  background: var(--cd-tile-bg); color: var(--primary-text-color, inherit); font-size: 11px; font-weight: 600;
+  border: 1px solid rgba(128,128,128,.2); cursor: pointer; transition: background .15s;
 }
-.btn-channels-toggle:hover { background: rgba(255,255,255,.15); }
+.btn-channels-toggle:hover { background: rgba(128,128,128,.2); }
 .btn-channels-toggle ha-icon { --mdc-icon-size: 14px; }
 .group-member-tag {
   display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px;
@@ -653,23 +653,26 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .ep-box {
   display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 4px 10px;
   border-radius: 10px; border: 1px solid rgba(128,128,128,.3); background: var(--cd-card);
+  color: var(--primary-text-color, inherit);
   cursor: pointer; transition: border-color .2s, box-shadow .2s; outline: none;
 }
+.entity-picker:has([data-open]) { z-index: 999 !important; }
 .ep-box:hover { border-color: var(--cd-accent); }
 .ep-box[data-open] { border-color: var(--cd-accent); box-shadow: 0 0 0 1px var(--cd-accent); }
 .ep-icon { flex: none; color: var(--cd-accent); display: grid; place-items: center; }
 .ep-content { flex: 1; min-width: 0; display: grid; gap: 1px; }
-.ep-title { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--primary-text-color, #fff); }
+.ep-title { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--primary-text-color, inherit); }
 .ep-sub { font-size: 11px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ep-placeholder { color: var(--cd-secondary); font-size: 13px; }
 .ep-clear { border: 0; background: transparent; cursor: pointer; color: var(--cd-secondary); padding: 4px; border-radius: 50%; display: grid; place-items: center; flex: none; }
-.ep-clear:hover { color: var(--primary-text-color, #fff); background: rgba(128,128,128,.2); }
+.ep-clear:hover { color: var(--primary-text-color, inherit); background: rgba(128,128,128,.2); }
 .ep-chevron { flex: none; color: var(--cd-secondary); transition: transform .2s ease; }
 .ep-box[data-open] .ep-chevron { transform: rotate(180deg); }
 .ep-dropdown {
-  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 60;
-  border-radius: 12px; background: var(--cd-card); border: 1px solid rgba(128,128,128,.3);
-  box-shadow: 0 8px 32px rgba(0,0,0,.6); display: flex; flex-direction: column; overflow: hidden;
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1000;
+  border-radius: 12px; background: var(--cd-card); color: var(--primary-text-color, inherit);
+  border: 1px solid rgba(128,128,128,.28);
+  box-shadow: 0 12px 32px rgba(0,0,0,.28); display: flex; flex-direction: column; overflow: hidden;
 }
 .ep-search {
   display: flex; align-items: center; gap: 8px; padding: 8px 12px;
@@ -691,21 +694,23 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 
 /* ── Color Picker ── */
 .color-picker { position: relative; width: 100%; }
+.color-picker:has([data-open]) { z-index: 999 !important; }
 .cp-box {
   display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px;
   border-radius: 12px; border: 1px solid rgba(128,128,128,.3); background: var(--cd-card);
-  color: inherit; width: 100%; cursor: pointer; text-align: left; font-size: 13px;
+  color: var(--primary-text-color, inherit); width: 100%; cursor: pointer; text-align: left; font-size: 13px;
   transition: border-color .2s; outline: none;
 }
 .cp-box:hover, .cp-box[data-open] { border-color: var(--cd-accent); }
-.cp-dot { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.25); flex-shrink: 0; }
+.cp-dot { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid rgba(128,128,128,.35); flex-shrink: 0; }
 .cp-label { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cp-chevron { flex-shrink: 0; color: var(--cd-secondary); transition: transform .2s ease; }
 .cp-box[data-open] .cp-chevron { transform: rotate(180deg); }
 .cp-dropdown {
-  position: absolute; top: calc(100% + 4px); right: 0; width: max(100%, 250px); max-width: 85vw; z-index: 90;
-  border-radius: 14px; background: var(--cd-card); border: 1px solid rgba(128,128,128,.3);
-  box-shadow: 0 12px 36px rgba(0,0,0,.6); max-height: 260px; overflow-y: auto; padding: 6px;
+  position: absolute; top: calc(100% + 4px); right: 0; width: max(100%, 250px); max-width: 85vw; z-index: 1000;
+  border-radius: 14px; background: var(--cd-card); color: var(--primary-text-color, inherit);
+  border: 1px solid rgba(128,128,128,.28);
+  box-shadow: 0 12px 32px rgba(0,0,0,.28); max-height: 260px; overflow-y: auto; padding: 6px;
 }
 .cp-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
 .cp-item {
@@ -719,37 +724,36 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 
 /* ── Icon Picker ── */
 .icon-picker { position: relative; width: 100%; }
+.icon-picker:has([data-open]) { z-index: 999 !important; }
 .ip-box {
   display: flex; align-items: center; gap: 8px; height: 40px; padding: 2px 6px 2px 8px;
   border-radius: 12px; border: 1px solid rgba(128,128,128,.3); background: var(--cd-card);
-  transition: border-color .2s;
+  color: var(--primary-text-color, inherit);
+  transition: border-color .2s, box-shadow .2s;
 }
 .ip-box:hover, .ip-box[data-open] { border-color: var(--cd-accent); }
+.ip-box[data-open] { box-shadow: 0 0 0 1px var(--cd-accent); }
 .ip-preview {
   width: 30px; height: 30px; border-radius: 8px; background: var(--cd-tile-bg);
   display: grid; place-items: center; color: var(--cd-accent); flex-shrink: 0;
 }
-.ip-input { flex: 1; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; outline: none; min-width: 0; }
+.ip-input { flex: 1; border: 0; background: transparent; color: var(--primary-text-color, inherit); font: inherit; font-size: 13px; outline: none; min-width: 0; }
 .ip-clear, .ip-toggle {
   width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent;
   cursor: pointer; color: var(--cd-secondary); display: grid; place-items: center; flex-shrink: 0;
 }
-.ip-clear:hover, .ip-toggle:hover { background: var(--cd-tile-bg); color: #fff; }
+.ip-clear:hover, .ip-toggle:hover { background: var(--cd-tile-bg); color: var(--primary-text-color, inherit); }
 .ip-clear[hidden] { display: none; }
 .ip-dropdown {
-  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 90;
-  border-radius: 14px; background: var(--cd-card); border: 1px solid rgba(128,128,128,.3);
-  box-shadow: 0 12px 36px rgba(0,0,0,.6); max-height: 280px; display: flex; flex-direction: column; overflow: hidden;
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1000;
+  border-radius: 14px; background: var(--cd-card); color: var(--primary-text-color, inherit);
+  border: 1px solid rgba(128,128,128,.28);
+  box-shadow: 0 12px 32px rgba(0,0,0,.28); max-height: 280px; display: flex; flex-direction: column; overflow: hidden;
 }
 .ip-dropdown[hidden] { display: none; }
-.ip-status {
-  padding: 6px 10px; font-size: 11px; color: var(--cd-secondary);
-  background: var(--cd-tile-bg); border-bottom: 1px solid rgba(128,128,128,.15);
-  display: flex; align-items: center; justify-content: space-between;
-}
 .ip-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px;
-  padding: 8px; overflow-y: auto; max-height: 220px;
+  padding: 8px; overflow-y: auto; max-height: 268px;
 }
 .ip-chip {
   display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px;
@@ -958,10 +962,11 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 
 /* ── Custom Dropdown (No native browser <select>) ── */
 .custom-dropdown { position: relative; width: 100%; font-size: 13px; z-index: 10; }
-.custom-dropdown:has([data-open]) { z-index: 999; }
+.custom-dropdown:has([data-open]) { z-index: 999 !important; }
 .cdd-box {
   display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 4px 12px;
   border-radius: 10px; border: 1px solid rgba(128,128,128,.3); background: var(--cd-card);
+  color: var(--primary-text-color, inherit);
   cursor: pointer; transition: border-color .2s, box-shadow .2s; outline: none; user-select: none;
 }
 .cdd-box:hover:not(.disabled) { border-color: var(--cd-accent); }
@@ -969,14 +974,15 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .cdd-box.disabled { opacity: .5; cursor: default; }
 .cdd-icon { flex: none; display: grid; place-items: center; font-size: 18px; }
 .cdd-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.cdd-text { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cdd-text { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--primary-text-color, inherit); }
 .cdd-text.placeholder { color: var(--cd-secondary); }
 .cdd-chevron { flex: none; color: var(--cd-secondary); transition: transform .2s ease; }
 .cdd-box[data-open] .cdd-chevron { transform: rotate(180deg); }
 .cdd-menu {
   position: absolute; z-index: 1000; left: 0; right: 0; top: calc(100% + 4px);
-  background: #1c1c1f; border-radius: 12px; border: 1px solid rgba(255,255,255,.2);
-  box-shadow: 0 16px 48px rgba(0,0,0,.95); max-height: 280px; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--cd-card); color: var(--primary-text-color, inherit);
+  border-radius: 12px; border: 1px solid rgba(128,128,128,.28);
+  box-shadow: 0 12px 32px rgba(0,0,0,.28); max-height: 280px; display: flex; flex-direction: column; overflow: hidden;
   animation: cddSlideDown .15s ease-out;
 }
 @keyframes cddSlideDown {
@@ -985,18 +991,20 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 }
 .cdd-search-row {
   display: flex; align-items: center; gap: 8px; padding: 8px 12px;
-  background: var(--cd-tile-bg); border-bottom: 1px solid rgba(128,128,128,.15);
+  background: var(--cd-tile-bg); color: var(--primary-text-color, inherit);
+  border-bottom: 1px solid rgba(128,128,128,.15);
 }
-.cdd-search-input { flex: 1; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; outline: none; }
+.cdd-search-input { flex: 1; border: 0; background: transparent; color: var(--primary-text-color, inherit); font: inherit; font-size: 13px; outline: none; }
 .cdd-list { overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
 .cdd-item {
   display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px;
+  color: var(--primary-text-color, inherit);
   cursor: pointer; transition: background .12s; user-select: none;
 }
 .cdd-item:hover { background: rgba(128,128,128,.15); }
 .cdd-item.selected { background: color-mix(in srgb, var(--cd-accent) 18%, transparent); }
 .cdd-item-texts { flex: 1; min-width: 0; }
-.cdd-item-label { font-size: 13px; font-weight: 600; color: var(--primary-text-color, #fff); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cdd-item-label { font-size: 13px; font-weight: 600; color: var(--primary-text-color, inherit); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cdd-item-sub { font-size: 11px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cdd-item-check { color: var(--cd-accent); flex: none; font-size: 16px; }
 .cdd-empty { padding: 16px 12px; text-align: center; color: var(--cd-secondary); font-size: 12px; }
@@ -1155,8 +1163,9 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
 .room-modal-dialog .dialog-foot {
   border-radius: 0 0 calc(var(--cd-radius) - 1px) calc(var(--cd-radius) - 1px);
 }
-.room-modal-dialog .cdd-menu {
-  max-height: min(220px, 38dvh);
+.room-modal-dialog .cdd-menu,
+.room-modal-dialog .ip-dropdown {
+  max-height: min(250px, 42dvh);
 }
 
 /* ── Mobile Dialog, Touch & Selection Bar Responsive ── */
@@ -1232,7 +1241,7 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
 /* ── Room Edit & Sensor Conflict Modals ── */
 .sensor-pref-card {
   background: var(--cd-tile-bg);
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(128,128,128,0.18);
   border-radius: 14px;
   padding: 14px;
   margin-bottom: 12px;
@@ -1252,14 +1261,14 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
 .sensor-mode-tab {
   display: flex; align-items: center; justify-content: center; gap: 6px;
   padding: 10px 10px; min-height: 40px; border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.04); color: var(--cd-secondary);
+  border: 1px solid rgba(128,128,128,0.22);
+  background: var(--cd-card); color: var(--cd-secondary);
   font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
   transition: all .15s; touch-action: manipulation;
 }
 .sensor-mode-tab.active {
   background: color-mix(in srgb, var(--cd-accent) 18%, transparent);
-  border-color: var(--cd-accent); color: #fff;
+  border-color: var(--cd-accent); color: var(--primary-text-color, inherit);
 }
 .sensor-choice-list {
   display: flex; flex-direction: column; gap: 6px;
@@ -1267,12 +1276,12 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
 .sensor-choice-row {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 12px; min-height: 46px; border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(128,128,128,0.18);
+  background: var(--cd-card);
   cursor: pointer; transition: border-color .15s, background .15s; touch-action: manipulation;
 }
 @media (hover: hover) {
-  .sensor-choice-row:hover { border-color: rgba(255,255,255,0.25); }
+  .sensor-choice-row:hover { border-color: var(--cd-accent); }
 }
 .sensor-choice-row.selected {
   border-color: var(--cd-accent);
@@ -2155,15 +2164,38 @@ async function _loadFullMdiCatalog(hass) {
 
   return _mdiLoadPromise;
 }
+
+const INITIAL_BATCH_SIZE = 160;
+const SCROLL_BATCH_SIZE = 160;
+
+function _buildPriorityEntries(priorityIcons) {
+  if (!Array.isArray(priorityIcons) || !priorityIcons.length) return [];
+  const entries = [];
+  const seen = new Set();
+  for (const item of priorityIcons) {
+    const ic = typeof item === 'string' ? item : (item?.icon || item?.value);
+    if (!ic || seen.has(ic)) continue;
+    seen.add(ic);
+    const label = (typeof item === 'object' && (item?.label || item?.name))
+      ? (item.label || item.name)
+      : ic.replace(/^mdi:/, '');
+    const tags = (typeof item === 'object' && item?.cat) ? item.cat.toLowerCase() : '';
+    entries.push({ icon: ic, label, search: `${ic} ${label} ${tags}`.toLowerCase() });
+  }
+  return entries;
+}
 class IconPicker {
-  constructor({ hass, value = '', onChange, placeholder = 'Icon suchen (z. B. Lampe, mdi:bed)...' }) {
+  constructor({ hass, value = '', onChange, placeholder = 'Icon suchen (z. B. Lampe, mdi:bed)...', priorityIcons = null }) {
     this.hass = hass;
     this.value = value || '';
     this.onChange = onChange;
     this.placeholder = placeholder;
+    this.priorityEntries = _buildPriorityEntries(priorityIcons);
     this.isOpen = false;
     this.searchQuery = '';
     this._catalog = _mdiCatalog || _buildBaseCatalog(hass).list;
+    this._filteredCatalog = [];
+    this._renderedCount = 0;
 
     this._onDocClick = (e) => {
       if (!e.composedPath().includes(this.el)) this._close();
@@ -2245,9 +2277,11 @@ class IconPicker {
 
     this.box = h('div', { class: 'ip-box' }, this.previewIcon, this.textInput, this.clearBtn, this.toggleBtn);
 
-    this.statusEl = h('div', { class: 'ip-status' });
-    this.grid = h('div', { class: 'ip-grid' });
-    this.dropdown = h('div', { class: 'ip-dropdown', hidden: true }, this.statusEl, this.grid);
+    this.grid = h('div', {
+      class: 'ip-grid',
+      onScroll: () => this._onGridScroll(),
+    });
+    this.dropdown = h('div', { class: 'ip-dropdown', hidden: true }, this.grid);
 
     this.el = h('div', { class: 'icon-picker' }, this.box, this.dropdown);
     this._updatePreview();
@@ -2302,51 +2336,88 @@ class IconPicker {
     document.removeEventListener('pointerdown', this._onDocClick);
   }
 
+  destroy() {
+    this._close();
+    document.removeEventListener('pointerdown', this._onDocClick);
+  }
+
+  _getCatalog() {
+    if (!this.priorityEntries.length) return this._catalog;
+    const priorityMap = new Map(this.priorityEntries.map((e) => [e.icon, e]));
+    const merged = this.priorityEntries.map((prio) => {
+      const catEntry = this._catalog.find((c) => c.icon === prio.icon);
+      if (!catEntry) return prio;
+      return {
+        icon: prio.icon,
+        label: prio.label,
+        search: `${prio.search} ${catEntry.search}`.trim(),
+      };
+    });
+    for (const entry of this._catalog) {
+      if (!priorityMap.has(entry.icon)) merged.push(entry);
+    }
+    return merged;
+  }
+
+  _makeChip(entry, customLabel = null) {
+    const isSel = this.value === entry.icon;
+    const label = customLabel ?? entry.label;
+    return h('button', {
+      type: 'button',
+      class: `ip-chip${isSel ? ' active' : ''}`,
+      title: `${label} (${entry.icon})`,
+      onClick: (e) => { e.stopPropagation(); this._setValue(entry.icon); },
+    }, icon(entry.icon), h('span', { class: 'ip-chip-name' }, label));
+  }
+
+  _onGridScroll() {
+    if (this._renderedCount >= this._filteredCatalog.length) return;
+    const { scrollTop, clientHeight, scrollHeight } = this.grid;
+    if (scrollTop + clientHeight >= scrollHeight - 240) {
+      this._appendBatch(SCROLL_BATCH_SIZE);
+    }
+  }
+
+  _appendBatch(count) {
+    const total = this._filteredCatalog.length;
+    if (this._renderedCount >= total) return;
+    const nextEnd = Math.min(this._renderedCount + count, total);
+    const frag = document.createDocumentFragment();
+    for (let i = this._renderedCount; i < nextEnd; i++) {
+      frag.appendChild(this._makeChip(this._filteredCatalog[i]));
+    }
+    this._renderedCount = nextEnd;
+    this.grid.appendChild(frag);
+  }
+
   _renderGrid() {
     const q = this.searchQuery;
+    const catalog = this._getCatalog();
     const filtered = q
-      ? this._catalog.filter((entry) => entry.search.includes(q))
-      : this._catalog;
+      ? catalog.filter((entry) => entry.search.includes(q))
+      : catalog;
 
-    const maxVisible = 80;
-    const visible = filtered.slice(0, maxVisible);
+    this._filteredCatalog = filtered;
+    this._renderedCount = 0;
+    this.grid.scrollTop = 0;
 
-    if (q) {
-      this.statusEl.textContent = filtered.length > maxVisible
-        ? `${maxVisible} von ${filtered.length} Treffern – weiter tippen zum Eingrenzen`
-        : `${filtered.length} Treffer`;
-    } else {
-      this.statusEl.textContent = `${this._catalog.length} Icons verfügbar · Direkt oben tippen zum Suchen`;
-    }
-
-    const items = visible.map((entry) => {
-      const isSel = this.value === entry.icon;
-      return h('button', {
-        type: 'button',
-        class: `ip-chip${isSel ? ' active' : ''}`,
-        title: `${entry.label} (${entry.icon})`,
-        onClick: (e) => { e.stopPropagation(); this._setValue(entry.icon); },
-      }, icon(entry.icon), h('span', { class: 'ip-chip-name' }, entry.label));
-    });
-
-    if (q) {
-      const customMdi = `mdi:${q.replace(/\s+/g, '-')}`;
-      if (!visible.some((entry) => entry.icon === customMdi)) {
-        items.unshift(h('button', {
-          type: 'button',
-          class: 'ip-chip',
-          title: customMdi,
-          onClick: (e) => { e.stopPropagation(); this._setValue(customMdi); },
-        }, icon(customMdi), h('span', { class: 'ip-chip-name' }, customMdi)));
+    if (!filtered.length) {
+      if (q) {
+        const slug = q.replace(/^mdi:/i, '').replace(/\s+/g, '-');
+        const customMdi = `mdi:${slug}`;
+        this.grid.replaceChildren(
+          this._makeChip({ icon: customMdi, label: customMdi }, customMdi)
+        );
+        return;
       }
-    }
-
-    if (!items.length) {
-      this.grid.replaceChildren(h('div', { class: 'ip-empty' }, 'Kein Icon gefunden – direkt „mdi:name“ eingeben'));
+      this.grid.replaceChildren(h('div', { class: 'ip-empty' }, 'Keine Icons verfügbar'));
       return;
     }
 
-    this.grid.replaceChildren(...items);
+    this.grid.replaceChildren();
+    // When searching, render up to 240 immediately and stream the rest seamlessly on scroll
+    // so every matching available icon can be browsed without lag.
+    this._appendBatch(q ? 240 : INITIAL_BATCH_SIZE);
   }
 }
 // ─── END: components/icon_picker.js ───
@@ -5229,16 +5300,17 @@ class RoomEditModal {
       onInput: (e) => { this.roomName = e.target.value; },
     });
 
-    const iconOptions = ROOM_ICON_OPTIONS.some((o) => o.value === this.selectedIcon)
-      ? ROOM_ICON_OPTIONS
-      : [{ value: this.selectedIcon, label: `Aktuell (${this.selectedIcon})`, icon: this.selectedIcon }, ...ROOM_ICON_OPTIONS];
-
-    this.iconDropdown = new CustomDropdown({
-      options: iconOptions,
+    this.headIcon = icon(this.selectedIcon);
+    this.iconPicker = new IconPicker({
+      hass: this.hass,
       value: this.selectedIcon,
-      searchable: true,
-      placeholder: 'Raum-Icon wählen...',
-      onChange: (val) => { this.selectedIcon = val; },
+      priorityIcons: ROOM_ICON_OPTIONS,
+      placeholder: 'Raum-Icon wählen (z. B. Wohnzimmer, mdi:sofa)...',
+      onChange: (val) => {
+        const nextIcon = (val && val.includes(':')) ? val : 'mdi:home-outline';
+        this.selectedIcon = nextIcon;
+        this.headIcon?.setAttribute('icon', nextIcon);
+      },
     });
 
     const allSensors = this.roomSpec.all_sensors || {};
@@ -5289,7 +5361,7 @@ class RoomEditModal {
     },
     h('div', { class: 'dialog room-modal-dialog' },
       h('div', { class: 'dialog-head' },
-        icon(this.selectedIcon),
+        this.headIcon,
         h('h2', {}, `Raum bearbeiten: ${this.roomSpec.name}`),
         h('button', {
           type: 'button', class: 'icon-btn', 'aria-label': 'Schließen',
@@ -5299,7 +5371,7 @@ class RoomEditModal {
         isUnassigned ? null : h('div', { class: 'section-title' }, 'Raumname'),
         isUnassigned ? null : h('div', { class: 'field', style: { marginBottom: '10px' } }, this.nameInput),
         h('div', { class: 'section-title' }, 'Raum-Icon'),
-        h('div', { class: 'field', style: { marginBottom: '10px', zIndex: '20' } }, this.iconDropdown.el),
+        h('div', { class: 'field', style: { marginBottom: '10px', zIndex: '20' } }, this.iconPicker.el),
         h('div', { class: 'section-title' }, 'Raumsensoren & Durchschnitt'),
         ...sensorBlocks),
       h('div', { class: 'dialog-foot' },
@@ -5310,7 +5382,7 @@ class RoomEditModal {
   }
 
   _close() {
-    this.iconDropdown?.destroy();
+    this.iconPicker?.destroy();
     this.el.remove();
     this.onClose?.();
   }
@@ -5372,7 +5444,7 @@ class RoomEditModal {
         await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
       }
 
-      this.iconDropdown?.destroy();
+      this.iconPicker?.destroy();
       this.el.remove();
       this.onSaved?.();
     } catch (err) {
@@ -5431,7 +5503,7 @@ class RoomEditModal {
         if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
       }
 
-      this.iconDropdown?.destroy();
+      this.iconPicker?.destroy();
       this.el.remove();
       this.onSaved?.();
     } catch (err) {
@@ -6673,18 +6745,15 @@ class DeviceWizard {
     const isNewRoom = this._isNewRoomForDevice(this.selectedAreaId);
     let roomIconField = null;
     if (isNewRoom) {
-      const roomIconOpts = ROOM_ICON_OPTIONS.some((o) => o.value === this.roomIcon)
-        ? ROOM_ICON_OPTIONS
-        : [{ value: this.roomIcon, label: this.roomIcon, icon: this.roomIcon }, ...ROOM_ICON_OPTIONS];
-      const roomIconDropdown = new CustomDropdown({
-        options: roomIconOpts,
+      const roomIconPicker = new IconPicker({
+        hass: this.hass,
         value: this.roomIcon || 'mdi:home-outline',
-        searchable: true,
-        placeholder: 'Raum-Icon wählen...',
-        onChange: (val) => { this.roomIcon = val; },
+        priorityIcons: ROOM_ICON_OPTIONS,
+        placeholder: 'Raum-Icon wählen (z. B. Wohnzimmer, mdi:sofa)...',
+        onChange: (val) => { this.roomIcon = val || 'mdi:home-outline'; },
       });
-      this._dropdowns.push(roomIconDropdown);
-      roomIconField = h('div', { class: 'field', style: { position: 'relative', zIndex: '16' } }, 'Raum-Icon (neuer Raum)', roomIconDropdown.el);
+      this._dropdowns.push(roomIconPicker);
+      roomIconField = h('div', { class: 'field', style: { position: 'relative', zIndex: '16' } }, 'Raum-Icon (neuer Raum)', roomIconPicker.el);
     }
 
     const nameInput = h('input', {
@@ -6701,6 +6770,7 @@ class DeviceWizard {
         this.customIcon = val;
       },
     });
+    this._dropdowns.push(devIconPicker);
 
     const catGrid = h('div', { class: 'cat-grid' },
       ...DEVICE_CATEGORIES.map((c) => {
