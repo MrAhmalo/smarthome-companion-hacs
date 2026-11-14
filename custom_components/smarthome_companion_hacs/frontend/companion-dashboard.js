@@ -134,16 +134,10 @@ class CompanionDashboardPanel extends HTMLElement {
       onOpenRoom: (areaId) => this._openRoom(areaId),
       onEditRoom: (roomSpec) => this._openRoomEdit(roomSpec),
       onOpenDevice: (deviceId) => {
-        if (this._editMode) this._toggleEditMode();
         this._openWizard(deviceId);
       },
       onOpenGroup: (groupId) => {
-        if (this._editMode) this._toggleEditMode();
-        this._openWizard();
-        setTimeout(() => {
-          const wiz = this._wizard;
-          if (wiz && wiz.groups[groupId]) wiz._openGroupModal(wiz.groups[groupId]);
-        }, 350);
+        this._openWizard(null, groupId);
       },
       isEditMode: () => !!this._editMode,
     };
@@ -157,7 +151,11 @@ class CompanionDashboardPanel extends HTMLElement {
       this._nav = new NavBar(config.nav);
       this._components = [this._warningDetail];
       this._content.replaceChildren(this._warningDetail.el, this._nav.el);
-      this._push();
+      if (this._editMode && this._editBanner) {
+      this._content.prepend(this._editBanner);
+    }
+
+    this._push();
       return;
     }
 
@@ -172,7 +170,11 @@ class CompanionDashboardPanel extends HTMLElement {
         this._nav = new NavBar(config.nav);
         this._components = [this._roomDetail];
         this._content.replaceChildren(this._roomDetail.el, this._nav.el);
-        this._push();
+        if (this._editMode && this._editBanner) {
+      this._content.prepend(this._editBanner);
+    }
+
+    this._push();
         return;
       }
       this._activeRoomId = null;
@@ -221,6 +223,10 @@ class CompanionDashboardPanel extends HTMLElement {
       this._ro?.disconnect();
       this._ro = new ResizeObserver(debounce(() => this._layoutRooms(), 100));
       this._ro.observe(this._roomsWrap);
+    }
+
+    if (this._editMode && this._editBanner) {
+      this._content.prepend(this._editBanner);
     }
 
     this._push();
@@ -357,7 +363,6 @@ class CompanionDashboardPanel extends HTMLElement {
       onClose: () => { this._roomModal = null; },
       onSaved: () => {
         this._roomModal = null;
-        if (this._editMode) this._toggleEditMode();
         this._load();
         this._toast('Raum gespeichert');
       },
@@ -366,24 +371,18 @@ class CompanionDashboardPanel extends HTMLElement {
   }
 
   // ── device wizard ──
-  _openWizard(deviceId = null) {
-    if (this._editMode) {
-      this._editMode = false;
-      this._editBtn?.removeAttribute('data-active');
-      this._editBtn?.classList.remove('edit-btn-active');
-      this._page?.removeAttribute('data-edit-mode');
-      this._editBanner?.remove();
-    }
+  _openWizard(deviceId = null, groupId = null) {
     this._wizard?.el.remove();
     this._wizard = new DeviceWizard({
       hass: this._hass,
       initialDeviceId: deviceId,
+      initialGroupId: groupId,
       onClose: () => { this._wizard?.el.remove(); this._wizard = null; },
       onSaved: (err) => {
         if (err) { this._toast(`Fehler: ${err.message || err}`); return; }
         this._wizard?.el.remove();
         this._wizard = null;
-        this._toast('Gerät erfolgreich eingerichtet');
+        this._toast('Erfolgreich gespeichert');
         this._serialized = null;
         this._load();
       },

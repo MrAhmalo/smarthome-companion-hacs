@@ -610,7 +610,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
 
         rooms.append({
             "area_id": area_id,
-            "name": area.name if area else "Sonstige",
+            "name": area.name if area else "Nicht zugeordnet",
             "icon": _clean_icon(rcfg.get("icon")) or (area.icon if area and area.icon else "mdi:home-outline"),
             "tiles": tiles,
             "expanded": expanded,

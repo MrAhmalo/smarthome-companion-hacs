@@ -45,9 +45,11 @@ export class DeviceWizard {
   /**
    * @param {{hass:object, initialDeviceId?:string, onClose:Function, onSaved:Function}} opts
    */
-  constructor({ hass, initialDeviceId, onClose, onSaved }) {
+  constructor({ hass, initialDeviceId, initialGroupId, onClose, onSaved }) {
     this.hass = hass;
     this.initialDeviceId = initialDeviceId || null;
+    this.initialGroupId = initialGroupId || null;
+    this.directMode = !!(this.initialDeviceId || this.initialGroupId);
     this.onClose = onClose;
     this.onSaved = onSaved;
 
@@ -140,6 +142,12 @@ export class DeviceWizard {
         }
       }
 
+      if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
+        this.dialog.hidden = true;
+        this._openGroupModal(this.groups[this.initialGroupId], true);
+        return;
+      }
+
       this._render();
     } catch (err) {
       this.body.replaceChildren(h('div', { class: 'empty' }, icon('mdi:alert'), h('div', {}, `Fehler beim Laden: ${err.message || err}`)));
@@ -185,8 +193,15 @@ export class DeviceWizard {
     const isConfigured = !!(this.selectedDevice && this.configuredDevices[this.selectedDevice.id]);
 
     const leftActions = [];
-    if (isFirst) {
+    if (isFirst || (this.initialDeviceId && this.step === 1)) {
       leftActions.push(h('button', { class: 'btn', onClick: () => this.onClose() }, 'Abbrechen'));
+      if (!isFirst && isConfigured) {
+        leftActions.push(h('button', {
+          class: 'btn danger',
+          title: 'Companion-Einrichtung für dieses Gerät aufheben',
+          onClick: () => this._removeDevice(this.selectedDevice.id, this.customName),
+        }, icon('mdi:delete-outline'), 'Einrichtung aufheben'));
+      }
     } else {
       leftActions.push(h('button', { class: 'btn', onClick: () => { this.step--; this._render(); } }, icon('mdi:chevron-left'), 'Zurück'));
       if (isConfigured) {
@@ -240,6 +255,12 @@ export class DeviceWizard {
         this.selectedDevice = null;
         this.step = 0;
       }
+      if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
+        this.dialog.hidden = true;
+        this._openGroupModal(this.groups[this.initialGroupId], true);
+        return;
+      }
+
       this._render();
       this.onSaved(null);
     } catch (err) {
@@ -485,7 +506,13 @@ export class DeviceWizard {
                 this.selectedDevice = d;
                 this._initDevice();
                 this.step = 1;
-                this._render();
+                if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
+        this.dialog.hidden = true;
+        this._openGroupModal(this.groups[this.initialGroupId], true);
+        return;
+      }
+
+      this._render();
               },
             }, icon('mdi:pencil'), 'Bearbeiten'),
             h('button', {
@@ -509,7 +536,13 @@ export class DeviceWizard {
                 this.selectedDevice = d;
                 this._initDevice();
                 this.step = 1;
-                this._render();
+                if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
+        this.dialog.hidden = true;
+        this._openGroupModal(this.groups[this.initialGroupId], true);
+        return;
+      }
+
+      this._render();
               },
             }, icon('mdi:plus'), 'Einrichten')
           );
@@ -528,7 +561,13 @@ export class DeviceWizard {
             this.selectedDevice = d;
             this._initDevice();
             this.step = 1;
-            this._render();
+            if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
+        this.dialog.hidden = true;
+        this._openGroupModal(this.groups[this.initialGroupId], true);
+        return;
+      }
+
+      this._render();
           },
         },
         chk,
@@ -740,7 +779,7 @@ export class DeviceWizard {
     this.el.appendChild(overlay);
   }
 
-  _openGroupModal(existingGroup = null) {
+  _openGroupModal(existingGroup = null, isDirect = false) {
     let selectedIds = existingGroup ? [...(existingGroup.children || [])] : Array.from(this.selectedDevices);
     if (!existingGroup && selectedIds.length < 2) return;
     const isMultiGroup = !existingGroup && selectedIds.some((id) => !!this.groups[id]);
@@ -900,11 +939,18 @@ export class DeviceWizard {
       addDropdownWrap = h('div', { style: { marginTop: '6px' } }, addDd.el);
     }
 
+    const closeGroupModal = () => {
+      overlay.remove();
+      areaDd.destroy();
+      catDd.destroy();
+      if (isDirect) this.onClose?.();
+    };
+
     const dialog = h('div', { class: 'dialog group-modal-dialog', style: { maxWidth: '520px', width: 'min(520px, 94vw)' } },
       h('div', { class: 'dialog-head' },
         icon(isMultiGroup ? 'mdi:folder-multiple' : 'mdi:lightbulb-group'),
         h('h2', {}, existingGroup ? 'Gruppe bearbeiten' : (isMultiGroup ? 'Hauptgruppe erstellen' : 'Gruppe erstellen')),
-        h('button', { class: 'icon-btn', onClick: () => { overlay.remove(); areaDd.destroy(); catDd.destroy(); } }, icon('mdi:close'))),
+        h('button', { class: 'icon-btn', onClick: closeGroupModal }, icon('mdi:close'))),
       h('div', { class: 'dialog-body', style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
         h('div', {},
           h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Gruppen-Name:'),
@@ -924,7 +970,7 @@ export class DeviceWizard {
           addDropdownWrap)),
       h('div', { class: 'dialog-foot' },
         h('div', { class: 'dialog-foot-actions' },
-          h('button', { class: 'btn', onClick: () => { overlay.remove(); areaDd.destroy(); catDd.destroy(); } }, 'Abbrechen')),
+          h('button', { class: 'btn', onClick: closeGroupModal }, 'Abbrechen')),
         h('div', { class: 'dialog-foot-actions' },
           h('button', {
             class: 'btn primary',
@@ -1211,7 +1257,13 @@ export class DeviceWizard {
             if (!this.customIcon) {
               devIconPicker._setValue(c.icon);
             }
-            this._render();
+            if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
+        this.dialog.hidden = true;
+        this._openGroupModal(this.groups[this.initialGroupId], true);
+        return;
+      }
+
+      this._render();
           },
         },
         icon(c.icon),
@@ -1547,7 +1599,7 @@ export class DeviceWizard {
       h('div', { class: 'hint', style: { fontSize: '15px', maxWidth: '440px', lineHeight: '1.5', color: 'rgba(255,255,255,0.85)' } },
         `Gerät „${this.customName}“ wurde erfolgreich im Raum „${areaName}“ eingerichtet.`),
       h('div', { style: { display: 'flex', gap: '12px', marginTop: '18px' } },
-        h('button', {
+        this.directMode ? null : h('button', {
           class: 'btn secondary',
           onClick: () => {
             this.isCelebration = false;
@@ -1562,7 +1614,7 @@ export class DeviceWizard {
             this.onClose();
             this.onSaved(null);
           },
-        }, icon('mdi:view-dashboard'), 'Zum Dashboard')));
+        }, icon(this.directMode ? 'mdi:check' : 'mdi:view-dashboard'), this.directMode ? 'Fertig' : 'Zum Dashboard')));
 
     this.body.replaceChildren(celebration);
   }

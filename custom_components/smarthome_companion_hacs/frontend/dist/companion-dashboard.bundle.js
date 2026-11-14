@@ -94,11 +94,21 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   z-index: 2;
   box-sizing: border-box;
 }
+@keyframes cdEditMarch {
+  0%   { background-position: 0 0, 0 100%, 0 0, 100% 0; }
+  100% { background-position: 24px 0, -24px 100%, 0 -24px, 100% 24px; }
+}
 @media (hover: hover) {
   .page[data-edit-mode] .tile:hover::before,
   .page[data-edit-mode] .cover-detail-row:hover::before,
   .page[data-edit-mode] .room-head:hover::before {
-    border-color: #fff;
+    border-color: transparent;
+    background:
+      repeating-linear-gradient(90deg, var(--cd-accent) 0 7px, transparent 7px 12px) 0 0 / 24px 2px repeat-x,
+      repeating-linear-gradient(90deg, var(--cd-accent) 0 7px, transparent 7px 12px) 0 100% / 24px 2px repeat-x,
+      repeating-linear-gradient(0deg, var(--cd-accent) 0 7px, transparent 7px 12px) 0 0 / 2px 24px repeat-y,
+      repeating-linear-gradient(0deg, var(--cd-accent) 0 7px, transparent 7px 12px) 100% 0 / 2px 24px repeat-y;
+    animation: cdEditMarch 0.7s linear infinite;
   }
 }
 .device-room-section { margin-top: 16px; }
@@ -1107,7 +1117,12 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
   height: auto !important;
   min-height: auto !important;
   max-height: min(90vh, calc(100dvh - 32px)) !important;
+}
+.group-modal-dialog {
   overflow: visible !important;
+}
+.room-modal-dialog {
+  overflow: hidden !important;
 }
 .group-modal-dialog .dialog-body,
 .room-modal-dialog .dialog-body {
@@ -1120,6 +1135,9 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
 .room-modal-dialog .dialog-body {
   max-height: calc(100dvh - 180px);
   overflow-y: auto !important;
+}
+.room-modal-dialog .dialog-foot {
+  border-radius: 0 0 var(--cd-radius) var(--cd-radius);
 }
 .room-modal-dialog .cdd-menu {
   max-height: min(220px, 38dvh);
@@ -5098,6 +5116,7 @@ class RoomEditModal {
     this.roomSpec = roomSpec;
     this.onSaved = onSaved;
     this.onClose = onClose;
+    this.roomName = roomSpec.name || '';
     this.selectedIcon = roomSpec.icon || 'mdi:home-outline';
     this.sensorPrefs = JSON.parse(JSON.stringify(roomSpec.sensor_prefs || {}));
     this._saving = false;
@@ -5105,6 +5124,15 @@ class RoomEditModal {
   }
 
   _build() {
+    const isUnassigned = this.roomSpec.area_id === '__none__';
+    this.nameInput = h('input', {
+      type: 'text',
+      value: this.roomName,
+      disabled: isUnassigned,
+      placeholder: 'Raumname...',
+      onInput: (e) => { this.roomName = e.target.value; },
+    });
+
     const iconOptions = ROOM_ICON_OPTIONS.some((o) => o.value === this.selectedIcon)
       ? ROOM_ICON_OPTIONS
       : [{ value: this.selectedIcon, label: `Aktuell (${this.selectedIcon})`, icon: this.selectedIcon }, ...ROOM_ICON_OPTIONS];
@@ -5152,6 +5180,12 @@ class RoomEditModal {
       onClick: () => this._save(),
     }, icon('mdi:content-save'), 'Speichern');
 
+    const deleteBtn = !isUnassigned ? h('button', {
+      type: 'button',
+      class: 'btn danger',
+      onClick: () => this._confirmDelete(),
+    }, icon('mdi:delete-outline'), 'Raum löschen') : null;
+
     this.el = h('div', {
       class: 'overlay',
       style: { zIndex: '1010' },
@@ -5166,11 +5200,14 @@ class RoomEditModal {
           onClick: () => this._close(),
         }, icon('mdi:close'))),
       h('div', { class: 'dialog-body' },
+        isUnassigned ? null : h('div', { class: 'section-title' }, 'Raumname'),
+        isUnassigned ? null : h('div', { class: 'field', style: { marginBottom: '10px' } }, this.nameInput),
         h('div', { class: 'section-title' }, 'Raum-Icon'),
         h('div', { class: 'field', style: { marginBottom: '10px', zIndex: '20' } }, this.iconDropdown.el),
         h('div', { class: 'section-title' }, 'Raumsensoren & Durchschnitt'),
         ...sensorBlocks),
-      h('div', { class: 'dialog-foot', style: { justifyContent: 'flex-end' } },
+      h('div', { class: 'dialog-foot' },
+        h('div', { class: 'dialog-foot-actions' }, deleteBtn),
         h('div', { class: 'dialog-foot-actions' },
           h('button', { type: 'button', class: 'btn', onClick: () => this._close() }, 'Abbrechen'),
           this.saveBtn))));
@@ -5182,19 +5219,85 @@ class RoomEditModal {
     this.onClose?.();
   }
 
+  _confirmDelete() {
+    const confirmOverlay = h('div', {
+      class: 'overlay',
+      style: { zIndex: '1020' },
+      onClick: (e) => { if (e.target === confirmOverlay) confirmOverlay.remove(); },
+    },
+    h('div', { class: 'dialog room-modal-dialog', style: { maxWidth: '440px' } },
+      h('div', { class: 'dialog-head' },
+        icon('mdi:alert-outline'),
+        h('h2', {}, 'Raum löschen?')),
+      h('div', { class: 'dialog-body' },
+        h('div', { class: 'hint', style: { fontSize: '14px', color: 'var(--primary-text-color, #fff)', lineHeight: '1.5' } },
+          `Möchtest du den Raum „${this.roomSpec.name}“ wirklich löschen?\n\nDer Raum wird entfernt, alle zugeordneten Geräte und Sensoren bleiben erhalten und werden automatisch nach „Nicht zugeordnet“ verschoben.`)),
+      h('div', { class: 'dialog-foot', style: { justifyContent: 'flex-end' } },
+        h('div', { class: 'dialog-foot-actions' },
+          h('button', { type: 'button', class: 'btn', onClick: () => confirmOverlay.remove() }, 'Abbrechen'),
+          h('button', {
+            type: 'button',
+            class: 'btn danger',
+            onClick: async () => {
+              confirmOverlay.remove();
+              await this._deleteRoom();
+            },
+          }, icon('mdi:delete-outline'), 'Endgültig löschen')))));
+    this.el.append(confirmOverlay);
+  }
+
+  async _deleteRoom() {
+    if (this._saving) return;
+    this._saving = true;
+    const areaId = this.roomSpec.area_id;
+    try {
+      if (areaId && areaId !== '__none__') {
+        await this.hass.callWS({
+          type: 'config/area_registry/delete',
+          area_id: areaId,
+        });
+      }
+
+      const data = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
+      const config = data?.config || {};
+      if (config.rooms && areaId in config.rooms) {
+        delete config.rooms[areaId];
+      }
+      if (Array.isArray(config.room_order)) {
+        config.room_order = config.room_order.filter((id) => id !== areaId);
+      }
+      if (config.tile_order && areaId in config.tile_order) {
+        delete config.tile_order[areaId];
+      }
+      await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
+
+      this.iconDropdown?.destroy();
+      this.el.remove();
+      this.onSaved?.();
+    } catch (err) {
+      this._saving = false;
+      console.error('[RoomEditModal] delete failed', err);
+    }
+  }
+
   async _save() {
     if (this._saving) return;
     this._saving = true;
     this.saveBtn.disabled = true;
     const areaId = this.roomSpec.area_id;
+    const trimmedName = (this.roomName || '').trim();
     try {
       if (areaId && areaId !== '__none__') {
         try {
-          await this.hass.callWS({
+          const areaUpdate = {
             type: 'config/area_registry/update',
             area_id: areaId,
             icon: this.selectedIcon,
-          });
+          };
+          if (trimmedName && trimmedName !== this.roomSpec.name) {
+            areaUpdate.name = trimmedName;
+          }
+          await this.hass.callWS(areaUpdate);
         } catch (_) {
           // Non-fatal in mock/dev mode
         }
@@ -5264,9 +5367,11 @@ class DeviceWizard {
   /**
    * @param {{hass:object, initialDeviceId?:string, onClose:Function, onSaved:Function}} opts
    */
-  constructor({ hass, initialDeviceId, onClose, onSaved }) {
+  constructor({ hass, initialDeviceId, initialGroupId, onClose, onSaved }) {
     this.hass = hass;
     this.initialDeviceId = initialDeviceId || null;
+    this.initialGroupId = initialGroupId || null;
+    this.directMode = !!(this.initialDeviceId || this.initialGroupId);
     this.onClose = onClose;
     this.onSaved = onSaved;
 
@@ -5359,6 +5464,12 @@ class DeviceWizard {
         }
       }
 
+      if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
+        this.dialog.hidden = true;
+        this._openGroupModal(this.groups[this.initialGroupId], true);
+        return;
+      }
+
       this._render();
     } catch (err) {
       this.body.replaceChildren(h('div', { class: 'empty' }, icon('mdi:alert'), h('div', {}, `Fehler beim Laden: ${err.message || err}`)));
@@ -5404,8 +5515,15 @@ class DeviceWizard {
     const isConfigured = !!(this.selectedDevice && this.configuredDevices[this.selectedDevice.id]);
 
     const leftActions = [];
-    if (isFirst) {
+    if (isFirst || (this.initialDeviceId && this.step === 1)) {
       leftActions.push(h('button', { class: 'btn', onClick: () => this.onClose() }, 'Abbrechen'));
+      if (!isFirst && isConfigured) {
+        leftActions.push(h('button', {
+          class: 'btn danger',
+          title: 'Companion-Einrichtung für dieses Gerät aufheben',
+          onClick: () => this._removeDevice(this.selectedDevice.id, this.customName),
+        }, icon('mdi:delete-outline'), 'Einrichtung aufheben'));
+      }
     } else {
       leftActions.push(h('button', { class: 'btn', onClick: () => { this.step--; this._render(); } }, icon('mdi:chevron-left'), 'Zurück'));
       if (isConfigured) {
@@ -5459,6 +5577,12 @@ class DeviceWizard {
         this.selectedDevice = null;
         this.step = 0;
       }
+      if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
+        this.dialog.hidden = true;
+        this._openGroupModal(this.groups[this.initialGroupId], true);
+        return;
+      }
+
       this._render();
       this.onSaved(null);
     } catch (err) {
@@ -5704,7 +5828,13 @@ class DeviceWizard {
                 this.selectedDevice = d;
                 this._initDevice();
                 this.step = 1;
-                this._render();
+                if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
+        this.dialog.hidden = true;
+        this._openGroupModal(this.groups[this.initialGroupId], true);
+        return;
+      }
+
+      this._render();
               },
             }, icon('mdi:pencil'), 'Bearbeiten'),
             h('button', {
@@ -5728,7 +5858,13 @@ class DeviceWizard {
                 this.selectedDevice = d;
                 this._initDevice();
                 this.step = 1;
-                this._render();
+                if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
+        this.dialog.hidden = true;
+        this._openGroupModal(this.groups[this.initialGroupId], true);
+        return;
+      }
+
+      this._render();
               },
             }, icon('mdi:plus'), 'Einrichten')
           );
@@ -5747,7 +5883,13 @@ class DeviceWizard {
             this.selectedDevice = d;
             this._initDevice();
             this.step = 1;
-            this._render();
+            if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
+        this.dialog.hidden = true;
+        this._openGroupModal(this.groups[this.initialGroupId], true);
+        return;
+      }
+
+      this._render();
           },
         },
         chk,
@@ -5959,7 +6101,7 @@ class DeviceWizard {
     this.el.appendChild(overlay);
   }
 
-  _openGroupModal(existingGroup = null) {
+  _openGroupModal(existingGroup = null, isDirect = false) {
     let selectedIds = existingGroup ? [...(existingGroup.children || [])] : Array.from(this.selectedDevices);
     if (!existingGroup && selectedIds.length < 2) return;
     const isMultiGroup = !existingGroup && selectedIds.some((id) => !!this.groups[id]);
@@ -6119,11 +6261,18 @@ class DeviceWizard {
       addDropdownWrap = h('div', { style: { marginTop: '6px' } }, addDd.el);
     }
 
+    const closeGroupModal = () => {
+      overlay.remove();
+      areaDd.destroy();
+      catDd.destroy();
+      if (isDirect) this.onClose?.();
+    };
+
     const dialog = h('div', { class: 'dialog group-modal-dialog', style: { maxWidth: '520px', width: 'min(520px, 94vw)' } },
       h('div', { class: 'dialog-head' },
         icon(isMultiGroup ? 'mdi:folder-multiple' : 'mdi:lightbulb-group'),
         h('h2', {}, existingGroup ? 'Gruppe bearbeiten' : (isMultiGroup ? 'Hauptgruppe erstellen' : 'Gruppe erstellen')),
-        h('button', { class: 'icon-btn', onClick: () => { overlay.remove(); areaDd.destroy(); catDd.destroy(); } }, icon('mdi:close'))),
+        h('button', { class: 'icon-btn', onClick: closeGroupModal }, icon('mdi:close'))),
       h('div', { class: 'dialog-body', style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
         h('div', {},
           h('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: 'var(--cd-secondary)' } }, 'Gruppen-Name:'),
@@ -6143,7 +6292,7 @@ class DeviceWizard {
           addDropdownWrap)),
       h('div', { class: 'dialog-foot' },
         h('div', { class: 'dialog-foot-actions' },
-          h('button', { class: 'btn', onClick: () => { overlay.remove(); areaDd.destroy(); catDd.destroy(); } }, 'Abbrechen')),
+          h('button', { class: 'btn', onClick: closeGroupModal }, 'Abbrechen')),
         h('div', { class: 'dialog-foot-actions' },
           h('button', {
             class: 'btn primary',
@@ -6430,7 +6579,13 @@ class DeviceWizard {
             if (!this.customIcon) {
               devIconPicker._setValue(c.icon);
             }
-            this._render();
+            if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
+        this.dialog.hidden = true;
+        this._openGroupModal(this.groups[this.initialGroupId], true);
+        return;
+      }
+
+      this._render();
           },
         },
         icon(c.icon),
@@ -6766,7 +6921,7 @@ class DeviceWizard {
       h('div', { class: 'hint', style: { fontSize: '15px', maxWidth: '440px', lineHeight: '1.5', color: 'rgba(255,255,255,0.85)' } },
         `Gerät „${this.customName}“ wurde erfolgreich im Raum „${areaName}“ eingerichtet.`),
       h('div', { style: { display: 'flex', gap: '12px', marginTop: '18px' } },
-        h('button', {
+        this.directMode ? null : h('button', {
           class: 'btn secondary',
           onClick: () => {
             this.isCelebration = false;
@@ -6781,7 +6936,7 @@ class DeviceWizard {
             this.onClose();
             this.onSaved(null);
           },
-        }, icon('mdi:view-dashboard'), 'Zum Dashboard')));
+        }, icon(this.directMode ? 'mdi:check' : 'mdi:view-dashboard'), this.directMode ? 'Fertig' : 'Zum Dashboard')));
 
     this.body.replaceChildren(celebration);
   }
@@ -7093,16 +7248,10 @@ class CompanionDashboardPanel extends HTMLElement {
       onOpenRoom: (areaId) => this._openRoom(areaId),
       onEditRoom: (roomSpec) => this._openRoomEdit(roomSpec),
       onOpenDevice: (deviceId) => {
-        if (this._editMode) this._toggleEditMode();
         this._openWizard(deviceId);
       },
       onOpenGroup: (groupId) => {
-        if (this._editMode) this._toggleEditMode();
-        this._openWizard();
-        setTimeout(() => {
-          const wiz = this._wizard;
-          if (wiz && wiz.groups[groupId]) wiz._openGroupModal(wiz.groups[groupId]);
-        }, 350);
+        this._openWizard(null, groupId);
       },
       isEditMode: () => !!this._editMode,
     };
@@ -7116,7 +7265,11 @@ class CompanionDashboardPanel extends HTMLElement {
       this._nav = new NavBar(config.nav);
       this._components = [this._warningDetail];
       this._content.replaceChildren(this._warningDetail.el, this._nav.el);
-      this._push();
+      if (this._editMode && this._editBanner) {
+      this._content.prepend(this._editBanner);
+    }
+
+    this._push();
       return;
     }
 
@@ -7131,7 +7284,11 @@ class CompanionDashboardPanel extends HTMLElement {
         this._nav = new NavBar(config.nav);
         this._components = [this._roomDetail];
         this._content.replaceChildren(this._roomDetail.el, this._nav.el);
-        this._push();
+        if (this._editMode && this._editBanner) {
+      this._content.prepend(this._editBanner);
+    }
+
+    this._push();
         return;
       }
       this._activeRoomId = null;
@@ -7180,6 +7337,10 @@ class CompanionDashboardPanel extends HTMLElement {
       this._ro?.disconnect();
       this._ro = new ResizeObserver(debounce(() => this._layoutRooms(), 100));
       this._ro.observe(this._roomsWrap);
+    }
+
+    if (this._editMode && this._editBanner) {
+      this._content.prepend(this._editBanner);
     }
 
     this._push();
@@ -7316,7 +7477,6 @@ class CompanionDashboardPanel extends HTMLElement {
       onClose: () => { this._roomModal = null; },
       onSaved: () => {
         this._roomModal = null;
-        if (this._editMode) this._toggleEditMode();
         this._load();
         this._toast('Raum gespeichert');
       },
@@ -7325,24 +7485,18 @@ class CompanionDashboardPanel extends HTMLElement {
   }
 
   // ── device wizard ──
-  _openWizard(deviceId = null) {
-    if (this._editMode) {
-      this._editMode = false;
-      this._editBtn?.removeAttribute('data-active');
-      this._editBtn?.classList.remove('edit-btn-active');
-      this._page?.removeAttribute('data-edit-mode');
-      this._editBanner?.remove();
-    }
+  _openWizard(deviceId = null, groupId = null) {
     this._wizard?.el.remove();
     this._wizard = new DeviceWizard({
       hass: this._hass,
       initialDeviceId: deviceId,
+      initialGroupId: groupId,
       onClose: () => { this._wizard?.el.remove(); this._wizard = null; },
       onSaved: (err) => {
         if (err) { this._toast(`Fehler: ${err.message || err}`); return; }
         this._wizard?.el.remove();
         this._wizard = null;
-        this._toast('Gerät erfolgreich eingerichtet');
+        this._toast('Erfolgreich gespeichert');
         this._serialized = null;
         this._load();
       },

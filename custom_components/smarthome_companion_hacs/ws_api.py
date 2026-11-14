@@ -14,6 +14,7 @@ from homeassistant.helpers import (
 )
 from .const import DOMAIN
 from .util import safe_fire_event
+from .entity_sync import async_sync_renamed_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -213,10 +214,12 @@ async def handle_configure_device(hass, connection, msg):
         _LOGGER.warning("Could not update device registry for %s: %s", device_id, e)
 
     # Sync primary entity ID in HA entity registry on rename
+    renamed_map = {}
     if custom_name and primary:
         ent_reg = er.async_get(hass)
         p_entry = ent_reg.async_get(primary)
         if p_entry:
+            old_eid = p_entry.entity_id
             domain = p_entry.domain
             clean_name = re.sub(r"[^a-z0-9_]+", "_", custom_name.lower()).strip("_")
             effective_area = area_id or p_entry.area_id
@@ -231,14 +234,18 @@ async def handle_configure_device(hass, connection, msg):
             else:
                 clean_slug = clean_name
             target_eid = f"{domain}.{clean_slug}"
-            if p_entry.entity_id != target_eid:
+            if old_eid != target_eid:
                 existing = ent_reg.async_get(target_eid)
                 if not existing or existing.unique_id == p_entry.unique_id:
                     try:
-                        ent_reg.async_update_entity(p_entry.entity_id, new_entity_id=target_eid)
-                        _LOGGER.info("Updated primary entity ID from %s to %s", p_entry.entity_id, target_eid)
+                        ent_reg.async_update_entity(old_eid, new_entity_id=target_eid)
+                        renamed_map[old_eid] = target_eid
+                        _LOGGER.info("Updated primary entity ID from %s to %s", old_eid, target_eid)
                     except Exception as e:
-                        _LOGGER.warning("Could not rename entity ID for %s: %s", p_entry.entity_id, e)
+                        _LOGGER.warning("Could not rename entity ID for %s: %s", old_eid, e)
+
+    if renamed_map:
+        await async_sync_renamed_entities(hass, store, renamed_map)
 
     safe_fire_event(hass, f"{DOMAIN}_dashboard_updated")
     connection.send_result(msg["id"], {"success": True})

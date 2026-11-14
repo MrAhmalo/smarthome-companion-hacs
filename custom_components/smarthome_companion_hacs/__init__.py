@@ -8,6 +8,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
 from .store import CompanionStore
+from .entity_sync import async_sync_renamed_entities
 from .ws_api import async_register_websockets
 from .blinds_manager import BlindsManager
 from .sun_manager import SunManager
@@ -42,6 +43,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         
         async_register_websockets(hass)
         async_register_dashboard_websockets(hass)
+
+        @callback
+        def _on_entity_registry_updated(event):
+            data = event.data or {}
+            if data.get("action") != "update":
+                return
+            changes = data.get("changes") or {}
+            old_eid = changes.get("entity_id")
+            new_eid = data.get("entity_id")
+            if isinstance(old_eid, str) and isinstance(new_eid, str) and old_eid != new_eid:
+                hass.async_create_task(async_sync_renamed_entities(hass, store, {old_eid: new_eid}))
+
+        hass.bus.async_listen("entity_registry_updated", _on_entity_registry_updated)
         await sun_manager.async_setup()
         try:
             await async_register_dashboard_panel(hass)

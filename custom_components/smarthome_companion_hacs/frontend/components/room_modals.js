@@ -200,6 +200,7 @@ export class RoomEditModal {
     this.roomSpec = roomSpec;
     this.onSaved = onSaved;
     this.onClose = onClose;
+    this.roomName = roomSpec.name || '';
     this.selectedIcon = roomSpec.icon || 'mdi:home-outline';
     this.sensorPrefs = JSON.parse(JSON.stringify(roomSpec.sensor_prefs || {}));
     this._saving = false;
@@ -207,6 +208,15 @@ export class RoomEditModal {
   }
 
   _build() {
+    const isUnassigned = this.roomSpec.area_id === '__none__';
+    this.nameInput = h('input', {
+      type: 'text',
+      value: this.roomName,
+      disabled: isUnassigned,
+      placeholder: 'Raumname...',
+      onInput: (e) => { this.roomName = e.target.value; },
+    });
+
     const iconOptions = ROOM_ICON_OPTIONS.some((o) => o.value === this.selectedIcon)
       ? ROOM_ICON_OPTIONS
       : [{ value: this.selectedIcon, label: `Aktuell (${this.selectedIcon})`, icon: this.selectedIcon }, ...ROOM_ICON_OPTIONS];
@@ -254,6 +264,12 @@ export class RoomEditModal {
       onClick: () => this._save(),
     }, icon('mdi:content-save'), 'Speichern');
 
+    const deleteBtn = !isUnassigned ? h('button', {
+      type: 'button',
+      class: 'btn danger',
+      onClick: () => this._confirmDelete(),
+    }, icon('mdi:delete-outline'), 'Raum löschen') : null;
+
     this.el = h('div', {
       class: 'overlay',
       style: { zIndex: '1010' },
@@ -268,11 +284,14 @@ export class RoomEditModal {
           onClick: () => this._close(),
         }, icon('mdi:close'))),
       h('div', { class: 'dialog-body' },
+        isUnassigned ? null : h('div', { class: 'section-title' }, 'Raumname'),
+        isUnassigned ? null : h('div', { class: 'field', style: { marginBottom: '10px' } }, this.nameInput),
         h('div', { class: 'section-title' }, 'Raum-Icon'),
         h('div', { class: 'field', style: { marginBottom: '10px', zIndex: '20' } }, this.iconDropdown.el),
         h('div', { class: 'section-title' }, 'Raumsensoren & Durchschnitt'),
         ...sensorBlocks),
-      h('div', { class: 'dialog-foot', style: { justifyContent: 'flex-end' } },
+      h('div', { class: 'dialog-foot' },
+        h('div', { class: 'dialog-foot-actions' }, deleteBtn),
         h('div', { class: 'dialog-foot-actions' },
           h('button', { type: 'button', class: 'btn', onClick: () => this._close() }, 'Abbrechen'),
           this.saveBtn))));
@@ -284,19 +303,85 @@ export class RoomEditModal {
     this.onClose?.();
   }
 
+  _confirmDelete() {
+    const confirmOverlay = h('div', {
+      class: 'overlay',
+      style: { zIndex: '1020' },
+      onClick: (e) => { if (e.target === confirmOverlay) confirmOverlay.remove(); },
+    },
+    h('div', { class: 'dialog room-modal-dialog', style: { maxWidth: '440px' } },
+      h('div', { class: 'dialog-head' },
+        icon('mdi:alert-outline'),
+        h('h2', {}, 'Raum löschen?')),
+      h('div', { class: 'dialog-body' },
+        h('div', { class: 'hint', style: { fontSize: '14px', color: 'var(--primary-text-color, #fff)', lineHeight: '1.5' } },
+          `Möchtest du den Raum „${this.roomSpec.name}“ wirklich löschen?\n\nDer Raum wird entfernt, alle zugeordneten Geräte und Sensoren bleiben erhalten und werden automatisch nach „Nicht zugeordnet“ verschoben.`)),
+      h('div', { class: 'dialog-foot', style: { justifyContent: 'flex-end' } },
+        h('div', { class: 'dialog-foot-actions' },
+          h('button', { type: 'button', class: 'btn', onClick: () => confirmOverlay.remove() }, 'Abbrechen'),
+          h('button', {
+            type: 'button',
+            class: 'btn danger',
+            onClick: async () => {
+              confirmOverlay.remove();
+              await this._deleteRoom();
+            },
+          }, icon('mdi:delete-outline'), 'Endgültig löschen')))));
+    this.el.append(confirmOverlay);
+  }
+
+  async _deleteRoom() {
+    if (this._saving) return;
+    this._saving = true;
+    const areaId = this.roomSpec.area_id;
+    try {
+      if (areaId && areaId !== '__none__') {
+        await this.hass.callWS({
+          type: 'config/area_registry/delete',
+          area_id: areaId,
+        });
+      }
+
+      const data = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
+      const config = data?.config || {};
+      if (config.rooms && areaId in config.rooms) {
+        delete config.rooms[areaId];
+      }
+      if (Array.isArray(config.room_order)) {
+        config.room_order = config.room_order.filter((id) => id !== areaId);
+      }
+      if (config.tile_order && areaId in config.tile_order) {
+        delete config.tile_order[areaId];
+      }
+      await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
+
+      this.iconDropdown?.destroy();
+      this.el.remove();
+      this.onSaved?.();
+    } catch (err) {
+      this._saving = false;
+      console.error('[RoomEditModal] delete failed', err);
+    }
+  }
+
   async _save() {
     if (this._saving) return;
     this._saving = true;
     this.saveBtn.disabled = true;
     const areaId = this.roomSpec.area_id;
+    const trimmedName = (this.roomName || '').trim();
     try {
       if (areaId && areaId !== '__none__') {
         try {
-          await this.hass.callWS({
+          const areaUpdate = {
             type: 'config/area_registry/update',
             area_id: areaId,
             icon: this.selectedIcon,
-          });
+          };
+          if (trimmedName && trimmedName !== this.roomSpec.name) {
+            areaUpdate.name = trimmedName;
+          }
+          await this.hass.callWS(areaUpdate);
         } catch (_) {
           // Non-fatal in mock/dev mode
         }

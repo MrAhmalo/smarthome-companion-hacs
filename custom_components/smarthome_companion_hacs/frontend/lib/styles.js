@@ -89,11 +89,21 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   z-index: 2;
   box-sizing: border-box;
 }
+@keyframes cdEditMarch {
+  0%   { background-position: 0 0, 0 100%, 0 0, 100% 0; }
+  100% { background-position: 24px 0, -24px 100%, 0 -24px, 100% 24px; }
+}
 @media (hover: hover) {
   .page[data-edit-mode] .tile:hover::before,
   .page[data-edit-mode] .cover-detail-row:hover::before,
   .page[data-edit-mode] .room-head:hover::before {
-    border-color: #fff;
+    border-color: transparent;
+    background:
+      repeating-linear-gradient(90deg, var(--cd-accent) 0 7px, transparent 7px 12px) 0 0 / 24px 2px repeat-x,
+      repeating-linear-gradient(90deg, var(--cd-accent) 0 7px, transparent 7px 12px) 0 100% / 24px 2px repeat-x,
+      repeating-linear-gradient(0deg, var(--cd-accent) 0 7px, transparent 7px 12px) 0 0 / 2px 24px repeat-y,
+      repeating-linear-gradient(0deg, var(--cd-accent) 0 7px, transparent 7px 12px) 100% 0 / 2px 24px repeat-y;
+    animation: cdEditMarch 0.7s linear infinite;
   }
 }
 .device-room-section { margin-top: 16px; }
@@ -1102,7 +1112,12 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
   height: auto !important;
   min-height: auto !important;
   max-height: min(90vh, calc(100dvh - 32px)) !important;
+}
+.group-modal-dialog {
   overflow: visible !important;
+}
+.room-modal-dialog {
+  overflow: hidden !important;
 }
 .group-modal-dialog .dialog-body,
 .room-modal-dialog .dialog-body {
@@ -1115,6 +1130,9 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
 .room-modal-dialog .dialog-body {
   max-height: calc(100dvh - 180px);
   overflow-y: auto !important;
+}
+.room-modal-dialog .dialog-foot {
+  border-radius: 0 0 var(--cd-radius) var(--cd-radius);
 }
 .room-modal-dialog .cdd-menu {
   max-height: min(220px, 38dvh);
