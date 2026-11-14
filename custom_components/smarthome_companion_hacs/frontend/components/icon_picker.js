@@ -226,8 +226,8 @@ export class IconPicker {
     this._renderGrid();
     this._portalCleanup?.();
     this._portalCleanup = positionFloatingMenu(this.box, this.dropdown, {
-      minWidth: 260,
-      maxHeight: 280,
+      minWidth: 300,
+      maxHeight: 340,
       matchWidth: true,
     });
     setTimeout(() => {
@@ -282,7 +282,7 @@ export class IconPicker {
       class: `ip-chip${isSel ? ' active' : ''}`,
       title: `${label} (${entry.icon})`,
       onClick: (e) => { e.stopPropagation(); this._setValue(entry.icon); },
-    }, icon(entry.icon), h('span', { class: 'ip-chip-name' }, label));
+    }, h('span', { class: 'ip-chip-inner' }, icon(entry.icon), h('span', { class: 'ip-chip-name' }, label)));
   }
 
   _onGridScroll() {

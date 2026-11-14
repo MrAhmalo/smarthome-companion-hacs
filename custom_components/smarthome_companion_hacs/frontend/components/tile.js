@@ -62,7 +62,9 @@ export class Tile {
     this.btns = h('div', { class: 'tile-btns' });
     this.feature = h('div', { class: 'tile-feature', hidden: true });
 
-    const wide = ['cover', 'media_player', 'climate'].includes(this.kind);
+    const wide = ['cover', 'media_player', 'climate'].includes(this.kind)
+      || this.spec.wide === true
+      || this.spec.force_own_row === true;
     this.el = h('div', { class: `tile ${this.kind}${wide ? ' wide' : ''}`, 'data-key': this.spec.key },
       h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns),
       this.feature,
@@ -117,10 +119,15 @@ export class Tile {
     return false;
   }
 
+  get isForceOwnRow() {
+    return this.spec.force_own_row === true;
+  }
+
   get isAlwaysWide() {
     return ['cover', 'media_player', 'climate'].includes(this.kind)
       || this.spec.is_group === true
-      || this.spec.wide === true;
+      || this.spec.wide === true
+      || this.spec.force_own_row === true;
   }
 
   get isWide() {
@@ -463,15 +470,26 @@ export class GroupTile {
         'data-group': 'true',
       }, mainRow, this.feature, editBorder(10));
     } else {
-      if (this.children.length % 2 === 1) {
-        for (let i = 0; i < this.children.length - 1; i++) {
-          this.children[i].setWide?.(false);
+      const wideChildren = [];
+      const compactChildren = [];
+      for (const c of this.children) {
+        if (c.isForceOwnRow || c.isAlwaysWide || c.hasSlider) {
+          c.setWide?.(true);
+          wideChildren.push(c);
+        } else {
+          compactChildren.push(c);
         }
-        this.children[this.children.length - 1].setWide?.(true);
-      } else {
-        this.children.forEach((c) => c.setWide?.(false));
       }
-      this.subGrid = h('div', { class: 'group-sub-grid' }, ...this.children.map((c) => c.el));
+      if (compactChildren.length % 2 === 1) {
+        for (let i = 0; i < compactChildren.length - 1; i++) {
+          compactChildren[i].setWide?.(false);
+        }
+        compactChildren[compactChildren.length - 1].setWide?.(true);
+      } else {
+        compactChildren.forEach((c) => c.setWide?.(false));
+      }
+      const orderedChildren = [...compactChildren, ...wideChildren];
+      this.subGrid = h('div', { class: 'group-sub-grid' }, ...orderedChildren.map((c) => c.el));
       this.subContainer = h('div', { class: 'group-sub-container' }, this.subGrid);
       this.subInner = h('div', { class: 'group-sub-inner' }, this.subContainer);
       this.subBody = h('div', { class: 'group-sub-body' }, this.subInner);

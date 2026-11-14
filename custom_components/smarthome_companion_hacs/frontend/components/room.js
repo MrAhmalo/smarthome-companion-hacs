@@ -40,6 +40,8 @@ export function applySmartTileLayout(tiles, grid = null) {
     const isGroup = t.spec?.is_group || t.is_group === true || t.constructor?.name === 'GroupTile';
     if (isGroup) {
       bottomWide.push(t);
+    } else if (t.isForceOwnRow) {
+      sliderTiles.push(t);
     } else if (t.isAlwaysWide) {
       topWide.push(t);
     } else if (t.hasSlider) {

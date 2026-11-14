@@ -10,6 +10,12 @@ from .const import DOMAIN
 from .store import CompanionStore
 from .entity_sync import async_sync_renamed_entities
 from .ws_api import async_register_websockets
+from .migrations import (
+    MIGRATION_ENERGY_SENSORS_V1,
+    MIGRATION_SUB_ENTITY_NAMES_V1,
+    async_migrate_energy_sensors,
+    async_migrate_sub_entity_names,
+)
 from .blinds_manager import BlindsManager
 from .sun_manager import SunManager
 from .irrigation_manager import IrrigationManager
@@ -53,6 +59,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             old_eid = data.get("old_entity_id") or changes.get("entity_id")
             new_eid = data.get("entity_id")
             if isinstance(old_eid, str) and isinstance(new_eid, str) and old_eid != new_eid:
+                internal_renames = hass.data.get(DOMAIN, {}).get("_internal_renames")
+                if internal_renames and (old_eid, new_eid) in internal_renames:
+                    internal_renames.discard((old_eid, new_eid))
+                    return
                 hass.async_create_task(async_sync_renamed_entities(hass, store, {old_eid: new_eid}))
 
         hass.bus.async_listen("entity_registry_updated", _on_entity_registry_updated)
@@ -61,6 +71,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await async_register_dashboard_panel(hass)
         except Exception as err:  # noqa: BLE001 - never block the backend because of the UI
             _LOGGER.error("Could not register Companion dashboard panel: %s", err)
+
+        async def _run_startup_migrations(_event=None):
+            await async_migrate_energy_sensors(hass, store)
+            await async_migrate_sub_entity_names(hass, store)
+
+        migs = store.get_migrations()
+        if not migs.get(MIGRATION_ENERGY_SENSORS_V1) or not migs.get(MIGRATION_SUB_ENTITY_NAMES_V1):
+            if getattr(hass, "is_running", False):
+                await _run_startup_migrations()
+            elif not hass.data[DOMAIN].get("_startup_migrations_scheduled"):
+                hass.data[DOMAIN]["_startup_migrations_scheduled"] = True
+                # pyrefly: ignore [missing-import]
+                from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+
+                hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _run_startup_migrations)
 
         async def handle_set_sleep_in(call):
             entity_ids = call.data.get("entity_ids", [])

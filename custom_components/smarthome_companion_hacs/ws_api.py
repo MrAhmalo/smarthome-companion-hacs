@@ -14,7 +14,7 @@ from homeassistant.helpers import (
 )
 from .const import DOMAIN
 from .util import safe_fire_event
-from .entity_sync import async_sync_renamed_entities, slugify_ha
+from .entity_sync import async_sync_renamed_entities, slugify_ha, sync_device_entity_ids
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -207,6 +207,28 @@ async def handle_configure_device(hass, connection, msg):
     if energy:
         _sync_entity_labels(hass, energy, [f"{category}_energy"])
 
+    sub_entities_for_labels = entities.get("sub_entities") if isinstance(entities, dict) else None
+    if isinstance(sub_entities_for_labels, dict):
+        for sub_eid, sub_data in sub_entities_for_labels.items():
+            if not isinstance(sub_data, dict):
+                continue
+            sub_cat = sub_data.get("category") or category
+            sub_cat_info = categories.get(sub_cat, {})
+            if sub_data.get("power"):
+                _ensure_label_exists(
+                    hass,
+                    f"{sub_cat}_power",
+                    name=f"{sub_cat_info.get('display_name', sub_cat)} Power",
+                )
+                _sync_entity_labels(hass, sub_data["power"], [f"{sub_cat}_power"])
+            if sub_data.get("energy"):
+                _ensure_label_exists(
+                    hass,
+                    f"{sub_cat}_energy",
+                    name=f"{sub_cat_info.get('display_name', sub_cat)} Energy",
+                )
+                _sync_entity_labels(hass, sub_data["energy"], [f"{sub_cat}_energy"])
+
     # Update device name / area in HA registry
     dev_reg = dr.async_get(hass)
     try:
@@ -220,149 +242,20 @@ async def handle_configure_device(hass, connection, msg):
     except Exception as e:
         _LOGGER.warning("Could not update device registry for %s: %s", device_id, e)
 
-    # Sync entity IDs in HA entity registry on rename (multi-channel, single-channel, or sensor-only)
-    renamed_map = {}
-    ent_reg = er.async_get(hass)
-    area_reg = ar.async_get(hass)
-
-    def _find_entry_by_uid(uid: str | None, fallback_id: str) -> object | None:
-        if not uid:
-            return None
-        dom = fallback_id.split(".", 1)[0] if "." in fallback_id else None
-        for e in ent_reg.entities.values():
-            if e.unique_id == uid and (dom is None or e.domain == dom):
-                return e
-        return None
-
-    def _try_rename_entry(entry, raw_name: str | None, expected_uid: str | None = None) -> str | None:
-        if not entry:
-            return None
-        old_eid = entry.entity_id
-        if not raw_name:
-            return old_eid
-        clean_name = slugify_ha(raw_name)
-        if not clean_name:
-            return old_eid
-        effective_area = area_id if area_id is not None else entry.area_id
-        area_slug = ""
-        if effective_area:
-            a_entry = area_reg.async_get_area(effective_area)
-            if a_entry:
-                area_slug = slugify_ha(a_entry.name)
-        if area_slug and not clean_name.startswith(f"{area_slug}_") and clean_name != area_slug:
-            clean_slug = f"{area_slug}_{clean_name}"
-        else:
-            clean_slug = clean_name
-        target_eid = f"{entry.domain}.{clean_slug}"
-        if old_eid == target_eid:
-            return old_eid
-        existing = ent_reg.async_get(target_eid)
-        uid_match = entry.unique_id or expected_uid
-        if not existing or (uid_match and existing.unique_id == uid_match):
-            try:
-                ent_reg.async_update_entity(old_eid, new_entity_id=target_eid)
-                renamed_map[old_eid] = target_eid
-                _LOGGER.info("Updated entity ID from %s to %s", old_eid, target_eid)
-                return target_eid
-            except Exception as e:
-                _LOGGER.warning("Could not rename entity ID for %s: %s", old_eid, e)
-        return old_eid
-
-    def _record_prior_rename(old_id: str | None, new_id: str | None) -> None:
-        if old_id and new_id and old_id != new_id and ent_reg.async_get(old_id) is None:
-            renamed_map[old_id] = new_id
-
-    sub_entities = entities.get("sub_entities") if isinstance(entities, dict) else None
-    room_sensors = entities.get("room_sensors") if isinstance(entities, dict) else None
-    has_actuator = bool((isinstance(sub_entities, dict) and sub_entities) or primary)
-
-    active_by_uid: dict[str, str] = {}
-    final_primary_eid: str | None = None
-
-    if isinstance(sub_entities, dict) and sub_entities:
-        single_sub = len(sub_entities) == 1 and bool(custom_name)
-        for sub_id, sub_data in list(sub_entities.items()):
-            if not isinstance(sub_data, dict):
-                continue
-            sub_name = (custom_name if single_sub else None) or sub_data.get("custom_name") or sub_data.get("name") or custom_name
-            uid = sub_data.get("unique_id")
-            s_entry = (
-                ent_reg.async_get(sub_id)
-                or ent_reg.async_get(sub_data.get("original_id", ""))
-                or _find_entry_by_uid(uid, sub_id)
-            )
-            final_eid = _try_rename_entry(s_entry, sub_name, uid)
-            if final_eid:
-                _record_prior_rename(sub_id, final_eid)
-                _record_prior_rename(sub_data.get("original_id"), final_eid)
-                if uid:
-                    active_by_uid[uid] = final_eid
-                if sub_id == primary or not final_primary_eid:
-                    final_primary_eid = final_eid
-    elif custom_name and primary:
-        p_uid = entities.get("primary_unique_id") if isinstance(entities, dict) else None
-        p_entry = ent_reg.async_get(primary) or _find_entry_by_uid(p_uid, primary)
-        final_primary_eid = _try_rename_entry(p_entry, custom_name, p_uid)
-        if final_primary_eid:
-            _record_prior_rename(primary, final_primary_eid)
-            _record_prior_rename(entities.get("primary_original_id") if isinstance(entities, dict) else None, final_primary_eid)
-            if p_uid:
-                active_by_uid[p_uid] = final_primary_eid
-
-    if custom_name and isinstance(room_sensors, dict) and room_sensors:
-        enabled_sensors = [
-            (s_id, s_data)
-            for s_id, s_data in room_sensors.items()
-            if isinstance(s_data, dict) and s_data.get("enabled", True)
-        ]
-        for s_id, s_data in enabled_sensors:
-            uid = s_data.get("unique_id")
-            rs_entry = (
-                ent_reg.async_get(s_id)
-                or ent_reg.async_get(s_data.get("original_id", ""))
-                or _find_entry_by_uid(uid, s_id)
-            )
-            s_type = str(s_data.get("type") or "").strip()
-            if has_actuator:
-                if not s_type or s_type == "other":
-                    continue
-                rs_name = f"{custom_name}_{s_type}"
-            else:
-                rs_name = f"{custom_name}_{s_type}" if (len(enabled_sensors) > 1 and s_type) else custom_name
-            final_rs_eid = _try_rename_entry(rs_entry, rs_name, uid)
-            if final_rs_eid:
-                _record_prior_rename(s_id, final_rs_eid)
-                _record_prior_rename(s_data.get("original_id"), final_rs_eid)
-                if uid:
-                    active_by_uid[uid] = final_rs_eid
-
-    # Catch any entity ID changes compared to previous stored config of this device
-    if isinstance(prev_dev, dict):
-        prev_ents = prev_dev.get("entities") or {}
-        if isinstance(prev_ents, dict):
-            prev_primary = prev_ents.get("primary")
-            prev_p_uid = prev_ents.get("primary_unique_id")
-            if prev_primary:
-                target = active_by_uid.get(prev_p_uid) if prev_p_uid else None
-                _record_prior_rename(prev_primary, target or final_primary_eid)
-            prev_subs = prev_ents.get("sub_entities")
-            if isinstance(prev_subs, dict):
-                for p_sid, p_sdata in prev_subs.items():
-                    p_uid = p_sdata.get("unique_id") if isinstance(p_sdata, dict) else None
-                    target = active_by_uid.get(p_uid) if p_uid else (final_primary_eid if len(prev_subs) == 1 else None)
-                    _record_prior_rename(p_sid, target)
-            prev_rs = prev_ents.get("room_sensors")
-            if isinstance(prev_rs, dict):
-                for p_rsid, p_rsdata in prev_rs.items():
-                    p_uid = p_rsdata.get("unique_id") if isinstance(p_rsdata, dict) else None
-                    if p_uid and p_uid in active_by_uid:
-                        _record_prior_rename(p_rsid, active_by_uid[p_uid])
+    # Sync primary, channel, room-sensor, and ALL remaining sub-entity IDs of this device
+    renamed_map = sync_device_entity_ids(
+        hass,
+        device_id,
+        devices[device_id],
+        area_id=area_id,
+        prev_dev=prev_dev,
+    )
 
     if renamed_map:
         await async_sync_renamed_entities(hass, store, renamed_map)
 
     safe_fire_event(hass, f"{DOMAIN}_dashboard_updated")
-    connection.send_result(msg["id"], {"success": True})
+    connection.send_result(msg["id"], {"success": True, "renamed": renamed_map})
 
 @websocket_api.websocket_command({
     vol.Required("type"): "smarthome_companion/devices/remove",
@@ -391,6 +284,15 @@ async def handle_remove_device_config(hass, connection, msg):
             _remove_entity_labels(hass, ents["power"], [f"{cat}_power"])
         if ents.get("energy"):
             _remove_entity_labels(hass, ents["energy"], [f"{cat}_energy"])
+        if isinstance(ents.get("sub_entities"), dict):
+            for sub in ents["sub_entities"].values():
+                if not isinstance(sub, dict):
+                    continue
+                sub_cat = sub.get("category") or cat
+                if sub.get("power"):
+                    _remove_entity_labels(hass, sub["power"], [f"{sub_cat}_power"])
+                if sub.get("energy"):
+                    _remove_entity_labels(hass, sub["energy"], [f"{sub_cat}_energy"])
 
     safe_fire_event(hass, f"{DOMAIN}_dashboard_updated")
     connection.send_result(msg["id"], {"success": True})

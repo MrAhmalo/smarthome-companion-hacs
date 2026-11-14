@@ -18,6 +18,463 @@ def slugify_ha(text: str) -> str:
     return re.sub(r"[^a-z0-9_]+", "_", s).strip("_")
 
 
+def _strip_prefix_token(text: str, token: str) -> str:
+    if not text or not token:
+        return text
+    if text == token:
+        return ""
+    if text.startswith(f"{token}_"):
+        return text[len(token) + 1 :]
+    return text
+
+
+def _build_base_slug(raw_name: str | None, area_slug: str = "") -> str:
+    clean = slugify_ha(raw_name or "")
+    if not clean:
+        return ""
+    if area_slug and not clean.startswith(f"{area_slug}_") and clean != area_slug:
+        return f"{area_slug}_{clean}"
+    return clean
+
+
+def _common_underscore_prefixes(object_ids: list[str]) -> list[str]:
+    """Return all multi-entity underscore-aligned common prefixes (length >= 3)."""
+    split_ids = [oid.split("_") for oid in object_ids if oid]
+    prefixes: set[str] = set()
+    for i in range(len(split_ids)):
+        for j in range(i + 1, len(split_ids)):
+            a, b = split_ids[i], split_ids[j]
+            common: list[str] = []
+            for tok_a, tok_b in zip(a, b):
+                if tok_a == tok_b:
+                    common.append(tok_a)
+                else:
+                    break
+            if common:
+                pref = "_".join(common)
+                if len(pref) >= 3:
+                    prefixes.add(pref)
+    return sorted(prefixes, key=len, reverse=True)
+
+
+def _resolve_unique_target_eid(ent_reg, domain: str, desired_slug: str, current_eid: str) -> str:
+    """Return a collision-free entity_id for `domain.desired_slug` (idempotent on existing suffixes)."""
+    clean_slug = re.sub(r"_+", "_", desired_slug).strip("_")
+    candidate = f"{domain}.{clean_slug}"
+    if candidate == current_eid or ent_reg.async_get(candidate) is None:
+        return candidate
+    idx = 2
+    while True:
+        cand_n = f"{domain}.{clean_slug}_{idx}"
+        if cand_n == current_eid or ent_reg.async_get(cand_n) is None:
+            return cand_n
+        idx += 1
+
+
+_CHANNEL_SUB_PREFIX_RE = re.compile(r"^(?:ch|channel|switch|light|plug|outlet|socket)_?\d+_")
+
+
+def _extract_sub_entity_suffix(
+    entry,
+    known_prefixes: list[str],
+    strip_name_tokens: list[str],
+    linked_role: str | None = None,
+    strip_channel_prefix: bool = False,
+) -> str:
+    """Extract the functional suffix of a secondary device entity without duplicating device prefixes."""
+    obj_id = entry.entity_id.split(".", 1)[1].lower()
+
+    for prefix in known_prefixes:
+        if obj_id == prefix:
+            raw_suffix = ""
+            break
+        if obj_id.startswith(f"{prefix}_"):
+            raw_suffix = obj_id[len(prefix) + 1 :]
+            if strip_channel_prefix and linked_role in ("power", "energy"):
+                stripped_ch = _CHANNEL_SUB_PREFIX_RE.sub("", raw_suffix)
+                if stripped_ch:
+                    raw_suffix = stripped_ch
+            return raw_suffix
+    else:
+        raw_suffix = None
+
+    # Fallback when object_id did not match any device/channel prefix
+    orig_name = getattr(entry, "original_name", None) or getattr(entry, "name", None) or ""
+    if orig_name:
+        orig_slug = slugify_ha(orig_name)
+        changed = True
+        while changed and orig_slug:
+            changed = False
+            for tok in strip_name_tokens:
+                if not tok:
+                    continue
+                if orig_slug.startswith(f"{tok}_"):
+                    orig_slug = orig_slug[len(tok) + 1 :]
+                    changed = True
+                elif orig_slug.endswith(f"_{tok}"):
+                    orig_slug = orig_slug[: -len(tok) - 1]
+                    changed = True
+                elif orig_slug == tok:
+                    orig_slug = ""
+                    changed = True
+        if orig_slug:
+            return orig_slug
+
+    trans_key = slugify_ha(getattr(entry, "translation_key", None) or "")
+    if trans_key:
+        return trans_key
+
+    dc = slugify_ha(getattr(entry, "device_class", None) or getattr(entry, "original_device_class", None) or "")
+    if dc:
+        return dc
+
+    if linked_role:
+        return linked_role
+
+    if raw_suffix == "":
+        return ""
+    return obj_id
+
+
+def _suppress_internal_rename_event(hass, old_eid: str, new_eid: str) -> None:
+    """Mark `(old_eid, new_eid)` as batch-handled so entity_registry_updated listener skips duplicate sync."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    internal = domain_data.setdefault("_internal_renames", set())
+    pair = (old_eid, new_eid)
+    internal.add(pair)
+    loop = getattr(hass, "loop", None)
+    if loop is not None:
+        try:
+            loop.call_later(10, internal.discard, pair)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def sync_device_entity_ids(
+    hass,
+    device_id: str,
+    device_cfg: dict,
+    *,
+    area_id: str | None = None,
+    prev_dev: dict | None = None,
+) -> dict[str, str]:
+    """Rename primary, channel, room-sensor, and ALL remaining sub-entities of a device consistently.
+
+    Leaves existing Friendly Names (`name`/`original_name`) untouched and guarantees collision-free target IDs.
+    Returns `renamed_map` (`{old_entity_id: new_entity_id}`).
+    """
+    # pyrefly: ignore [missing-import]
+    from homeassistant.helpers import (
+        area_registry as ar,
+        device_registry as dr,
+        entity_registry as er,
+    )
+
+    ent_reg = er.async_get(hass)
+    dev_reg = dr.async_get(hass)
+    area_reg = ar.async_get(hass)
+
+    device = dev_reg.async_get(device_id)
+    entities_cfg = device_cfg.get("entities") if isinstance(device_cfg, dict) else {}
+    if not isinstance(entities_cfg, dict):
+        entities_cfg = {}
+
+    custom_name = (
+        (device_cfg.get("custom_name") if isinstance(device_cfg, dict) else None)
+        or (device.name_by_user if device else None)
+        or (device.name if device else None)
+        or ""
+    )
+    if not custom_name:
+        return {}
+
+    effective_area_id = area_id if area_id is not None else (device.area_id if device else None)
+    area_slug = ""
+    if effective_area_id:
+        a_entry = area_reg.async_get_area(effective_area_id)
+        if a_entry:
+            area_slug = slugify_ha(a_entry.name)
+
+    device_base_slug = _build_base_slug(custom_name, area_slug)
+    if not device_base_slug:
+        return {}
+
+    device_entries = [
+        e for e in ent_reg.entities.values()
+        if getattr(e, "device_id", None) == device_id
+    ]
+
+    # Collect known prefixes BEFORE mutating entity_registry so sub-entity suffix extraction stays accurate
+    target_prefixes: set[str] = {device_base_slug, slugify_ha(custom_name)}
+    known_prefix_set: set[str] = set(target_prefixes)
+    for raw_n in (
+        device.name if device else None,
+        device.name_by_user if device else None,
+        prev_dev.get("custom_name") if isinstance(prev_dev, dict) else None,
+    ):
+        if raw_n:
+            s = slugify_ha(raw_n)
+            if s:
+                known_prefix_set.add(s)
+                if area_slug:
+                    known_prefix_set.add(_build_base_slug(raw_n, area_slug))
+
+    # Add previous/current primary & channel object_ids and pairwise common prefixes
+    prev_ents = prev_dev.get("entities") if isinstance(prev_dev, dict) else {}
+    if isinstance(prev_ents, dict):
+        if prev_ents.get("primary") and "." in str(prev_ents["primary"]):
+            oid = str(prev_ents["primary"]).split(".", 1)[1].lower()
+            known_prefix_set.add(oid)
+            target_prefixes.add(oid)
+        if isinstance(prev_ents.get("sub_entities"), dict):
+            for p_sid in prev_ents["sub_entities"]:
+                if "." in str(p_sid):
+                    oid = str(p_sid).split(".", 1)[1].lower()
+                    known_prefix_set.add(oid)
+                    target_prefixes.add(oid)
+
+    if entities_cfg.get("primary") and "." in str(entities_cfg["primary"]):
+        oid = str(entities_cfg["primary"]).split(".", 1)[1].lower()
+        known_prefix_set.add(oid)
+        target_prefixes.add(oid)
+    sub_entities = entities_cfg.get("sub_entities")
+    if isinstance(sub_entities, dict):
+        for s_id in sub_entities:
+            if "." in str(s_id):
+                oid = str(s_id).split(".", 1)[1].lower()
+                known_prefix_set.add(oid)
+                target_prefixes.add(oid)
+
+    target_prefixes.discard("")
+    raw_obj_ids = [
+        e.entity_id.split(".", 1)[1].lower()
+        for e in device_entries
+        if "." in e.entity_id
+    ]
+    unaligned_obj_ids = [
+        oid
+        for oid in raw_obj_ids
+        if not any(oid == tp or oid.startswith(f"{tp}_") for tp in target_prefixes)
+    ]
+    for cp in _common_underscore_prefixes(unaligned_obj_ids):
+        known_prefix_set.add(cp)
+
+    known_prefix_set.discard("")
+    known_prefixes = sorted(known_prefix_set, key=len, reverse=True)
+    strip_name_tokens = sorted(
+        {
+            t
+            for t in (
+                area_slug,
+                device_base_slug,
+                slugify_ha(custom_name),
+                slugify_ha(device.name if device else ""),
+                slugify_ha(device.name_by_user if device else ""),
+                slugify_ha(prev_dev.get("custom_name") if isinstance(prev_dev, dict) else ""),
+            )
+            if t
+        },
+        key=len,
+        reverse=True,
+    )
+
+    renamed_map: dict[str, str] = {}
+    handled_entry_ids: set[int] = set()
+    handled_eids: set[str] = set()
+    active_by_uid: dict[str, str] = {}
+
+    def _find_entry_by_uid(uid: str | None, fallback_id: str) -> object | None:
+        if not uid:
+            return None
+        dom = fallback_id.split(".", 1)[0] if "." in fallback_id else None
+        for e in ent_reg.entities.values():
+            if e.unique_id == uid and (dom is None or e.domain == dom):
+                return e
+        return None
+
+    def _rename_entry(entry, target_slug: str) -> str | None:
+        if not entry:
+            return None
+        handled_entry_ids.add(id(entry))
+        old_eid = entry.entity_id
+        handled_eids.add(old_eid)
+        if not target_slug:
+            return old_eid
+        target_eid = _resolve_unique_target_eid(ent_reg, entry.domain, target_slug, old_eid)
+        if old_eid == target_eid:
+            return old_eid
+        try:
+            _suppress_internal_rename_event(hass, old_eid, target_eid)
+            ent_reg.async_update_entity(old_eid, new_entity_id=target_eid)
+            handled_eids.add(target_eid)
+            renamed_map[old_eid] = target_eid
+            _LOGGER.info("Updated entity ID from %s to %s", old_eid, target_eid)
+            return target_eid
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("Could not rename entity ID for %s: %s", old_eid, err)
+            return old_eid
+
+    def _record_prior_rename(old_id: str | None, new_id: str | None) -> None:
+        if old_id and new_id and old_id != new_id and ent_reg.async_get(old_id) is None:
+            renamed_map[old_id] = new_id
+
+    primary = entities_cfg.get("primary")
+    room_sensors = entities_cfg.get("room_sensors")
+    has_actuator = bool((isinstance(sub_entities, dict) and sub_entities) or primary)
+
+    final_primary_eid: str | None = None
+    channel_base_slugs: dict[str, str] = {}
+    linked_power_to_channel: dict[str, str] = {}
+    linked_energy_to_channel: dict[str, str] = {}
+
+    # 1. Primary / multi-channel actuators
+    if isinstance(sub_entities, dict) and sub_entities:
+        single_sub = len(sub_entities) == 1 and bool(custom_name)
+        for sub_id, sub_data in list(sub_entities.items()):
+            if not isinstance(sub_data, dict):
+                continue
+            sub_name = (custom_name if single_sub else None) or sub_data.get("custom_name") or sub_data.get("name") or custom_name
+            uid = sub_data.get("unique_id")
+            s_entry = (
+                ent_reg.async_get(sub_id)
+                or ent_reg.async_get(sub_data.get("original_id", ""))
+                or _find_entry_by_uid(uid, sub_id)
+            )
+            target_slug = _build_base_slug(sub_name, area_slug)
+            final_eid = _rename_entry(s_entry, target_slug)
+            if final_eid:
+                _record_prior_rename(sub_id, final_eid)
+                _record_prior_rename(sub_data.get("original_id"), final_eid)
+                if uid:
+                    active_by_uid[uid] = final_eid
+                ch_slug = final_eid.split(".", 1)[1]
+                channel_base_slugs[sub_id] = ch_slug
+                channel_base_slugs[final_eid] = ch_slug
+                if sub_data.get("power"):
+                    linked_power_to_channel[sub_data["power"]] = ch_slug
+                if sub_data.get("energy"):
+                    linked_energy_to_channel[sub_data["energy"]] = ch_slug
+                if sub_id == primary or not final_primary_eid:
+                    final_primary_eid = final_eid
+    elif primary:
+        p_uid = entities_cfg.get("primary_unique_id")
+        p_entry = (
+            ent_reg.async_get(primary)
+            or ent_reg.async_get(entities_cfg.get("primary_original_id", ""))
+            or _find_entry_by_uid(p_uid, primary)
+        )
+        final_primary_eid = _rename_entry(p_entry, device_base_slug)
+        if final_primary_eid:
+            _record_prior_rename(primary, final_primary_eid)
+            _record_prior_rename(entities_cfg.get("primary_original_id"), final_primary_eid)
+            if p_uid:
+                active_by_uid[p_uid] = final_primary_eid
+
+    # 2. Enabled room sensors
+    single_sensor_slug: str | None = None
+    if isinstance(room_sensors, dict) and room_sensors:
+        enabled_sensors = [
+            (s_id, s_data)
+            for s_id, s_data in room_sensors.items()
+            if isinstance(s_data, dict) and s_data.get("enabled", True)
+        ]
+        for s_id, s_data in enabled_sensors:
+            uid = s_data.get("unique_id")
+            rs_entry = (
+                ent_reg.async_get(s_id)
+                or ent_reg.async_get(s_data.get("original_id", ""))
+                or _find_entry_by_uid(uid, s_id)
+            )
+            s_type = str(s_data.get("type") or "").strip()
+            if has_actuator:
+                if not s_type or s_type == "other":
+                    continue
+                rs_name = f"{custom_name}_{s_type}"
+            else:
+                rs_name = f"{custom_name}_{s_type}" if (len(enabled_sensors) > 1 and s_type) else custom_name
+            final_rs_eid = _rename_entry(rs_entry, _build_base_slug(rs_name, area_slug))
+            if final_rs_eid:
+                _record_prior_rename(s_id, final_rs_eid)
+                _record_prior_rename(s_data.get("original_id"), final_rs_eid)
+                if uid:
+                    active_by_uid[uid] = final_rs_eid
+                if not has_actuator and len(enabled_sensors) == 1:
+                    single_sensor_slug = final_rs_eid.split(".", 1)[1]
+
+    # Effective base slug for ALL remaining device sub-entities follows the renamed main entity's slug
+    is_multi_ch = isinstance(sub_entities, dict) and len(sub_entities) > 1
+    if final_primary_eid and not is_multi_ch:
+        effective_device_slug = final_primary_eid.split(".", 1)[1]
+    elif single_sensor_slug:
+        effective_device_slug = single_sensor_slug
+    else:
+        effective_device_slug = device_base_slug
+
+    # 3. ALL remaining entities belonging to `device_id` (power, energy, battery, RSSI, events, diagnostics, etc.)
+    # Process active entities before disabled entities so active ones always claim primary suffixes first
+    remaining = sorted(
+        (e for e in device_entries if id(e) not in handled_entry_ids and e.entity_id not in handled_eids),
+        key=lambda e: (bool(getattr(e, "disabled_by", None)), e.entity_id),
+    )
+    for entry in remaining:
+        old_eid = entry.entity_id
+        linked_role = None
+        target_base = effective_device_slug
+        strip_ch = is_multi_ch
+
+        if old_eid in linked_power_to_channel:
+            linked_role = "power"
+            if is_multi_ch:
+                target_base = linked_power_to_channel[old_eid]
+        elif old_eid in linked_energy_to_channel:
+            linked_role = "energy"
+            if is_multi_ch:
+                target_base = linked_energy_to_channel[old_eid]
+        elif old_eid == entities_cfg.get("power"):
+            linked_role = "power"
+        elif old_eid == entities_cfg.get("energy"):
+            linked_role = "energy"
+
+        suffix = _extract_sub_entity_suffix(
+            entry,
+            known_prefixes,
+            strip_name_tokens,
+            linked_role=linked_role,
+            strip_channel_prefix=strip_ch,
+        )
+        desired_slug = f"{target_base}_{suffix}" if suffix else target_base
+        _rename_entry(entry, desired_slug)
+
+    # 4. Catch any entity ID changes compared to previous stored config of this device
+    if isinstance(prev_ents, dict) and prev_ents:
+        prev_primary = prev_ents.get("primary")
+        prev_p_uid = prev_ents.get("primary_unique_id")
+        if prev_primary:
+            target = active_by_uid.get(prev_p_uid) if prev_p_uid else None
+            _record_prior_rename(prev_primary, target or final_primary_eid)
+        for aux_key in ("power", "energy"):
+            prev_aux = prev_ents.get(aux_key)
+            cur_aux = entities_cfg.get(aux_key)
+            if prev_aux and prev_aux in renamed_map:
+                _record_prior_rename(prev_aux, renamed_map[prev_aux])
+            elif prev_aux and cur_aux and prev_aux != cur_aux and ent_reg.async_get(prev_aux) is None:
+                _record_prior_rename(prev_aux, cur_aux)
+        prev_subs = prev_ents.get("sub_entities")
+        if isinstance(prev_subs, dict):
+            for p_sid, p_sdata in prev_subs.items():
+                p_uid = p_sdata.get("unique_id") if isinstance(p_sdata, dict) else None
+                target = active_by_uid.get(p_uid) if p_uid else (final_primary_eid if len(prev_subs) == 1 else None)
+                _record_prior_rename(p_sid, target)
+        prev_rs = prev_ents.get("room_sensors")
+        if isinstance(prev_rs, dict):
+            for p_rsid, p_rsdata in prev_rs.items():
+                p_uid = p_rsdata.get("unique_id") if isinstance(p_rsdata, dict) else None
+                if p_uid and p_uid in active_by_uid:
+                    _record_prior_rename(p_rsid, active_by_uid[p_uid])
+
+    return renamed_map
+
+
 def _build_entity_id_pattern(id_map: dict[str, str]) -> re.Pattern[str] | None:
     """Compile a single-pass boundary-safe case-insensitive regex matching any entity ID in id_map."""
     keys = sorted((k for k in id_map if k), key=len, reverse=True)

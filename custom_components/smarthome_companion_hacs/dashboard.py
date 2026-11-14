@@ -294,7 +294,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                 return
         tiles_by_area.setdefault(valid_area(area_id) or NO_AREA_ID, []).append(tile)
 
-    def make_tile(key, entry, entity_id, name, category, icon, device, power=None, energy=None):
+    def make_tile(key, entry, entity_id, name, category, icon, device, power=None, energy=None, force_own_row=False):
         cat = categories.get(category, {}) if category else {}
         area_id = valid_area((entry.area_id if entry else None) or (device.area_id if device else None))
         return area_id, {
@@ -307,6 +307,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
             "color": cat.get("color"),
             "power": power,
             "energy": energy,
+            "force_own_row": bool(force_own_row),
         }
 
     def resolve_aux(entity_id):
@@ -352,10 +353,12 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                 name = sub.get("custom_name") or sub.get("name") or device_name
                 if len(valid_subs) == 1 and not sub.get("custom_name"):
                     name = device_name or name
+                sub_force = bool(sub.get("force_own_row", (cfg.get("options") or {}).get("force_own_row", False)))
                 area_id, tile = make_tile(
                     f"{device_id}:{uid}", entry, entity_id, name, sub.get("category") or category,
                     sub.get("icon") or cfg.get("icon"), device,
                     resolve_aux(sub.get("power")), resolve_aux(sub.get("energy")),
+                    force_own_row=sub_force,
                 )
                 add_tile(area_id, tile)
         else:
@@ -372,9 +375,11 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
             else:
                 continue
             uid = ents.get("primary_unique_id") or entity_id
+            dev_force = bool((cfg.get("options") or {}).get("force_own_row", False))
             area_id, tile = make_tile(
                 f"{device_id}:{uid}", entry, entity_id, device_name, category, cfg.get("icon"),
                 device, resolve_aux(ents.get("power")), resolve_aux(ents.get("energy")),
+                force_own_row=dev_force,
             )
             add_tile(area_id, tile)
 

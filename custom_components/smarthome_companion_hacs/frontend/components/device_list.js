@@ -211,10 +211,11 @@ export function createWizardDeviceElements({
 }
 
 /** Build a room section wrapping `.device-cards` without creating a nested scrollbox. */
-export function createDeviceRoomSection(areaName, cardElements, itemCount = cardElements.length) {
+export function createDeviceRoomSection(areaName, cardElements, itemCount = cardElements.length, roomIcon = null) {
+  const iconName = areaName === 'Ohne Raum' ? 'mdi:help-circle-outline' : (roomIcon || 'mdi:home-outline');
   return h('div', { class: 'device-room-section' },
     h('div', { class: 'device-room-header' },
-      icon(areaName === 'Ohne Raum' ? 'mdi:help-circle-outline' : 'mdi:home-outline'),
+      icon(iconName),
       h('span', {}, areaName),
       h('span', { class: 'room-count' }, `(${itemCount})`)),
     h('div', { class: 'device-cards' }, ...cardElements));

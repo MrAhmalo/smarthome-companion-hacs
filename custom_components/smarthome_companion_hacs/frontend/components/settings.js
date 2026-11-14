@@ -160,7 +160,7 @@ export class Settings {
   _select(obj, key, label, options, fallback = options[0][0]) {
     const val = obj[key] ?? fallback;
     const cdd = this._track(new CustomDropdown({
-      options: options.map(([v, l]) => ({ value: v, label: l })),
+      options: options.map(([v, l, ic]) => ({ value: v, label: l, ...(ic ? { icon: ic } : {}) })),
       value: val,
       onChange: (v) => { obj[key] = v; },
     }));
@@ -376,7 +376,7 @@ export class Settings {
         rc.visible_users ||= [];
         return h('div', { class: 'row-card' },
           h('div', { class: 'row-head' },
-            icon('mdi:home-outline'),
+            icon(rc.icon || room.icon || 'mdi:home-outline'),
             h('div', { class: 'row-title' }, room.name),
             this._miniBtn('mdi:arrow-up', 'Raum nach oben', ri === 0, () => move(this.rooms, ri, -1)),
             this._miniBtn('mdi:arrow-down', 'Raum nach unten', ri === this.rooms.length - 1, () => move(this.rooms, ri, 1))),
@@ -403,7 +403,16 @@ export class Settings {
 
   _tabExtra() {
     this.draft.extra_tiles ||= [];
-    const areaOptions = [['', 'Automatisch'], ...this.areas.map((a) => [a.area_id, a.name])];
+    const resolveAreaIcon = (area) => (
+      this.draft.rooms?.[area.area_id]?.icon
+      || this.rooms.find((r) => r.area_id === area.area_id)?.icon
+      || area.icon
+      || 'mdi:home-outline'
+    );
+    const areaOptions = [
+      ['', 'Automatisch', 'mdi:auto-fix'],
+      ...this.areas.map((a) => [a.area_id, a.name, resolveAreaIcon(a)]),
+    ];
     return [
       this._title('Zusatz-Kacheln'),
       this._hint('• Entitäten ohne Gerät (Helfer, Skripte, Klima)\n• Raumzuweisung per ID'),

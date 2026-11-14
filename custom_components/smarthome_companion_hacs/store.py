@@ -10,7 +10,7 @@ class CompanionStore:
     def __init__(self, hass):
         self.hass = hass
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
-        self.data = {"blinds": {}, "irrigation": {}, "devices": {}, "categories": {}, "dismissed_devices": [], "simulation": {}, "dashboard": None}
+        self.data = {"blinds": {}, "irrigation": {}, "devices": {}, "categories": {}, "dismissed_devices": [], "simulation": {}, "dashboard": None, "migrations": {}}
 
     async def async_load(self):
         saved = await self._store.async_load()
@@ -24,6 +24,7 @@ class CompanionStore:
             self.data.setdefault("simulation", {})
             self.data.setdefault("groups", {})
             self.data.setdefault("dashboard", None)
+            self.data.setdefault("migrations", {})
 
             # Migrate / sanitize zone IDs in irrigation store if they contain invalid characters
             irrigation = self.data.get("irrigation")
@@ -144,4 +145,17 @@ class CompanionStore:
 
     async def save_dashboard_config(self, config: dict):
         self.data["dashboard"] = config
+        return await self.async_save()
+
+    # ── Migrations ──
+
+    def get_migrations(self) -> dict:
+        migrations = self.data.get("migrations")
+        if not isinstance(migrations, dict):
+            migrations = {}
+            self.data["migrations"] = migrations
+        return migrations
+
+    async def set_migration_done(self, name: str, value=True) -> bool:
+        self.get_migrations()[name] = value
         return await self.async_save()

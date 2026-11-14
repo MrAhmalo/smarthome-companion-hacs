@@ -881,24 +881,34 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1500;
   border-radius: 14px; background: var(--cd-card); color: var(--primary-text-color, inherit);
   border: 1px solid rgba(128,128,128,.28);
-  box-shadow: 0 12px 32px rgba(0,0,0,.28); max-height: 280px; display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0,0,0,.28); max-height: 340px; display: flex; flex-direction: column; overflow: hidden;
 }
 .ip-dropdown[hidden] { display: none; }
 .ip-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px;
-  padding: 8px; overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1; min-height: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  grid-auto-rows: max-content; align-content: start; gap: 6px;
+  padding: 8px; overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1 1 auto; min-height: 0;
 }
 .ip-chip {
-  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; min-height: 52px;
+  display: block; width: 100%; min-width: 0; height: auto; min-height: 68px; padding: 10px 6px;
   border-radius: 10px; border: 1px solid transparent; background: var(--cd-tile-bg);
-  color: inherit; cursor: pointer; text-align: center; font-size: 11px;
+  color: inherit; cursor: pointer; text-align: center; font-size: 11px; line-height: 1.25;
+  box-sizing: border-box; appearance: none; -webkit-appearance: none;
   transition: transform .12s, border-color .12s, background .12s;
 }
+.ip-chip-inner {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 5px; width: 100%; min-width: 0;
+}
+.ip-chip-inner ha-icon { flex: none; --mdc-icon-size: 22px; }
 @media (hover: hover) {
   .ip-chip:hover { transform: translateY(-2px); border-color: var(--cd-accent); background: color-mix(in srgb, var(--cd-accent) 15%, transparent); }
 }
 .ip-chip.active { border-color: var(--cd-accent); background: rgba(3, 169, 244, 0.2); background: color-mix(in srgb, var(--cd-accent) 22%, transparent); font-weight: 600; }
-.ip-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70px; }
+.ip-chip-name {
+  display: block; width: 100%; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; line-height: 1.25;
+}
 .ip-empty { padding: 20px 12px; text-align: center; color: var(--cd-secondary); font-size: 12px; }
 
 /* ── Trash preview box ── */

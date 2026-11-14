@@ -31,6 +31,7 @@ export class DeviceWizard {
     this.selectedAreaId = '';
     this.selectedCategory = 'schalter';
     this.renameInHA = true;
+    this.forceOwnRow = false;
 
     // Channels / sub-entities
     this.channels = []; // [{ entity_id, enabled, name, category, power, energy, presence_simulation, unique_id }]
@@ -424,7 +425,9 @@ export class DeviceWizard {
       });
 
       const totalCount = groupCards.length + devs.length;
-      return createDeviceRoomSection(areaName, [...groupCards, ...devCards], totalCount);
+      const roomArea = this.areas.find((a) => a.name === areaName);
+      const roomIcon = roomArea ? this._getRoomIcon(roomArea) : null;
+      return createDeviceRoomSection(areaName, [...groupCards, ...devCards], totalCount, roomIcon);
     });
 
     this.deviceListEl.replaceChildren(...sections);
@@ -636,7 +639,7 @@ export class DeviceWizard {
 
     const areaOptions = [
       { value: '', label: 'Ohne Raum', icon: 'mdi:home-outline' },
-      ...this.areas.map((a) => ({ value: a.area_id, label: a.name, icon: 'mdi:map-marker' })),
+      ...this.areas.map((a) => ({ value: a.area_id, label: a.name, icon: this._getRoomIcon(a) })),
     ];
     const catOptions = DEVICE_CATEGORIES.map((c) => ({ value: c.id, label: c.name, icon: c.icon, color: c.color }));
 
@@ -936,6 +939,121 @@ export class DeviceWizard {
     return !hasTiles && !hasSensors;
   }
 
+  _getRoomIcon(areaOrId) {
+    if (!areaOrId) return 'mdi:home-outline';
+    const areaId = typeof areaOrId === 'string' ? areaOrId : areaOrId.area_id;
+    const areaObj = typeof areaOrId === 'object' ? areaOrId : this.areas?.find((a) => a.area_id === areaId);
+    const cfgIcon = areaId ? this._dashboardConfig?.rooms?.[areaId]?.icon : '';
+    const dashIcon = areaId ? this._dashboardRooms?.find((r) => r.area_id === areaId)?.icon : '';
+    return cfgIcon || dashIcon || areaObj?.icon || 'mdi:home-outline';
+  }
+
+  _extractChannelMatchTokens(channelEntity) {
+    if (!channelEntity) return [];
+    const tokens = [];
+    const eid = (channelEntity.entity_id || '').toLowerCase();
+    const numMatches = eid.match(/(?:_|ch|channel|l|switch|light|plug|outlet|socket)(\d+)(?:$|_)/g) || [];
+    for (const m of numMatches) {
+      const digits = m.match(/\d+/);
+      if (digits) tokens.push(digits[0]);
+    }
+    const rawName = (channelEntity.name || channelEntity.original_name || '').toLowerCase();
+    for (const part of rawName.split(/[^a-z0-9äöüß]+/)) {
+      if (part.length >= 2) tokens.push(part);
+    }
+    return [...new Set(tokens)];
+  }
+
+  _sensorChannelMatchScore(sensor, channelEntity) {
+    if (!channelEntity) return 0;
+    const tokens = this._extractChannelMatchTokens(channelEntity);
+    if (!tokens.length) return 0;
+    const hay = `${sensor.entity_id || ''} ${sensor.name || ''} ${sensor.original_name || ''}`.toLowerCase();
+    let hits = 0;
+    for (const t of tokens) {
+      if (/^\d+$/.test(t)) {
+        const re = new RegExp(`(?:_|ch|channel|l|switch|outlet|socket)${t}(?:$|_|\\b)`);
+        if (re.test(hay)) hits += 2;
+      } else if (hay.includes(t)) {
+        hits += 1;
+      }
+    }
+    return hits;
+  }
+
+  _detectPowerSensor(sensors, channelEntity = null, excludeIds = null) {
+    const candidates = [];
+    for (const s of sensors) {
+      if (!s || s.entity_category === 'config' || excludeIds?.has(s.entity_id)) continue;
+      const st = this.hass?.states?.[s.entity_id];
+      const dc = (st?.attributes?.device_class || s.device_class || s.original_device_class || '').toLowerCase();
+      const unit = (st?.attributes?.unit_of_measurement || s.unit_of_measurement || '').trim().toLowerCase();
+      const nameStr = `${s.entity_id} ${s.original_name || ''} ${s.name || ''} ${st?.attributes?.friendly_name || ''}`.toLowerCase();
+      if (dc && !['power', 'apparent_power', 'reactive_power'].includes(dc)) continue;
+      if (unit && !['w', 'kw', 'mw'].includes(unit)) continue;
+      const isPower = dc === 'power'
+        || ['w', 'kw', 'mw'].includes(unit)
+        || (nameStr.includes('power') && !nameStr.includes('power_factor') && !nameStr.includes('energy'))
+        || nameStr.includes('leistung');
+      if (!isPower) continue;
+      let score = 0;
+      if (dc === 'power') score += 100;
+      if (['w', 'kw', 'mw'].includes(unit)) score += 60;
+      if (s.entity_category === 'diagnostic') score -= 15;
+      score += this._sensorChannelMatchScore(s, channelEntity) * 35;
+      candidates.push({ entity_id: s.entity_id, score });
+    }
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates[0]?.entity_id || '';
+  }
+
+  _detectEnergySensor(sensors, channelEntity = null, excludeIds = null) {
+    const NON_ENERGY_CLASSES = new Set([
+      'power', 'apparent_power', 'reactive_power', 'water', 'gas', 'volume',
+      'monetary', 'duration', 'voltage', 'current', 'frequency', 'power_factor',
+      'temperature', 'humidity', 'battery', 'illuminance', 'pressure', 'signal_strength',
+      'data_size', 'data_rate', 'timestamp', 'enum',
+    ]);
+    const ENERGY_UNITS = new Set(['kwh', 'wh', 'mwh']);
+    const NON_ENERGY_UNITS = new Set(['w', 'kw', 'mw', 'va', 'var', 'v', 'a', 'ma', 'hz', 'l', 'm³', 'm3', 'eur', 'usd', 's', 'min', 'h', '°c', '°f', '%']);
+    const candidates = [];
+    for (const s of sensors) {
+      if (!s || s.entity_category === 'config' || excludeIds?.has(s.entity_id)) continue;
+      const st = this.hass?.states?.[s.entity_id];
+      const dc = (st?.attributes?.device_class || s.device_class || s.original_device_class || '').toLowerCase();
+      const sc = (st?.attributes?.state_class || s.capabilities?.state_class || '').toLowerCase();
+      const unit = (st?.attributes?.unit_of_measurement || s.unit_of_measurement || '').trim().toLowerCase();
+      const nameStr = `${s.entity_id} ${s.original_name || ''} ${s.name || ''} ${st?.attributes?.friendly_name || ''}`.toLowerCase();
+
+      if (dc && dc !== 'energy' && NON_ENERGY_CLASSES.has(dc)) continue;
+      if (unit && !ENERGY_UNITS.has(unit) && NON_ENERGY_UNITS.has(unit)) continue;
+
+      const hasEnergyUnit = ENERGY_UNITS.has(unit);
+      const hasTotalStateClass = sc === 'total' || sc === 'total_increasing';
+      const hasEnergyKeyword = /(energy|energie|verbrauch|consumption|summation|kwh|mwh|\bwh\b)/.test(nameStr);
+      const matches = dc === 'energy'
+        || hasEnergyUnit
+        || (hasTotalStateClass && !dc && !unit && hasEnergyKeyword)
+        || (!dc && !unit && hasEnergyKeyword);
+      if (!matches) continue;
+
+      let score = 0;
+      if (dc === 'energy') score += 100;
+      if (hasEnergyUnit) score += 60;
+      if (hasTotalStateClass) score += 40;
+      if (hasEnergyKeyword) score += 20;
+      if (/(today|daily|yesterday|month|monthly|week|weekly|year|annual|hour|hourly|returned|export|feed_in|tages|heute|gestern|woche|monat|jahr|einspeisung|rueckspeisung|rückspeisung)/.test(nameStr)) {
+        score -= 25;
+      }
+      if (s.entity_category === 'diagnostic') score -= 15;
+      const chScore = this._sensorChannelMatchScore(s, channelEntity);
+      score += chScore * 35;
+      candidates.push({ entity_id: s.entity_id, score, chScore });
+    }
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates[0] || null;
+  }
+
   // ═══════════════ Initialize selected device ═══════════════
   _initDevice() {
     const d = this.selectedDevice;
@@ -943,9 +1061,9 @@ export class DeviceWizard {
     const existing = this.configuredDevices[d.id];
 
     this.selectedAreaId = d.area_id || '';
-    const areaObj = this.areas?.find((a) => a.area_id === this.selectedAreaId);
-    this.roomIcon = this._isNewRoomForDevice(this.selectedAreaId) ? (areaObj?.icon || 'mdi:home-outline') : '';
+    this.roomIcon = this._isNewRoomForDevice(this.selectedAreaId) ? this._getRoomIcon(this.selectedAreaId) : '';
     this.customIcon = existing?.icon || '';
+    this.forceOwnRow = !!existing?.options?.force_own_row;
     let rawName = existing?.custom_name || d.name_by_user || d.name || '';
     if (!existing?.custom_name) {
       rawName = this._stripRoomName(rawName, this.selectedAreaId);
@@ -976,8 +1094,8 @@ export class DeviceWizard {
     });
 
     // Auto-detect power & energy
-    const powerSensor = sensors.find((s) => s.entity_id.includes('power') || s.original_name?.toLowerCase().includes('power') || s.original_name?.toLowerCase().includes('leistung'))?.entity_id || '';
-    const energySensor = sensors.find((s) => s.entity_id.includes('energy') || s.original_name?.toLowerCase().includes('energy') || s.original_name?.toLowerCase().includes('energie'))?.entity_id || '';
+    const powerSensor = this._detectPowerSensor(sensors);
+    const energySensor = this._detectEnergySensor(sensors)?.entity_id || '';
 
     // Auto-detect category
     let autoCat = 'schalter';
@@ -995,6 +1113,8 @@ export class DeviceWizard {
 
     // Sub-entities / channels
     const existingSubs = existing?.entities?.sub_entities || {};
+    const assignedEnergy = new Set();
+    const assignedPower = new Set();
     this.channels = controllable.map((e, idx) => {
       const sub = existingSubs[e.entity_id] || (e.unique_id
         ? Object.values(existingSubs).find((s) => s?.unique_id === e.unique_id)
@@ -1003,15 +1123,48 @@ export class DeviceWizard {
       if (!sub.custom_name && !sub.name) {
         channelName = this._stripRoomName(channelName, this.selectedAreaId);
       }
+      let chPower = sub.power || '';
+      let autoChPower = '';
+      if (!chPower) {
+        if (controllable.length > 1) {
+          const matchedPower = this._detectPowerSensor(sensors, e, assignedPower);
+          chPower = matchedPower || (idx === 0 ? (existing?.entities?.power || powerSensor) : '');
+          if (chPower) assignedPower.add(chPower);
+          autoChPower = chPower;
+        } else {
+          chPower = existing?.entities?.power || powerSensor;
+          autoChPower = powerSensor;
+        }
+      }
+      let chEnergy = sub.energy || '';
+      let autoChEnergy = '';
+      if (!chEnergy) {
+        if (controllable.length > 1) {
+          const match = this._detectEnergySensor(sensors, e, assignedEnergy);
+          if (match && (match.chScore > 0 || idx === 0)) {
+            chEnergy = match.entity_id;
+          } else if (idx === 0) {
+            chEnergy = existing?.entities?.energy || energySensor;
+          }
+          if (chEnergy) assignedEnergy.add(chEnergy);
+          autoChEnergy = chEnergy;
+        } else {
+          chEnergy = existing?.entities?.energy || energySensor;
+          autoChEnergy = energySensor;
+        }
+      }
       return {
         entity_id: e.entity_id,
         unique_id: e.unique_id || '',
         enabled: sub.enabled !== undefined ? !!sub.enabled : true,
         name: channelName,
         category: sub.category || this.selectedCategory,
-        power: sub.power || (idx === 0 ? (existing?.entities?.power || powerSensor) : ''),
-        energy: sub.energy || (idx === 0 ? (existing?.entities?.energy || energySensor) : ''),
+        power: chPower,
+        energy: chEnergy,
+        _autoPower: autoChPower,
+        _autoEnergy: autoChEnergy,
         presence_simulation: !!(sub.presence_simulation || (idx === 0 && existing?.entities?.presence_simulation)),
+        force_own_row: sub.force_own_row !== undefined ? !!sub.force_own_row : !!existing?.options?.force_own_row,
       };
     });
 
@@ -1025,7 +1178,7 @@ export class DeviceWizard {
     this._cleanupDropdowns();
     const areaOptions = [
       { value: '', label: 'Kein Raum', icon: 'mdi:map-marker-off' },
-      ...this.areas.map((a) => ({ value: a.area_id, label: a.name, icon: 'mdi:map-marker' })),
+      ...this.areas.map((a) => ({ value: a.area_id, label: a.name, icon: this._getRoomIcon(a) })),
     ];
 
     const areaDropdown = new CustomDropdown({
@@ -1035,8 +1188,7 @@ export class DeviceWizard {
       onChange: (val) => {
         this.selectedAreaId = val;
         if (this._isNewRoomForDevice(val)) {
-          const areaObj = this.areas?.find((a) => a.area_id === val);
-          this.roomIcon = areaObj?.icon || 'mdi:home-outline';
+          this.roomIcon = this._getRoomIcon(val);
         } else {
           this.roomIcon = '';
         }
@@ -1102,6 +1254,23 @@ export class DeviceWizard {
 
     const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color, '--hero-color': curCat.color } }, icon(this.customIcon || curCat.icon));
 
+    const ownRowCard = h('div', {
+      class: `feature-card${this.forceOwnRow ? ' active' : ''}`,
+      style: { '--feat-color': 'var(--cd-accent, #29b6f6)', cursor: 'pointer', marginTop: '10px' },
+      ...(this.forceOwnRow ? { 'data-active': '' } : {}),
+      onClick: () => {
+        this.forceOwnRow = !this.forceOwnRow;
+        this.channels.forEach((ch) => { ch.force_own_row = this.forceOwnRow; });
+        ownRowCard.toggleAttribute('data-active', this.forceOwnRow);
+        ownRowCard.classList.toggle('active', this.forceOwnRow);
+      },
+    },
+    h('div', { class: 'feature-icon' }, icon('mdi:view-agenda-outline')),
+    h('div', { class: 'feature-info' },
+      h('div', { class: 'feature-title' }, 'Eigene Zeile erzwingen'),
+      h('div', { class: 'feature-desc' }, 'Nicht kompakt gruppieren · Volle Breite')),
+    h('div', { class: 'switch-ui' }));
+
     this.body.replaceChildren(
       hero,
       h('div', { class: 'section-title' }, 'Details'),
@@ -1110,6 +1279,7 @@ export class DeviceWizard {
         h('div', { class: 'field' }, 'Raum', areaDropdown.el),
         roomIconField,
         h('div', { class: 'field' }, 'Icon', devIconPicker.el)),
+      ownRowCard,
       h('div', { class: 'section-title', style: { marginTop: '12px' } }, 'Kategorie'),
       catGrid);
   }
@@ -1189,7 +1359,7 @@ export class DeviceWizard {
       h('div', { class: 'hint' },
         !this.channels.length
           ? 'Sensortyp für Raumkachel'
-          : (isMulti ? 'Kanäle einzeln zuordnen' : 'Leistung & Simulation')));
+          : (isMulti ? 'Kanäle einzeln zuordnen' : 'Leistung, Energie & Simulation')));
 
     if (!this.channels.length) {
       this.body.replaceChildren(hero, header, sensorSection);
@@ -1225,6 +1395,32 @@ export class DeviceWizard {
             h('div', { class: 'hint', style: { marginTop: '2px' } }, 'Live-Verbrauch auf Kachel'))),
         powerPicker.el);
 
+      const energyPicker = new EntityPicker({
+        hass: this.hass,
+        value: ch.energy || '',
+        placeholder: 'kWh-Sensor (optional)',
+        domain: 'sensor',
+        onChange: (val) => {
+          ch.energy = val;
+          this.energyEntityId = val;
+        },
+      });
+      this._dropdowns.push(energyPicker);
+
+      const isAutoEnergy = ch.energy && ch.energy === this.energyEntityId;
+      const energyBadge = isAutoEnergy
+        ? h('span', { class: 'badge-tag ok auto-badge', style: { marginLeft: '8px' } }, icon('mdi:check-circle'), 'Auto')
+        : null;
+
+      const energyCard = h('div', { class: 'row-card', style: { padding: '14px 16px', gap: '10px' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+          h('div', { class: 'feature-icon', style: { color: '#66bb6a', display: 'grid', placeItems: 'center', width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(102,187,106,0.15)', flex: 'none' } }, icon('mdi:lightning-bolt')),
+          h('div', { style: { flex: '1', minWidth: '0' } },
+            h('div', { style: { fontWeight: '600', fontSize: '14px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' } },
+              'Energie (kWh)', energyBadge),
+            h('div', { class: 'hint', style: { marginTop: '2px' } }, 'Gesamtverbrauch (kWh / Wh)'))),
+        energyPicker.el);
+
       const simCard = h('div', {
         class: `feature-card${ch.presence_simulation ? ' active' : ''}`,
         style: { '--feat-color': '#ba68c8', cursor: 'pointer' },
@@ -1241,7 +1437,7 @@ export class DeviceWizard {
         h('div', { class: 'feature-desc' }, 'Zufallsschalten bei Abwesenheit')),
       h('div', { class: 'switch-ui' }));
 
-      this.body.replaceChildren(...[hero, header, powerCard, simCard, sensorSection].filter(Boolean));
+      this.body.replaceChildren(...[hero, header, powerCard, energyCard, simCard, sensorSection].filter(Boolean));
       return;
     }
 
@@ -1273,6 +1469,15 @@ export class DeviceWizard {
       });
       this._dropdowns.push(powerPicker);
 
+      const energyPicker = new EntityPicker({
+        hass: this.hass,
+        value: ch.energy || '',
+        placeholder: 'kWh-Sensor (optional)',
+        domain: 'sensor',
+        onChange: (val) => { ch.energy = val; },
+      });
+      this._dropdowns.push(energyPicker);
+
       const simCard = h('div', {
         class: `feature-card${ch.presence_simulation && ch.enabled ? ' active' : ''}`,
         style: { '--feat-color': '#ba68c8', cursor: ch.enabled ? 'pointer' : 'default' },
@@ -1290,8 +1495,13 @@ export class DeviceWizard {
         h('div', { class: 'feature-desc' }, 'Zufallsschalten bei Abwesenheit')),
       h('div', { class: 'switch-ui' }));
 
-      const isAutoPower = ch.power && ch.power === this.powerEntityId;
+      const isAutoPower = ch.power && (ch.power === this.powerEntityId || ch.power === ch._autoPower);
       const powerBadge = isAutoPower
+        ? h('span', { class: 'badge-tag ok auto-badge' }, icon('mdi:check-circle'), 'Auto')
+        : null;
+
+      const isAutoEnergy = ch.energy && (ch.energy === this.energyEntityId || ch.energy === ch._autoEnergy);
+      const energyBadge = isAutoEnergy
         ? h('span', { class: 'badge-tag ok auto-badge' }, icon('mdi:check-circle'), 'Auto')
         : null;
 
@@ -1332,7 +1542,12 @@ export class DeviceWizard {
             h('div', { class: 'field-head' },
               h('span', { class: 'field-label' }, 'Leistung (Watt)'),
               powerBadge),
-            powerPicker.el)),
+            powerPicker.el),
+          h('div', { class: 'field' },
+            h('div', { class: 'field-head' },
+              h('span', { class: 'field-label' }, 'Energie (kWh)'),
+              energyBadge),
+            energyPicker.el)),
         simCard);
     });
 
@@ -1354,18 +1569,22 @@ export class DeviceWizard {
 
     const hasSim = activeChannels.some((c) => c.presence_simulation);
     const hasPower = activeChannels.some((c) => c.power);
+    const hasEnergy = activeChannels.some((c) => c.energy);
+    const areaBadgeIcon = this.selectedAreaId ? this._getRoomIcon(this.selectedAreaId) : 'mdi:map-marker-off';
 
     const previewCard = h('div', {
       class: 'win11-preview-card',
       style: { '--preview-color': cat.color },
     },
-    h('div', { class: 'win11-preview-icon' }, icon(cat.icon)),
+    h('div', { class: 'win11-preview-icon' }, icon(this.customIcon || cat.icon)),
     h('div', { class: 'win11-preview-info' },
       h('div', { class: 'win11-preview-name' }, this.customName || 'Gerät'),
       h('div', { class: 'win11-preview-meta' },
         h('span', { class: 'badge-tag category', style: { '--badge-cat-color': cat.color } }, icon(cat.icon), cat.name),
-        h('span', { class: 'badge-tag area' }, icon('mdi:map-marker'), areaName),
+        h('span', { class: 'badge-tag area' }, icon(areaBadgeIcon), areaName),
         hasPower ? h('span', { class: 'badge-tag', style: { color: '#ffb74d' } }, icon('mdi:flash'), 'Leistung') : null,
+        hasEnergy ? h('span', { class: 'badge-tag', style: { color: '#66bb6a' } }, icon('mdi:lightning-bolt'), 'Energie') : null,
+        this.forceOwnRow ? h('span', { class: 'badge-tag' }, icon('mdi:view-agenda-outline'), 'Eigene Zeile') : null,
         hasSim ? h('span', { class: 'badge-tag', style: { color: '#ce93d8' } }, icon('mdi:home-clock'), 'Simulation') : null)));
 
     const syncCard = h('div', {
@@ -1514,6 +1733,7 @@ export class DeviceWizard {
             power: ch.power || undefined,
             energy: ch.energy || undefined,
             presence_simulation: ch.presence_simulation || false,
+            force_own_row: !!this.forceOwnRow,
           };
         }
         entitiesConfig = {
@@ -1544,6 +1764,7 @@ export class DeviceWizard {
       }
       entitiesConfig.room_sensors = room_sensors;
 
+      const existingOpts = this.configuredDevices?.[d.id]?.options || {};
       const res = await this.hass.callWS({
         type: 'smarthome_companion/devices/configure',
         device_id: d.id,
@@ -1551,6 +1772,10 @@ export class DeviceWizard {
         custom_name: this.customName,
         area_id: this.selectedAreaId || '',
         icon: this.customIcon || undefined,
+        options: {
+          ...existingOpts,
+          force_own_row: !!this.forceOwnRow,
+        },
         entities: entitiesConfig,
       });
 
