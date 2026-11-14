@@ -10,6 +10,7 @@ import {
   Badges, SmokeAlerts, WarningCard, TrashCard, PersonCards, AnnounceCard, NavBar,
 } from './components/specials.js';
 import { Settings } from './components/settings.js';
+import { RoomEditModal } from './components/room_modals.js';
 import { DeviceWizard } from './components/device_wizard.js';
 
 class CompanionDashboardPanel extends HTMLElement {
@@ -131,6 +132,7 @@ class CompanionDashboardPanel extends HTMLElement {
       presets: config.color_presets || [],
       openState: this._openState,
       onOpenRoom: (areaId) => this._openRoom(areaId),
+      onEditRoom: (roomSpec) => this._openRoomEdit(roomSpec),
       onOpenDevice: (deviceId) => {
         if (this._editMode) this._toggleEditMode();
         this._openWizard(deviceId);
@@ -332,7 +334,7 @@ class CompanionDashboardPanel extends HTMLElement {
         this._editBanner = h('div', { class: 'edit-mode-banner' },
           h('div', { class: 'edit-mode-banner-info' },
             icon('mdi:pencil'),
-            h('span', {}, 'Bearbeitungsmodus aktiv: Klicke ein Gerät an zum Konfigurieren')),
+            h('span', {}, 'Bearbeitungsmodus aktiv: Klicke ein Gerät oder einen Raum zum Konfigurieren')),
           h('button', {
             class: 'edit-mode-banner-btn',
             type: 'button',
@@ -343,6 +345,21 @@ class CompanionDashboardPanel extends HTMLElement {
     } else {
       this._editBanner?.remove();
     }
+  }
+
+  // ── room edit modal ──
+  _openRoomEdit(roomSpec) {
+    if (!this._hass || !roomSpec) return;
+    const modal = new RoomEditModal({
+      hass: this._hass,
+      roomSpec,
+      onSaved: () => {
+        if (this._editMode) this._toggleEditMode();
+        this._load();
+        this._toast('Raum gespeichert');
+      },
+    });
+    this._root.append(modal.el);
   }
 
   // ── device wizard ──

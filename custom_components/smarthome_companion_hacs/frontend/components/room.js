@@ -305,8 +305,20 @@ export class Room {
 
     this.head = h('div', {
       class: 'room-head', role: 'button', tabindex: '0', 'aria-expanded': String(this.open),
-      onClick: () => this._toggleOpen(),
-      onKeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._toggleOpen(); } },
+      onClick: () => {
+        if (this.ctx?.isEditMode?.()) {
+          this.ctx.onEditRoom?.(this.spec);
+          return;
+        }
+        this._toggleOpen();
+      },
+      onKeydown: (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          if (this.ctx?.isEditMode?.()) this.ctx.onEditRoom?.(this.spec);
+          else this._toggleOpen();
+        }
+      },
     },
     h('div', { class: 'room-icon' }, icon(spec.icon)),
     h('div', { class: 'room-title' }, h('div', { class: 'room-name' }, spec.name), this.metaEl),
@@ -389,10 +401,16 @@ export class Room {
     const hum = sensors.humidity?.length ? average(hass, sensors.humidity) : null;
     if (temp) chips.push(h('span', {}, icon('mdi:thermometer'), temp));
     if (hum) chips.push(h('span', {}, icon('mdi:water-percent'), hum));
-    if ((sensors.motion || []).some((id) => hass.states[id]?.state === 'on')) {
+    const isSensorOn = (id) => {
+      const st = hass.states[id];
+      if (!st) return false;
+      const v = String(st.state || '').toLowerCase();
+      return isActive(st) || ['on', 'home', 'detected', 'occupied', 'true'].includes(v);
+    };
+    if ((sensors.motion || []).some(isSensorOn)) {
       chips.push(h('span', { class: 'alert' }, icon('mdi:motion-sensor'), 'Bewegung'));
     }
-    if ((sensors.moisture || []).some((id) => hass.states[id]?.state === 'on')) {
+    if ((sensors.moisture || []).some(isSensorOn)) {
       chips.push(h('span', { class: 'alert' }, icon('mdi:water-alert'), 'Feuchtigkeit'));
     }
     const key = chips.map((c) => c.textContent).join('|');

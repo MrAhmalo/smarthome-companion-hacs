@@ -421,3 +421,34 @@ export function setSliderVal(slider, val) {
   const offsetPx = ((1 - p) * 6).toFixed(2);
   slider.style.setProperty('--val', `calc(${pct}% + ${offsetPx}px)`);
 }
+
+export const ROOM_ICON_OPTIONS = [
+  { value: 'mdi:home-outline', label: 'Standard (Haus)', icon: 'mdi:home-outline' },
+  { value: 'mdi:sofa', label: 'Wohnzimmer', icon: 'mdi:sofa' },
+  { value: 'mdi:bed', label: 'Schlafzimmer', icon: 'mdi:bed' },
+  { value: 'mdi:silverware-fork-knife', label: 'Küche', icon: 'mdi:silverware-fork-knife' },
+  { value: 'mdi:table-furniture', label: 'Esszimmer', icon: 'mdi:table-furniture' },
+  { value: 'mdi:shower', label: 'Badezimmer', icon: 'mdi:shower' },
+  { value: 'mdi:toilet', label: 'Gäste-WC', icon: 'mdi:toilet' },
+  { value: 'mdi:desk', label: 'Büro / Arbeitszimmer', icon: 'mdi:desk' },
+  { value: 'mdi:door-open', label: 'Flur / Diele', icon: 'mdi:door-open' },
+  { value: 'mdi:teddy-bear', label: 'Kinderzimmer', icon: 'mdi:teddy-bear' },
+  { value: 'mdi:washing-machine', label: 'Hauswirtschaftsraum', icon: 'mdi:washing-machine' },
+  { value: 'mdi:stairs-down', label: 'Keller', icon: 'mdi:stairs-down' },
+  { value: 'mdi:home-roof', label: 'Dachboden', icon: 'mdi:home-roof' },
+  { value: 'mdi:balcony', label: 'Balkon / Terrasse', icon: 'mdi:balcony' },
+  { value: 'mdi:flower', label: 'Garten', icon: 'mdi:flower' },
+  { value: 'mdi:garage', label: 'Garage', icon: 'mdi:garage' },
+  { value: 'mdi:car', label: 'Carport / Einfahrt', icon: 'mdi:car' },
+  { value: 'mdi:server', label: 'Technikraum', icon: 'mdi:server' },
+  { value: 'mdi:television', label: 'Heimkino', icon: 'mdi:television' },
+  { value: 'mdi:dumbbell', label: 'Fitnessraum', icon: 'mdi:dumbbell' },
+];
+
+export const ROOM_SENSOR_TYPES = [
+  { value: 'temperature', label: 'Raumtemperatur', icon: 'mdi:thermometer', color: '#ff7043' },
+  { value: 'humidity', label: 'Luftfeuchtigkeit', icon: 'mdi:water-percent', color: '#29b6f6' },
+  { value: 'motion', label: 'Anwesenheit / Bewegung', icon: 'mdi:motion-sensor', color: '#e91e63' },
+  { value: 'moisture', label: 'Feuchtigkeit / Wasserleck', icon: 'mdi:water-alert', color: '#26c6da' },
+  { value: 'ignore', label: 'Ignorieren (nicht anzeigen)', icon: 'mdi:eye-off-outline', color: '#9e9e9e' },
+];

@@ -361,7 +361,6 @@ export class GroupTile {
     const isLeuchte = this.category === 'leuchte';
     const defaultIcon = isLeuchte ? 'mdi:lightbulb-group-outline' : 'mdi:power-plug-off';
     this.iconEl = icon(this.spec.icon ? `${this.spec.icon}-outline` : defaultIcon);
-    this.badgeEl = h('span', { class: 'group-badge', hidden: true }, '0');
 
     this.iconBtn = h('button', {
       class: 'tile-icon group-icon-btn',
@@ -371,7 +370,7 @@ export class GroupTile {
         e.stopPropagation();
         this._toggleMaster();
       },
-    }, this.iconEl, this.badgeEl);
+    }, this.iconEl);
 
     this.nameEl = h('div', { class: 'tile-name' }, this.spec.name);
     this.stateEl = h('div', { class: 'tile-state' }, 'Aus');
@@ -514,25 +513,19 @@ export class GroupTile {
       const activeColor = this.spec.color || '#ffc107';
       this.el.style.setProperty('--tile-color', activeColor);
       this.iconEl.setAttribute('icon', this.spec.icon || (this.category === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug'));
-      this.badgeEl.textContent = String(activeCount);
-      this.badgeEl.hidden = false;
     } else {
       this.el.style.removeProperty('--tile-color');
       const offIcon = this.spec.icon ? `${this.spec.icon}-outline` : (this.category === 'leuchte' ? 'mdi:lightbulb-group-outline' : 'mdi:power-plug-off');
       this.iconEl.setAttribute('icon', offIcon);
-      this.badgeEl.hidden = true;
     }
 
     if (!states.length) {
       this.stateEl.textContent = 'Keine Entitäten';
     } else if (activeCount === 0) {
       this.stateEl.textContent = 'Aus';
-    } else if (activeCount === states.length) {
-      const avgBr = this._avgBrightness(activeStates);
-      this.stateEl.textContent = avgBr ? `Alle Ein · ${avgBr} %` : 'Alle Ein';
     } else {
       const avgBr = this._avgBrightness(activeStates);
-      this.stateEl.textContent = avgBr ? `${activeCount} von ${states.length} Ein · ${avgBr} %` : `${activeCount} von ${states.length} Ein`;
+      this.stateEl.textContent = avgBr ? `Ein · ${avgBr} %` : 'Ein';
     }
 
     if (this.category === 'leuchte' && anyOn) {

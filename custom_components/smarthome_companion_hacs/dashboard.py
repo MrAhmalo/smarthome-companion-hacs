@@ -276,6 +276,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
     tile_users = config.get("tile_users", {})
 
     tiles_by_area: dict[str, list[dict]] = {}
+    configured_sensors: dict[str, dict[str, list[str]]] = {}
     seen_entities: set[str] = set()
 
     def add_tile(area_id, tile):
@@ -372,6 +373,31 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                 device, resolve_aux(ents.get("power")), resolve_aux(ents.get("energy")),
             )
             add_tile(area_id, tile)
+
+        # Explicitly configured room sensors on this device
+        room_sensors = ents.get("room_sensors") or {}
+        if isinstance(room_sensors, dict):
+            for s_key, s_cfg in room_sensors.items():
+                if not isinstance(s_cfg, dict) or not s_cfg.get("enabled", True):
+                    continue
+                s_type = s_cfg.get("type")
+                if s_type not in ("temperature", "humidity", "motion", "moisture"):
+                    continue
+                s_entry = _resolve_entry(
+                    ent_reg, by_uid, s_key, s_cfg.get("unique_id"), s_cfg.get("original_id")
+                )
+                if s_entry is not None:
+                    if s_entry.disabled_by:
+                        continue
+                    s_eid = s_entry.entity_id
+                elif hass.states.get(s_key):
+                    s_eid = s_key
+                else:
+                    continue
+                s_area = (s_entry.area_id if s_entry else None) or (device.area_id if device else None) or NO_AREA_ID
+                bucket = configured_sensors.setdefault(s_area, {}).setdefault(s_type, [])
+                if s_eid not in bucket:
+                    bucket.append(s_eid)
 
     # ── Extra tiles (helpers, scripts … that have no device) ──
     for extra in config.get("extra_tiles", []):
@@ -534,29 +560,9 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
             target_area = g_tile.get("area_id") or NO_AREA_ID
             tiles_by_area.setdefault(target_area, []).append(g_tile)
 
-    # ── Area sensors / alerts straight from the registries ──
-    sensors: dict[str, dict[str, list[str]]] = {}
-    for entry in ent_reg.entities.values():
-        if entry.disabled_by or entry.hidden_by:
-            continue
-        dc = _device_class(entry)
-        wanted = None
-        if entry.domain == "sensor" and dc in ("temperature", "humidity"):
-            wanted = dc
-        elif entry.domain == "binary_sensor" and dc in ("motion", "moisture"):
-            wanted = dc
-        if wanted is None:
-            continue
-        area_id = entry.area_id
-        if not area_id and entry.device_id:
-            dev = dev_reg.async_get(entry.device_id)
-            area_id = dev.area_id if dev else None
-        if area_id:
-            sensors.setdefault(area_id, {}).setdefault(wanted, []).append(entry.entity_id)
-
-    # ── Assemble rooms ──
+    # ── Assemble rooms (only configured devices/sensors appear) ──
     order = [a for a in config.get("room_order", []) if isinstance(a, str)]
-    all_ids = set(tiles_by_area)
+    all_ids = set(tiles_by_area) | set(configured_sensors)
     if edit:
         all_ids |= set(areas.keys())
     ordered = [a for a in order if a in all_ids]
@@ -586,22 +592,38 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
         mode = rcfg.get("expanded", "collapsed")
         expanded = mode in ("expanded", "always") or user_id in rcfg.get("expanded_users", [])
         area = areas.get(area_id)
+        all_room_sensors = configured_sensors.get(area_id, {})
+        sensor_prefs = rcfg.get("sensor_prefs", {}) if isinstance(rcfg.get("sensor_prefs"), dict) else {}
+        effective_sensors: dict[str, list[str]] = {}
+        for s_type, eids in all_room_sensors.items():
+            pref = sensor_prefs.get(s_type)
+            if isinstance(pref, dict) and isinstance(pref.get("entities"), list):
+                valid_sel = [e for e in pref["entities"] if e in eids]
+                if valid_sel:
+                    effective_sensors[s_type] = [valid_sel[0]] if pref.get("mode") == "single" else valid_sel
+                else:
+                    effective_sensors[s_type] = list(eids)
+            else:
+                effective_sensors[s_type] = list(eids)
+
         rooms.append({
             "area_id": area_id,
             "name": area.name if area else "Sonstige",
-            "icon": (area.icon if area and area.icon else "mdi:home-outline"),
+            "icon": _clean_icon(rcfg.get("icon")) or (area.icon if area and area.icon else "mdi:home-outline"),
             "tiles": tiles,
             "expanded": expanded,
             "always_open": mode == "always",
             "visible_users": visible_users,
             "expanded_users": rcfg.get("expanded_users", []),
             "mode": mode,
-            "sensors": sensors.get(area_id, {}),
+            "sensors": effective_sensors,
+            "all_sensors": all_room_sensors,
+            "sensor_prefs": sensor_prefs,
         })
 
     return {
         "rooms": rooms,
-        "areas": [{"area_id": a.id, "name": a.name} for a in sorted(areas.values(), key=lambda x: x.name.lower())],
+        "areas": [{"area_id": a.id, "name": a.name, "icon": a.icon or ""} for a in sorted(areas.values(), key=lambda x: x.name.lower())],
     }
 
 

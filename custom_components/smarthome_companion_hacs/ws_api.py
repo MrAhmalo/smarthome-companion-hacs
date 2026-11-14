@@ -149,6 +149,14 @@ async def handle_configure_device(hass, connection, msg):
                     if entry and entry.unique_id:
                         sub_data["unique_id"] = entry.unique_id
 
+        room_sensors = entities.get("room_sensors")
+        if isinstance(room_sensors, dict):
+            for s_id, s_data in room_sensors.items():
+                if isinstance(s_data, dict) and not s_data.get("unique_id"):
+                    entry = ent_reg.async_get(s_id) or ent_reg.async_get(s_data.get("original_id", ""))
+                    if entry and entry.unique_id:
+                        s_data["unique_id"] = entry.unique_id
+
     # Save device config
     devices = store.get_devices()
     devices[device_id] = {

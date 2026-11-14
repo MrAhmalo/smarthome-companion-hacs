@@ -1,7 +1,8 @@
-import { h, icon, domainOf } from '../lib/util.js';
+import { h, icon, domainOf, ROOM_ICON_OPTIONS, ROOM_SENSOR_TYPES } from '../lib/util.js';
 import { EntityPicker } from './entity_picker.js';
 import { CustomDropdown } from './custom_dropdown.js';
 import { IconPicker } from './icon_picker.js';
+import { SensorConflictModal } from './room_modals.js';
 
 export const DEVICE_CATEGORIES = [
   { id: 'leuchte', name: 'Leuchte', icon: 'mdi:lightbulb', color: '#ffc107', desc: 'Lampen, Spots & LED-Streifen' },
@@ -104,11 +105,12 @@ export class DeviceWizard {
   async _load() {
     this.body.replaceChildren(h('div', { class: 'empty' }, icon('mdi:loading'), h('div', { style: { marginTop: '8px' } }, 'Lade Geräte...')));
     try {
-      const [devs, ents, areas, setup] = await Promise.all([
+      const [devs, ents, areas, setup, dash] = await Promise.all([
         this.hass.callWS({ type: 'config/device_registry/list' }),
         this.hass.callWS({ type: 'config/entity_registry/list' }),
         this.hass.callWS({ type: 'config/area_registry/list' }),
         this.hass.callWS({ type: 'smarthome_companion/devices/get' }).catch(() => ({ devices: {}, categories: {} })),
+        this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true }).catch(() => null),
       ]);
       this.devices = devs || [];
       this.entities = ents || [];
@@ -116,6 +118,8 @@ export class DeviceWizard {
       this.configuredDevices = setup.devices || {};
       this.categories = setup.categories || {};
       this.groups = setup.groups || {};
+      this._dashboardRooms = dash?.layout?.rooms || [];
+      this._dashboardConfig = dash?.config || {};
 
       if (this.initialDeviceId) {
         let id = this.initialDeviceId;
@@ -1023,6 +1027,36 @@ export class DeviceWizard {
     return name;
   }
 
+  _detectSensorType(entity) {
+    if (!entity || entity.entity_category === 'diagnostic' || entity.entity_category === 'config') {
+      return 'ignore';
+    }
+    const st = this.hass?.states?.[entity.entity_id];
+    const dc = st?.attributes?.device_class || entity.device_class || entity.original_device_class || '';
+    const unit = st?.attributes?.unit_of_measurement || '';
+    const dom = domainOf(entity.entity_id);
+    if (dom === 'sensor') {
+      if (dc === 'temperature' || unit === '°C' || unit === '°F') return 'temperature';
+      if (dc === 'humidity') return 'humidity';
+      return 'ignore';
+    }
+    if (dom === 'binary_sensor') {
+      if (['motion', 'occupancy', 'presence'].includes(dc)) return 'motion';
+      if (dc === 'moisture') return 'moisture';
+      return 'ignore';
+    }
+    return 'ignore';
+  }
+
+  _isNewRoomForDevice(areaId) {
+    if (!areaId) return false;
+    const room = (this._dashboardRooms || []).find((r) => r.area_id === areaId);
+    if (!room) return true;
+    const hasTiles = Array.isArray(room.tiles) && room.tiles.length > 0;
+    const hasSensors = room.all_sensors && Object.values(room.all_sensors).some((arr) => Array.isArray(arr) && arr.length > 0);
+    return !hasTiles && !hasSensors;
+  }
+
   // ═══════════════ Initialize selected device ═══════════════
   _initDevice() {
     const d = this.selectedDevice;
@@ -1030,6 +1064,8 @@ export class DeviceWizard {
     const existing = this.configuredDevices[d.id];
 
     this.selectedAreaId = d.area_id || '';
+    const areaObj = this.areas?.find((a) => a.area_id === this.selectedAreaId);
+    this.roomIcon = this._isNewRoomForDevice(this.selectedAreaId) ? (areaObj?.icon || 'mdi:home-outline') : '';
     this.customIcon = existing?.icon || '';
     let rawName = existing?.custom_name || d.name_by_user || d.name || '';
     if (!existing?.custom_name) {
@@ -1042,6 +1078,21 @@ export class DeviceWizard {
     const validActuators = devEntities.filter(isControllableActuator);
     const controllable = validActuators.length ? validActuators : devEntities.filter((e) => CONTROLLABLE_DOMAINS.has(domainOf(e.entity_id)) && e.entity_category !== 'diagnostic');
     const sensors = devEntities.filter((e) => domainOf(e.entity_id) === 'sensor');
+
+    const existingSensors = existing?.entities?.room_sensors || {};
+    const rawRoomSensors = devEntities.filter((e) => ['sensor', 'binary_sensor'].includes(domainOf(e.entity_id)));
+    this.sensorEntities = rawRoomSensors.map((e) => {
+      const saved = existingSensors[e.entity_id];
+      const detectedType = this._detectSensorType(e);
+      const type = saved?.type || (saved?.enabled === false ? 'ignore' : detectedType);
+      return {
+        entity_id: e.entity_id,
+        unique_id: e.unique_id || '',
+        name: e.name || e.original_name || this.hass?.states?.[e.entity_id]?.attributes?.friendly_name || e.entity_id,
+        detectedType,
+        type,
+      };
+    });
 
     // Auto-detect power & energy
     const powerSensor = sensors.find((s) => s.entity_id.includes('power') || s.original_name?.toLowerCase().includes('power') || s.original_name?.toLowerCase().includes('leistung'))?.entity_id || '';
@@ -1056,6 +1107,8 @@ export class DeviceWizard {
     else if (controllable.some((e) => domainOf(e.entity_id) === 'climate')) autoCat = 'klima';
     else if (controllable.some((e) => domainOf(e.entity_id) === 'media_player')) autoCat = 'fernseher';
     else if ((d.name || '').toLowerCase().includes('steckdose') || (d.model || '').toLowerCase().includes('plug')) autoCat = 'steckdose';
+    else if (!controllable.length && this.sensorEntities.some((s) => s.detectedType === 'motion')) autoCat = 'bewegungsmelder';
+    else if (!controllable.length && this.sensorEntities.some((s) => s.detectedType === 'temperature' || s.detectedType === 'humidity')) autoCat = 'raummessgeraet';
 
     this.selectedCategory = existing?.category || autoCat;
 
@@ -1086,6 +1139,7 @@ export class DeviceWizard {
 
   // ═══════════════ STEP 1: Details (Name, Kategorie, Raum) ═══════════════
   _renderStep1() {
+    this._cleanupDropdowns();
     const areaOptions = [
       { value: '', label: 'Kein Raum', icon: 'mdi:map-marker-off' },
       ...this.areas.map((a) => ({ value: a.area_id, label: a.name, icon: 'mdi:map-marker' })),
@@ -1097,16 +1151,39 @@ export class DeviceWizard {
       placeholder: 'Raum auswählen...',
       onChange: (val) => {
         this.selectedAreaId = val;
+        if (this._isNewRoomForDevice(val)) {
+          const areaObj = this.areas?.find((a) => a.area_id === val);
+          this.roomIcon = areaObj?.icon || 'mdi:home-outline';
+        } else {
+          this.roomIcon = '';
+        }
         if (this.customName) {
           const stripped = this._stripRoomName(this.customName, val);
           if (stripped && stripped !== this.customName) {
             this.customName = stripped;
-            nameInput.value = stripped;
           }
         }
+        this._renderStep1();
       },
     });
     this._dropdowns.push(areaDropdown);
+
+    const isNewRoom = this._isNewRoomForDevice(this.selectedAreaId);
+    let roomIconField = null;
+    if (isNewRoom) {
+      const roomIconOpts = ROOM_ICON_OPTIONS.some((o) => o.value === this.roomIcon)
+        ? ROOM_ICON_OPTIONS
+        : [{ value: this.roomIcon, label: this.roomIcon, icon: this.roomIcon }, ...ROOM_ICON_OPTIONS];
+      const roomIconDropdown = new CustomDropdown({
+        options: roomIconOpts,
+        value: this.roomIcon || 'mdi:home-outline',
+        searchable: true,
+        placeholder: 'Raum-Icon wählen...',
+        onChange: (val) => { this.roomIcon = val; },
+      });
+      this._dropdowns.push(roomIconDropdown);
+      roomIconField = h('div', { class: 'field', style: { position: 'relative', zIndex: '16' } }, 'Raum-Icon (neuer Raum)', roomIconDropdown.el);
+    }
 
     const nameInput = h('input', {
       type: 'text', value: this.customName, placeholder: 'Gerätename...',
@@ -1150,21 +1227,77 @@ export class DeviceWizard {
       h('div', { class: 'fields' },
         h('div', { class: 'field' }, 'Anzeigename im Dashboard', nameInput),
         h('div', { class: 'field' }, 'Raum (Bereich)', areaDropdown.el),
+        roomIconField,
         h('div', { class: 'field', style: { position: 'relative', zIndex: '15' } }, 'Symbol / Icon', devIconPicker.el)),
       h('div', { class: 'section-title', style: { marginTop: '16px' } }, 'Haupt-Kategorie'),
       h('div', { class: 'hint' }, 'Bestimmt das Standard-Icon und das Verhalten im Dashboard:'),
       catGrid);
   }
 
+  _buildSensorSection() {
+    if (!this.sensorEntities || !this.sensorEntities.length) return null;
+
+    const cards = this.sensorEntities.map((s) => {
+      const st = this.hass?.states?.[s.entity_id];
+      const liveVal = st
+        ? (st.attributes?.unit_of_measurement ? `${st.state} ${st.attributes.unit_of_measurement}` : st.state)
+        : '—';
+
+      const card = h('div', {
+        class: 'channel-card',
+        style: s.type === 'ignore' ? { opacity: '0.55' } : {},
+      });
+
+      const autoBadge = (s.type === s.detectedType && s.type !== 'ignore')
+        ? h('span', { class: 'badge-tag ok auto-badge' }, icon('mdi:check-circle'), 'Automatisch erkannt')
+        : null;
+
+      const typeDd = new CustomDropdown({
+        options: ROOM_SENSOR_TYPES,
+        value: s.type,
+        onChange: (val) => {
+          s.type = val;
+          card.style.opacity = val === 'ignore' ? '0.55' : '';
+          if (autoBadge) {
+            autoBadge.hidden = val !== s.detectedType || val === 'ignore';
+          }
+        },
+      });
+      this._dropdowns.push(typeDd);
+
+      card.append(
+        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' } },
+          h('div', { style: { minWidth: '0', flex: '1' } },
+            h('div', { style: { fontWeight: '600', fontSize: '14px' } }, s.name),
+            h('div', { class: 'hint', style: { fontSize: '11px' } }, s.entity_id)),
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
+            autoBadge,
+            h('span', { class: 'badge-tag' }, liveVal))),
+        h('div', { class: 'field' },
+          h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Sensor-Typ auf Raumkachel')),
+          typeDd.el));
+
+      return card;
+    });
+
+    return h('div', { style: { marginTop: '18px' } },
+      h('div', { class: 'section-title' }, 'Raumsensoren & Messwerte'),
+      h('div', { class: 'hint', style: { marginBottom: '10px' } },
+        'Lege fest, welche Sensorwerte auf der Raumkachel angezeigt oder ignoriert werden sollen:'),
+      ...cards);
+  }
+
   // ═══════════════ STEP 2: Kanäle & Messung ═══════════════
   _renderStep2() {
+    this._cleanupDropdowns();
     const isMulti = this.channels.length > 1;
+    const sensorSection = this._buildSensorSection();
 
-    if (!this.channels.length) {
+    if (!this.channels.length && !sensorSection) {
       this.body.replaceChildren(h('div', { class: 'empty' },
         icon('mdi:alert-circle-outline'),
-        h('div', { style: { fontWeight: '600' } }, 'Keine steuerbaren Entitäten gefunden'),
-        h('div', { class: 'hint' }, 'Dieses Gerät hat keine Schalter, Lichter oder Jalousien in Home Assistant.')));
+        h('div', { style: { fontWeight: '600' } }, 'Keine steuerbaren Entitäten oder Sensoren gefunden'),
+        h('div', { class: 'hint' }, 'Dieses Gerät hat keine passenden Entitäten in Home Assistant.')));
       return;
     }
 
@@ -1172,10 +1305,19 @@ export class DeviceWizard {
     const hero = h('div', { class: 'win11-hero-badge', style: { color: curCat.color || 'var(--cd-accent)', '--hero-color': curCat.color || 'var(--cd-accent)' } }, icon(curCat.icon || 'mdi:tune-vertical'));
 
     const header = h('div', { style: { textAlign: 'center', marginBottom: '14px' } },
-      h('h3', { style: { margin: '0 0 4px', fontSize: '18px', fontWeight: '700' } }, isMulti ? 'Kanäle & Messung' : 'Messung & Simulation'),
-      h('div', { class: 'hint' }, isMulti
-        ? 'Mehrkanal-Gerät: Kanäle separat konfigurieren und zuordnen'
-        : 'Optionale Leistungsmessung (Watt) und automatische Anwesenheitssimulation'));
+      h('h3', { style: { margin: '0 0 4px', fontSize: '18px', fontWeight: '700' } },
+        !this.channels.length ? 'Raumsensoren konfigurieren' : (isMulti ? 'Kanäle & Messung' : 'Messung & Simulation')),
+      h('div', { class: 'hint' },
+        !this.channels.length
+          ? 'Sensor-Typen prüfen, bei Bedarf überschreiben oder unerwünschte Entitäten ignorieren'
+          : (isMulti
+            ? 'Mehrkanal-Gerät: Kanäle separat konfigurieren und zuordnen'
+            : 'Optionale Leistungsmessung (Watt) und automatische Anwesenheitssimulation')));
+
+    if (!this.channels.length) {
+      this.body.replaceChildren(hero, header, sensorSection);
+      return;
+    }
 
     if (!isMulti) {
       // SINGLE ENTITY: No duplicate channel name, no duplicate category, no confusing disable switch!
@@ -1222,7 +1364,7 @@ export class DeviceWizard {
         h('div', { class: 'feature-desc' }, 'Zufälliges automatisches Schalten bei Abwesenheit zum Einbruchschutz')),
       h('div', { class: 'switch-ui' }));
 
-      this.body.replaceChildren(hero, header, powerCard, simCard);
+      this.body.replaceChildren(...[hero, header, powerCard, simCard, sensorSection].filter(Boolean));
       return;
     }
 
@@ -1313,7 +1455,7 @@ export class DeviceWizard {
         simCard);
     });
 
-    this.body.replaceChildren(hero, header, ...channelCards);
+    this.body.replaceChildren(...[hero, header, ...channelCards, sensorSection].filter(Boolean));
   }
 
   // ═══════════════ STEP 3: Zusammenfassung & Speichern ═══════════════
@@ -1509,6 +1651,18 @@ export class DeviceWizard {
         };
       }
 
+      const room_sensors = {};
+      for (const s of (this.sensorEntities || [])) {
+        room_sensors[s.entity_id] = {
+          entity_id: s.entity_id,
+          unique_id: s.unique_id || undefined,
+          original_id: s.entity_id,
+          type: s.type,
+          enabled: s.type !== 'ignore',
+        };
+      }
+      entitiesConfig.room_sensors = room_sensors;
+
       const res = await this.hass.callWS({
         type: 'smarthome_companion/devices/configure',
         device_id: d.id,
@@ -1520,6 +1674,67 @@ export class DeviceWizard {
       });
 
       if (res?.save_failed) throw new Error('Speichern im Backend fehlgeschlagen');
+
+      // Save room icon for newly populated room if selected
+      if (this.selectedAreaId && this.roomIcon && this._isNewRoomForDevice(this.selectedAreaId)) {
+        try {
+          await this.hass.callWS({
+            type: 'config/area_registry/update',
+            area_id: this.selectedAreaId,
+            icon: this.roomIcon,
+          });
+        } catch (_) { /* non-fatal in mock/dev mode */ }
+        try {
+          const dashData = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
+          const cfg = dashData?.config || {};
+          cfg.rooms ||= {};
+          cfg.rooms[this.selectedAreaId] ||= {};
+          cfg.rooms[this.selectedAreaId].icon = this.roomIcon;
+          await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config: cfg });
+        } catch (_) { /* non-fatal */ }
+      }
+
+      // Check for dynamic sensor conflicts in the target room
+      const activeTypes = [...new Set((this.sensorEntities || [])
+        .filter((s) => s.type && s.type !== 'ignore')
+        .map((s) => s.type))];
+
+      if (this.selectedAreaId && activeTypes.length > 0) {
+        try {
+          const updatedDash = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
+          const room = updatedDash?.layout?.rooms?.find((r) => r.area_id === this.selectedAreaId);
+          const conflicts = activeTypes
+            .map((t) => ({ type: t, entityIds: room?.all_sensors?.[t] || [] }))
+            .filter((c) => c.entityIds.length > 1);
+
+          if (conflicts.length > 0) {
+            this._saving = false;
+            const conflictModal = new SensorConflictModal({
+              hass: this.hass,
+              areaName: room?.name || 'Raum',
+              conflicts,
+              currentPrefs: room?.sensor_prefs || {},
+              onSave: async (prefs) => {
+                const cfg = updatedDash?.config || {};
+                cfg.rooms ||= {};
+                cfg.rooms[this.selectedAreaId] ||= {};
+                cfg.rooms[this.selectedAreaId].sensor_prefs = prefs;
+                await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config: cfg });
+                this.isCelebration = true;
+                this._renderCelebration();
+              },
+              onCancel: () => {
+                this.isCelebration = true;
+                this._renderCelebration();
+              },
+            });
+            this.el.append(conflictModal.el);
+            return;
+          }
+        } catch (err) {
+          console.warn('[wizard] conflict check failed', err);
+        }
+      }
 
       this._saving = false;
       this.isCelebration = true;
