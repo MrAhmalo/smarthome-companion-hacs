@@ -15,7 +15,7 @@ function _blCoverSignature(states, rooms) {
     .filter((id) => id.startsWith('cover.'))
     .sort();
   const avail = covers.map((id) => `${id}:${isUnavailable(states[id]) ? '0' : '1'}`).join(',');
-  const roomSig = (rooms || []).map((r) => `${r.id}:${r.name}`).join('|');
+  const roomSig = (rooms || []).map((r) => `${r.area_id}:${r.name}:${r.expanded ? 1 : 0}`).join('|');
   return `${avail}##${roomSig}`;
 }
 
@@ -38,6 +38,8 @@ export class BlindsView {
     this.onBack = onBack;
     this._destroyed = false;
     this._structSig = '';
+    this._sunFacadeSig = '';
+    this._setupSig = '';
     this._rowCtrls = new Map();
     this._logCache = null;
     this._logFetchedAt = 0;
@@ -165,6 +167,10 @@ export class BlindsView {
 
   _updateSunAndFacades(states) {
     const sun = states['sun.sun'];
+    const sig = `${sun?.state || ''}:${sun?.attributes?.elevation ?? ''}|` + _BL_FACADES.map((f) => `${states[f.intensity]?.state || ''}:${states[f.peak]?.state || ''}`).join('|');
+    if (sig === this._sunFacadeSig) return;
+    this._sunFacadeSig = sig;
+
     if (sun) {
       const above = sun.state === 'above_horizon';
       const elev = sun.attributes?.elevation != null ? ` (${Math.round(sun.attributes.elevation)}°)` : '';
@@ -205,13 +211,17 @@ export class BlindsView {
   _updateSetupStatus(states) {
     const cfg = states['sensor.smarthome_companion_eingerichtete_rollladen'];
     const uncfg = states['sensor.smarthome_companion_nicht_eingerichtete_rollladen'];
+    const cfgList = Array.isArray(cfg?.attributes?.configured_blinds) ? cfg.attributes.configured_blinds : [];
+    const uncfgList = Array.isArray(uncfg?.attributes?.unconfigured_blinds) ? uncfg.attributes.unconfigured_blinds : [];
+    const setupSig = `${cfg?.state ?? ''}:${cfgList.length}|${uncfg?.state ?? ''}:${uncfgList.map((b) => b.entity_id || b.name || b).join(',')}`;
+    if (setupSig === this._setupSig) return;
+    this._setupSig = setupSig;
+
     if (!cfg && !uncfg) {
       this._setupSec.hidden = true;
       return;
     }
     this._setupSec.hidden = false;
-    const cfgList = Array.isArray(cfg?.attributes?.configured_blinds) ? cfg.attributes.configured_blinds : [];
-    const uncfgList = Array.isArray(uncfg?.attributes?.unconfigured_blinds) ? uncfg.attributes.unconfigured_blinds : [];
 
     this._setupGrid.replaceChildren(
       h('div', {
@@ -267,9 +277,10 @@ export class BlindsView {
     const entityToRoom = new Map();
     const roomById = new Map();
     for (const r of rooms) {
-      roomById.set(r.id, r);
+      if (!r?.area_id) continue;
+      roomById.set(r.area_id, r);
       for (const t of r.tiles || []) {
-        if (t.entity_id?.startsWith('cover.')) entityToRoom.set(t.entity_id, r.id);
+        if (t.entity_id?.startsWith('cover.')) entityToRoom.set(t.entity_id, r.area_id);
       }
     }
 
@@ -283,13 +294,14 @@ export class BlindsView {
     // Order rooms matching dashboard order, followed by extra areas and __other__
     const orderedIds = [];
     for (const r of rooms) {
-      if (grouped.has(r.id)) orderedIds.push(r.id);
+      if (r?.area_id && grouped.has(r.area_id)) orderedIds.push(r.area_id);
     }
     for (const k of grouped.keys()) {
       if (k !== '__other__' && !orderedIds.includes(k)) orderedIds.push(k);
     }
     if (grouped.has('__other__')) orderedIds.push('__other__');
 
+    if (!this._roomOpen) this._roomOpen = new Map();
     const sections = [];
     for (const rId of orderedIds) {
       const ids = grouped.get(rId) || [];
@@ -303,6 +315,10 @@ export class BlindsView {
       const areaMeta = this.hass?.areas?.[rId];
       const title = roomMeta?.name || areaMeta?.name || (rId === '__other__' ? 'Weitere Rollläden' : rId);
       const rIcon = roomMeta?.icon || areaMeta?.icon || 'mdi:window-shutter';
+      if (!this._roomOpen.has(rId)) {
+        this._roomOpen.set(rId, !!(roomMeta && roomMeta.expanded));
+      }
+      const isOpen = !!this._roomOpen.get(rId);
 
       const rows = ids.map((id) => {
         const st = states[id];
@@ -315,19 +331,50 @@ export class BlindsView {
         return ctrl.row;
       });
 
-      sections.push(h('section', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon(rIcon), title),
-          h('div', { class: 'tile-btns' },
-            h('button', {
-              type: 'button', class: 'mini-btn', 'aria-label': `${title} öffnen`,
-              onClick: () => this.hass?.callService('cover', 'open_cover', { entity_id: ids }),
-            }, icon('mdi:arrow-up')),
-            h('button', {
-              type: 'button', class: 'mini-btn', 'aria-label': `${title} schließen`,
-              onClick: () => this.hass?.callService('cover', 'close_cover', { entity_id: ids }),
-            }, icon('mdi:arrow-down')))),
-        h('div', { class: 'cover-detail-list' }, ...rows)));
+      const body = h('div', { class: 'blinds-room-body', hidden: !isOpen },
+        h('div', { class: 'cover-detail-list' }, ...rows));
+      const card = h('section', { class: 'subview-section blinds-room-card' });
+      if (isOpen) card.setAttribute('data-open', '');
+
+      const head = h('div', {
+        class: 'blinds-room-head',
+        role: 'button',
+        tabindex: '0',
+        'aria-expanded': isOpen ? 'true' : 'false',
+        onClick: () => {
+          const next = !this._roomOpen.get(rId);
+          this._roomOpen.set(rId, next);
+          card.toggleAttribute('data-open', next);
+          body.hidden = !next;
+          head.setAttribute('aria-expanded', next ? 'true' : 'false');
+        },
+        onKeydown: (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); head.click(); }
+        },
+      },
+        h('div', { class: 'blinds-room-head-left' },
+          icon(rIcon),
+          h('span', { class: 'blinds-room-title' }, title),
+          h('span', { class: 'badge-chip' }, `${ids.length}`)),
+        h('div', { class: 'blinds-room-actions' },
+          h('button', {
+            type: 'button', class: 'mini-btn', 'aria-label': `${title} öffnen`,
+            onClick: (e) => {
+              e.stopPropagation();
+              this.hass?.callService('cover', 'open_cover', { entity_id: ids });
+            },
+          }, icon('mdi:arrow-up')),
+          h('button', {
+            type: 'button', class: 'mini-btn', 'aria-label': `${title} schließen`,
+            onClick: (e) => {
+              e.stopPropagation();
+              this.hass?.callService('cover', 'close_cover', { entity_id: ids });
+            },
+          }, icon('mdi:arrow-down')),
+          icon('mdi:chevron-down', 'blinds-room-chevron')));
+
+      card.append(head, body);
+      sections.push(card);
     }
 
     if (!sections.length) {

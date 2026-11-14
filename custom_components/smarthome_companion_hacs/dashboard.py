@@ -74,6 +74,29 @@ _CATEGORY_WEIGHT = {
 
 NO_AREA_ID = "__none__"
 
+_UTILITY_ENTITY_PATTERNS = (
+    "overcharge",
+    "protection",
+    "kindersicherung",
+    "child_lock",
+    "childlock",
+    "led_mode",
+    "ledmode",
+)
+
+
+def _is_utility_entity(hass, entry, entity_id: str, custom_name: str = "") -> bool:
+    """Return True for disabled, config/diagnostic, or plug child-lock/protection utility entities."""
+    if entry is not None:
+        if entry.disabled_by or getattr(entry, "entity_category", None) in ("config", "diagnostic"):
+            return True
+    eid_lower = (entity_id or "").lower()
+    st = hass.states.get(entity_id) if entity_id else None
+    friendly = (st.attributes.get("friendly_name") if st else "") or ""
+    entry_name = ((getattr(entry, "name", None) or getattr(entry, "original_name", None) or "") if entry else "")
+    name_lower = f"{custom_name} {entry_name} {friendly}".lower()
+    return any(p in eid_lower or p in name_lower for p in _UTILITY_ENTITY_PATTERNS)
+
 
 # ═══════════════════════════════════════════════
 # DEFAULT CONFIG (seeded once from the legacy Lovelace dashboard)
@@ -351,18 +374,12 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                     continue
                 entry = _resolve_entry(ent_reg, by_uid, sub_key, sub.get("unique_id"), sub.get("original_id"))
                 if entry is not None:
-                    if entry.disabled_by or getattr(entry, "entity_category", None) in ("config", "diagnostic"):
-                        continue
                     entity_id = entry.entity_id
                 elif hass.states.get(sub_key):
                     entity_id = sub_key
                 else:
                     continue
-                # Filter out config/diagnostic utility switches
-                eid_lower = entity_id.lower()
-                name_lower = (sub.get("custom_name") or sub.get("name") or (entry.name if entry else "") or "").lower()
-                config_pattern = ("overcharge", "protection", "kindersicherung", "child_lock", "childlock", "led_mode", "ledmode")
-                if any(x in eid_lower or x in name_lower for x in config_pattern):
+                if _is_utility_entity(hass, entry, entity_id, sub.get("custom_name") or sub.get("name") or ""):
                     continue
                 valid_subs.append((sub_key, sub, entry, entity_id))
 
@@ -414,6 +431,22 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                 entity_id = primary
             else:
                 entity_id = None
+            if entity_id and _is_utility_entity(hass, entry, entity_id, device_name):
+                entity_id = None
+                fallback_entry = next(
+                    (
+                        e for e in ent_reg.entities.values()
+                        if getattr(e, "device_id", None) == device_id
+                        and (getattr(e, "domain", None) or e.entity_id.split(".", 1)[0]) in ("switch", "light", "cover", "valve", "climate", "media_player", "fan")
+                        and not getattr(e, "disabled_by", None)
+                        and not getattr(e, "hidden_by", None)
+                        and not _is_utility_entity(hass, e, e.entity_id, device_name)
+                    ),
+                    None,
+                )
+                if fallback_entry is not None:
+                    entry = fallback_entry
+                    entity_id = fallback_entry.entity_id
             if entity_id:
                 uid = ents.get("primary_unique_id") or entity_id
                 dev_force = bool(options.get("force_own_row", False))
@@ -492,6 +525,8 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
         entity_id = entry.entity_id if entry else extra["entity_id"]
         if entry is None and hass.states.get(entity_id) is None:
             continue
+        if _is_utility_entity(hass, entry, entity_id, extra.get("name") or ""):
+            continue
         device = dev_reg.async_get(entry.device_id) if entry and entry.device_id else None
         area_id, tile = make_tile(
             f"extra:{(entry.unique_id if entry and entry.unique_id else entity_id)}",
@@ -552,6 +587,9 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                     parts = ref.split(":", 2)
                     if len(parts) >= 3 and hass.states.get(parts[2]):
                         eid = parts[2]
+                        e_entry = ent_reg.async_get(eid)
+                        if _is_utility_entity(hass, e_entry, eid):
+                            continue
                         descendant_eids.append(eid)
                         st = hass.states.get(eid)
                         child_specs.append({
@@ -564,6 +602,9 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                             "area_id": g.get("area_id"),
                         })
                 elif hass.states.get(ref):
+                    e_entry = ent_reg.async_get(ref)
+                    if _is_utility_entity(hass, e_entry, ref):
+                        continue
                     descendant_eids.append(ref)
                     child_specs.append({
                         "key": f"e:{ref}",
@@ -577,7 +618,8 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                     dev_name = dev.name_by_user or dev.name or "Gerät"
                     dev_ents = [
                         e for e in ent_reg.entities.values()
-                        if e.device_id == ref and not e.disabled_by
+                        if e.device_id == ref
+                        and not _is_utility_entity(hass, e, e.entity_id, dev_name)
                         and e.domain in ("light", "switch", "cover", "valve", "media_player")
                     ]
                     if dev_ents:

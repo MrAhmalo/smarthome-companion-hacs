@@ -318,10 +318,10 @@ class CompanionDashboardPanel extends HTMLElement {
       let viewInst = null;
       const goBack = () => this._navigate(this._prevView === 'more' && ['auto', 'printer3d'].includes(activeView) ? 'more' : 'overview');
       if (activeView === 'security') viewInst = new SecurityView({ hass: this._hass, config, onBack: goBack });
-      else if (activeView === 'solar') viewInst = new SolarView({ hass: this._hass, onBack: goBack });
-      else if (activeView === 'blinds') viewInst = new BlindsView({ hass: this._hass, layout, onBack: goBack });
+      else if (activeView === 'solar') viewInst = new SolarView({ hass: this._hass, config, onBack: goBack });
+      else if (activeView === 'blinds') viewInst = new BlindsView({ hass: this._hass, layout, config, onBack: goBack });
       else if (activeView === 'auto') viewInst = new AutoView({ hass: this._hass, config, onBack: goBack });
-      else if (activeView === 'printer3d') viewInst = new Printer3DView({ hass: this._hass, onBack: goBack });
+      else if (activeView === 'printer3d') viewInst = new Printer3DView({ hass: this._hass, config, onBack: goBack });
       else if (activeView === 'more') {
         viewInst = new MoreView({
           hass: this._hass,

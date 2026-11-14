@@ -1292,7 +1292,12 @@ export class DeviceWizard {
     });
 
     this.smokeEntityId = smokeEntities[0]?.entity_id || devEntities.find((e) => domainOf(e.entity_id) === 'binary_sensor')?.entity_id || '';
-    this.primaryEntityId = existing?.entities?.primary
+    const savedPrimary = existing?.entities?.primary || '';
+    const validSavedPrimary = savedPrimary && (
+      controllable.some((e) => e.entity_id === savedPrimary)
+      || (this.selectedCategory === 'rauchmelder' && savedPrimary === this.smokeEntityId)
+    ) ? savedPrimary : '';
+    this.primaryEntityId = validSavedPrimary
       || controllable[0]?.entity_id
       || (this.selectedCategory === 'rauchmelder' ? this.smokeEntityId : '')
       || '';

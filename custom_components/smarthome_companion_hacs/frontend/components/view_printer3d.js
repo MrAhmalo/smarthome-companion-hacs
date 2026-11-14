@@ -1,6 +1,6 @@
 // 3D Printer View: Bambu Lab A1 Mini Auto-Discovery, Print Progress, Temperatures & Hue Work Light.
 import {
-  h, icon, isUnavailable, numeric, moreInfo, formatState,
+  h, icon, isUnavailable, numeric, moreInfo, formatState, showConfirmDialog,
 } from '../lib/util.js';
 
 const _P3D_DEVICE_ID = '3896a2c7ff7d1946d671305a9359c828';
@@ -23,29 +23,43 @@ const _P3D_KNOWN = {
 };
 
 export class Printer3DView {
-  constructor({ hass, onBack }) {
+  constructor({ hass, config, onBack }) {
     this.hass = hass;
+    this.config = config || {};
     this.onBack = onBack;
     this._destroyed = false;
-    this._deviceEntityIds = null;
-    this._loadingRegistry = false;
     this._lastSig = '';
 
     this.el = h('div', { class: 'subview-page', style: { '--view-color': '#10b981' } });
     this._buildShell();
-    this._loadDeviceEntities();
-    if (hass) this.update(hass);
+    if (hass) this.update(hass, config);
   }
 
   destroy() {
     this._destroyed = true;
   }
 
+  _lightId() {
+    return this.config?.views?.printer3d?.light_entity || _P3D_LIGHT_ID;
+  }
+
+  _knownState(states, key) {
+    const baseId = _P3D_KNOWN[key];
+    if (!baseId) return null;
+    if (states[baseId]) return states[baseId];
+    const prefix = (this.config?.views?.printer3d?.entity_prefix || '').trim();
+    if (prefix && prefix !== '3dprinter_a1mini') {
+      const altId = baseId.replace('3dprinter_a1mini', prefix);
+      if (states[altId]) return states[altId];
+    }
+    return null;
+  }
+
   _buildShell() {
     this._subEl = h('div', { class: 'subview-sub' }, 'Bambu Lab A1 Mini');
     this._lightBtn = h('button', {
       type: 'button', class: 'btn', hidden: true,
-      onClick: () => this.hass?.callService('light', 'toggle', { entity_id: _P3D_LIGHT_ID }),
+      onClick: () => this.hass?.callService('light', 'toggle', { entity_id: this._lightId() }),
     }, icon('mdi:lightbulb-outline'), 'Drucker-Licht');
 
     const head = h('div', { class: 'subview-head' },
@@ -92,47 +106,41 @@ export class Printer3DView {
     this.el.append(head, statusSec, ctrlSec, detailsSec);
   }
 
-  async _loadDeviceEntities() {
-    if (!this.hass || this._loadingRegistry || this._deviceEntityIds) return;
-    this._loadingRegistry = true;
-    try {
-      const reg = await this.hass.callWS({ type: 'config/entity_registry/list' });
-      if (this._destroyed) return;
-      if (Array.isArray(reg)) {
-        const matched = reg
-          .filter((e) => !e.disabled_by && (e.device_id === _P3D_DEVICE_ID || /3dprinter_a1mini/i.test(e.entity_id)))
-          .map((e) => e.entity_id);
-        this._deviceEntityIds = new Set(matched);
-        if (this.hass) this.update(this.hass);
-      }
-    } catch (_) {
-      // Fallback to state scan
-    } finally {
-      this._loadingRegistry = false;
-    }
-  }
-
   _collectEntityIds(states) {
+    const p3dCfg = this.config?.views?.printer3d || {};
+    const devId = p3dCfg.device_id || _P3D_DEVICE_ID;
+    const prefix = p3dCfg.entity_prefix || '3dprinter_a1mini';
+    const haEnts = this.hass?.entities || {};
     const ids = new Set();
-    if (this._deviceEntityIds) {
-      for (const id of this._deviceEntityIds) if (states[id]) ids.add(id);
+
+    for (const [eid, entry] of Object.entries(haEnts)) {
+      if (!entry || entry.disabled_by) continue;
+      if (['config', 'diagnostic'].includes(entry.entity_category)) continue;
+      if (!states[eid]) continue;
+      if (entry.device_id === devId || eid.toLowerCase().includes(prefix.toLowerCase())) {
+        ids.add(eid);
+      }
     }
     for (const id of Object.values(_P3D_KNOWN)) {
+      const altId = prefix && prefix !== '3dprinter_a1mini' ? id.replace('3dprinter_a1mini', prefix) : id;
       if (states[id]) ids.add(id);
+      if (states[altId]) ids.add(altId);
     }
     for (const id of Object.keys(states)) {
-      if (/3dprinter_a1mini/i.test(id)) ids.add(id);
+      if (id.toLowerCase().includes(prefix.toLowerCase())) ids.add(id);
     }
     return [...ids].sort();
   }
 
-  update(hass) {
+  update(hass, config) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
+    if (config !== undefined) this.config = config;
     const states = hass.states || {};
     const ids = this._collectEntityIds(states);
 
-    const lightSt = states[_P3D_LIGHT_ID];
+    const lightId = this._lightId();
+    const lightSt = states[lightId];
     if (lightSt) {
       this._lightBtn.hidden = false;
       this._lightBtn.classList.toggle('primary', lightSt.state === 'on');
@@ -140,19 +148,19 @@ export class Printer3DView {
       this._lightBtn.hidden = true;
     }
 
-    const sig = ids.map((id) => `${id}:${states[id]?.state}:${states[id]?.attributes?.percentage ?? ''}`).join('|');
+    const sig = `${lightId}|` + ids.map((id) => `${id}:${states[id]?.state}:${states[id]?.attributes?.percentage ?? ''}`).join('|');
     if (sig === this._lastSig) return;
     this._lastSig = sig;
 
-    const stepSt = states[_P3D_KNOWN.step];
-    const taskSt = states[_P3D_KNOWN.task];
-    const remSt = states[_P3D_KNOWN.remaining];
-    const etaSt = states[_P3D_KNOWN.eta];
-    const progSt = states[_P3D_KNOWN.progress];
-    const curL = states[_P3D_KNOWN.layerCur];
-    const totL = states[_P3D_KNOWN.layerTotal];
-    const nozzleSize = states[_P3D_KNOWN.nozzleSize];
-    const nozzleType = states[_P3D_KNOWN.nozzleType];
+    const stepSt = this._knownState(states, 'step');
+    const taskSt = this._knownState(states, 'task');
+    const remSt = this._knownState(states, 'remaining');
+    const etaSt = this._knownState(states, 'eta');
+    const progSt = this._knownState(states, 'progress');
+    const curL = this._knownState(states, 'layerCur');
+    const totL = this._knownState(states, 'layerTotal');
+    const nozzleSize = this._knownState(states, 'nozzleSize');
+    const nozzleType = this._knownState(states, 'nozzleType');
 
     const stepRaw = stepSt ? String(stepSt.state) : 'offline';
     const isOffline = !stepSt || isUnavailable(stepSt) || stepRaw === 'offline';
@@ -198,7 +206,7 @@ export class Printer3DView {
   _renderControls(states, ids) {
     const rows = [];
 
-    const fan = states[_P3D_KNOWN.fan];
+    const fan = this._knownState(states, 'fan');
     if (fan) {
       const isOn = fan.state === 'on';
       rows.push(h('div', { class: 'log-row', style: { padding: '10px 12px' } },
@@ -212,7 +220,7 @@ export class Printer3DView {
         }, isOn ? `Ein (${fan.attributes?.percentage ?? 100}%)` : 'Aus')));
     }
 
-    const speed = states[_P3D_KNOWN.speedSelect];
+    const speed = this._knownState(states, 'speedSelect');
     if (speed && Array.isArray(speed.attributes?.options)) {
       const sel = h('select', {
         class: 'text-input',
@@ -236,12 +244,13 @@ export class Printer3DView {
         sel));
     }
 
-    for (const [id, label, ic] of [
-      [_P3D_KNOWN.nozzleTempTarget, 'Zieltemperatur Düse', 'mdi:thermometer'],
-      [_P3D_KNOWN.bedTempTarget, 'Zieltemperatur Druckbett', 'mdi:radiator'],
+    for (const [key, label, ic] of [
+      ['nozzleTempTarget', 'Zieltemperatur Düse', 'mdi:thermometer'],
+      ['bedTempTarget', 'Zieltemperatur Druckbett', 'mdi:radiator'],
     ]) {
-      const st = states[id];
+      const st = this._knownState(states, key);
       if (!st) continue;
+      const id = st.entity_id;
       const cur = numeric(st) ?? 0;
       const step = Number(st.attributes?.step || 5);
       const min = Number(st.attributes?.min ?? 0);
@@ -271,9 +280,17 @@ export class Printer3DView {
           return h('button', {
             type: 'button',
             class: `btn sm${isStop ? ' danger' : ''}`,
-            disabled: isUnavailable(st),
-            onClick: () => {
-              if (isStop && !window.confirm('Druckauftrag wirklich abbrechen?')) return;
+            disabled: !st || st.state === 'unavailable',
+            onClick: async () => {
+              if (isStop) {
+                const ok = await showConfirmDialog(this.el, {
+                  title: 'Druckauftrag abbrechen?',
+                  message: 'Möchtest du den laufenden Druckauftrag wirklich abbrechen?',
+                  confirmLabel: 'Abbrechen',
+                  danger: true,
+                });
+                if (!ok) return;
+              }
               this.hass?.callService('button', 'press', { entity_id: id });
             },
           }, icon(st?.attributes?.icon || 'mdi:gesture-tap-button'), st?.attributes?.friendly_name || id);

@@ -1,6 +1,6 @@
 // Room detail subview: dedicated granular control page for a single room.
 import {
-  h, icon, isActive,
+  h, icon, isActive, domainOf,
 } from '../lib/util.js';
 import { Tile, GroupTile } from './tile.js';
 import { effectiveCategory, applySmartTileLayout, GROUPS, average } from './room.js';
@@ -110,16 +110,6 @@ export class RoomDetailView {
     const bodyCard = h('div', { class: 'card room-detail-body' }, ...bodyChildren);
 
     this.el = h('div', { class: 'room-detail-page' }, head, bodyCard);
-  }
-
-  _coverService(spec, action, data = {}) {
-    const rawDom = domainOf(spec.entity_id);
-    if (rawDom !== 'cover') {
-      if (action === 'open_cover') return this.hass?.callService(rawDom, 'turn_on', { entity_id: spec.entity_id });
-      if (action === 'close_cover') return this.hass?.callService(rawDom, 'turn_off', { entity_id: spec.entity_id });
-      if (action === 'stop_cover') return this.hass?.callService(rawDom, 'turn_off', { entity_id: spec.entity_id });
-    }
-    return this.hass?.callService('cover', action, { entity_id: spec.entity_id, ...data });
   }
 
   _toggleGroup(group) {

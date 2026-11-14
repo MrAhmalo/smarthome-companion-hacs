@@ -89,6 +89,11 @@ export class EntityPicker {
     this._updateBox();
   }
 
+  setValue(val) {
+    this.value = val || '';
+    this._updateBox();
+  }
+
   _setValue(val) {
     this.value = val;
     this._updateBox();

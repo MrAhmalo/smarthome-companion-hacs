@@ -327,21 +327,29 @@ export class SecurityView {
     this.hass = hass;
     const states = hass.states || {};
 
+    const secCfg = this.config?.views?.security || {};
     const alarmId = this._findAlarmEntity(hass);
-    const timerSt = states['timer.rauchalarm_countdown'];
+    const timerId = secCfg.timer_entity && states[secCfg.timer_entity] ? secCfg.timer_entity : 'timer.rauchalarm_countdown';
+    const timerSt = states[timerId];
+    const abortId = secCfg.abort_entity && states[secCfg.abort_entity] ? secCfg.abort_entity : 'input_boolean.rauchalarm_abbrechen';
     const smokeSensors = Object.keys(states).filter((id) => id.startsWith('binary_sensor.') && states[id]?.attributes?.device_class === 'smoke');
     const sirens = Object.keys(states).filter((id) => (id.startsWith('switch.') || id.startsWith('siren.')) && /sirene|siren/i.test(id));
     const camIds = Object.keys(states).filter((id) => id.startsWith('camera.'));
     const windowDoors = Object.keys(states).filter((id) => id.startsWith('binary_sensor.') && ['window', 'door', 'garage_door', 'opening'].includes(states[id]?.attributes?.device_class));
     const coverAutos = Object.keys(states).filter((id) => id.startsWith('automation.') && /rollladen|jalousie/i.test(id));
-    const batteries = Object.keys(states).filter((id) => id.startsWith('binary_sensor.') === false && id.startsWith('sensor.') && states[id]?.attributes?.device_class === 'battery' && !/iphone/i.test(id));
-    const fritz = states['binary_sensor.fritz_box_7590_ax_verbindung'] || Object.values(states).find((s) => /fritz.*verbindung/i.test(s.entity_id));
+    const batteries = Object.keys(states).filter((id) => id.startsWith('sensor.') && states[id]?.attributes?.device_class === 'battery' && !/iphone|ipad|handy|phone|pixel|galaxy|watch|macbook|ios_/i.test(`${id} ${states[id]?.attributes?.friendly_name || ''}`));
+    const fritz = (secCfg.router_entity && states[secCfg.router_entity])
+      || states['binary_sensor.fritz_box_7590_ax_verbindung']
+      || Object.values(states).find((s) => /fritz.*verbindung|router.*online/i.test(s.entity_id));
+    const presenceId = secCfg.presence_entity && states[secCfg.presence_entity] ? secCfg.presence_entity : 'switch.anwesenheitssimulation';
+    const pumpId = secCfg.water_pump_entity && states[secCfg.water_pump_entity] ? secCfg.water_pump_entity : 'switch.garten_wasserpumpe_fenster';
 
     const trackedIds = [
       alarmId,
-      'timer.rauchalarm_countdown',
-      'switch.anwesenheitssimulation',
-      'switch.garten_wasserpumpe_fenster',
+      timerId,
+      abortId,
+      presenceId,
+      pumpId,
       fritz?.entity_id,
       ...smokeSensors,
       ...sirens,
@@ -365,7 +373,7 @@ export class SecurityView {
 
     const children = [];
 
-    // 1. Header
+    // 1. Header (clean — no isolated floating status chip)
     const fritzOffline = fritz && (fritz.state === 'off' || isUnavailable(fritz));
     children.push(h('div', { class: 'subview-head' },
       h('div', { class: 'subview-head-left' },
@@ -373,12 +381,7 @@ export class SecurityView {
         h('div', { class: 'subview-hero-icon' }, icon('mdi:shield-home')),
         h('div', { style: { minWidth: '0' } },
           h('h2', { class: 'subview-title' }, 'Sicherheit'),
-          h('div', { class: 'subview-sub' }, 'Alarmanlage, Rauchmelder, Kameras & Sensoren'))),
-      fritz ? h('span', {
-        class: 'badge-tag',
-        style: fritzOffline ? { background: 'rgba(239,68,68,.2)', color: '#ef4444' } : { background: 'rgba(76,175,80,.18)', color: '#4caf50' },
-        onClick: () => moreInfo(this.el, fritz.entity_id),
-      }, icon(fritzOffline ? 'mdi:cloud-off-outline' : 'mdi:router-wireless'), fritzOffline ? 'Internet Offline' : 'Router Online') : null));
+          h('div', { class: 'subview-sub' }, 'Alarmanlage, Rauchmelder, Kameras & Sensoren')))));
 
     // 2. Active Smoke Alarm or Timer Banner
     const activeSmokes = smokeSensors.filter((id) => ['on', 'detected', 'smoke'].includes(states[id]?.state));
@@ -404,13 +407,13 @@ export class SecurityView {
         }
       }
 
-      const abortEntity = states['input_boolean.rauchalarm_abbrechen'] ? 'input_boolean.rauchalarm_abbrechen' : null;
+      const abortEntity = states[abortId] ? abortId : null;
       children.push(h('div', { class: 'smoke-alert-banner' },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
           icon('mdi:fire-alert'),
           h('div', {},
             h('div', { style: { fontWeight: '800', fontSize: '15px', color: '#fecaca' } },
-              activeSmokes.length ? `RAUCH ERKANNT (${activeSmokes.map((id) => states[id]?.attributes?.friendly_name || id).join(', ')})` : 'Rauchalarm-Countdown aktiv'),
+              activeSmokes.length ? `Rauch erkannt (${activeSmokes.map((id) => states[id]?.attributes?.friendly_name || id).join(', ')})` : 'Rauchalarm-Countdown aktiv'),
             h('div', { class: 'hint', style: { color: '#fee2e2' } }, '• Sirenen-Auslösung prüfen\n• Abbruch über Button'))),
         timerActive ? timerDigits : null,
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
@@ -420,7 +423,7 @@ export class SecurityView {
           }, icon('mdi:smoke-detector-variant-off'), 'Rauchalarm abbrechen') : null,
           timerActive ? h('button', {
             type: 'button', class: 'btn secondary',
-            onClick: () => hass.callService('timer', 'cancel', { entity_id: 'timer.rauchalarm_countdown' }),
+            onClick: () => hass.callService('timer', 'cancel', { entity_id: timerId }),
           }, 'Timer stoppen') : null)));
     }
 
@@ -479,8 +482,8 @@ export class SecurityView {
 
     // 4. Quick Security Toggles (Presence Sim, Water Pump, Sirens)
     const quickEntities = [
-      { id: 'switch.anwesenheitssimulation', name: 'Anwesenheitssimulation', icon: 'mdi:home-clock', color: '#8b5cf6' },
-      { id: 'switch.garten_wasserpumpe_fenster', name: 'Garten Wasserpumpe', icon: 'mdi:water-pump', color: '#0ea5e9' },
+      { id: presenceId, name: 'Anwesenheitssimulation', icon: 'mdi:home-clock', color: '#8b5cf6' },
+      { id: pumpId, name: 'Garten Wasserpumpe', icon: 'mdi:water-pump', color: '#0ea5e9' },
       ...sirens.map((id) => ({
         id,
         name: states[id]?.attributes?.friendly_name || id,
@@ -578,9 +581,9 @@ export class SecurityView {
             },
             h('div', { class: 'kpi-top' },
               icon(alarm ? 'mdi:fire-alert' : 'mdi:smoke-detector'),
-              st?.attributes?.friendly_name || id),
+              h('span', {}, st?.attributes?.friendly_name || id)),
             h('div', { class: 'kpi-val', style: { fontSize: '15px', color: alarm ? '#ef4444' : (unav ? 'var(--cd-secondary)' : '#4caf50') } },
-              unav ? 'Nicht verfügbar' : (alarm ? 'RAUCH!' : 'OK · Kein Rauch')));
+              unav ? 'Nicht verfügbar' : (alarm ? 'Rauchalarm' : 'OK · Kein Rauch')));
           }))));
     }
 
@@ -620,19 +623,38 @@ export class SecurityView {
           }))));
     }
 
-    if (batteries.length) {
-      const sortedBat = [...batteries].sort((a, b) => Number(states[a]?.state ?? 999) - Number(states[b]?.state ?? 999)).slice(0, 16);
+    const batThreshold = Number(secCfg.battery_threshold ?? 20);
+    const critBat = batteries
+      .map((id) => {
+        const st = states[id];
+        const raw = st?.state;
+        const val = raw != null && raw !== '' ? Number(raw) : NaN;
+        return { id, st, val, name: st?.attributes?.friendly_name || id };
+      })
+      .filter((b) => Number.isFinite(b.val) && b.val <= batThreshold)
+      .sort((a, b) => a.val - b.val || a.name.localeCompare(b.name, 'de'));
+
+    if (critBat.length) {
       children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:battery-check-outline'), 'Geräte-Batterien (ohne iPhones)'),
+        h('div', { class: 'subview-section-head' },
+          h('div', { class: 'subview-section-title' }, icon('mdi:battery-alert'), `Kritische Geräte-Batterien (≤ ${batThreshold} %)`),
+          h('span', { class: 'badge-tag', style: { color: '#ef4444' } }, `${critBat.length} schwach`)),
         h('div', { class: 'kpi-grid' },
-          ...sortedBat.map((id) => {
-            const st = states[id];
-            const val = Number(st?.state);
-            const low = Number.isFinite(val) && val <= 25;
-            return h('div', { class: 'kpi-card', onClick: () => moreInfo(this.el, id) },
-              h('div', { class: 'kpi-top' }, icon(low ? 'mdi:battery-alert' : 'mdi:battery'), st?.attributes?.friendly_name || id),
-              h('div', { class: 'kpi-val', style: { fontSize: '16px', color: low ? '#ef4444' : 'inherit' } }, formatState(st)));
-          }))));
+          ...critBat.map((b) => h('div', { class: 'kpi-card', onClick: () => moreInfo(this.el, b.id) },
+            h('div', { class: 'kpi-top' }, icon('mdi:battery-alert'), h('span', {}, b.name)),
+            h('div', { class: 'kpi-val', style: { fontSize: '16px', color: '#ef4444' } }, formatState(b.st)))))));
+    }
+
+    if (fritz) {
+      children.push(h('div', { class: 'subview-section' },
+        h('div', { class: 'subview-section-head' },
+          h('div', { class: 'subview-section-title' }, icon(fritzOffline ? 'mdi:cloud-off-outline' : 'mdi:router-wireless'), 'System & Konnektivität')),
+        h('div', { class: 'log-row', style: { cursor: 'pointer' }, onClick: () => moreInfo(this.el, fritz.entity_id) },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1' } },
+            icon(fritzOffline ? 'mdi:router-wireless-off' : 'mdi:router-wireless'),
+            h('span', { class: 'log-row-main' }, fritz.attributes?.friendly_name || 'Router / Internet')),
+          h('span', { class: 'badge-tag', style: fritzOffline ? { color: '#ef4444' } : { color: '#4caf50' } },
+            fritzOffline ? 'Offline' : 'Online'))));
     }
 
     if (!alarmId && !smokeSensors.length && !camIds.length && !quickEntities.length) {

@@ -41,8 +41,9 @@ function _fmtWatts(w) {
 }
 
 export class SolarView {
-  constructor({ hass, onBack }) {
+  constructor({ hass, config, onBack }) {
     this.hass = hass;
+    this.config = config || {};
     this.onBack = onBack;
     this._destroyed = false;
     this._lastSig = '';
@@ -52,7 +53,7 @@ export class SolarView {
 
     this.el = h('div', { class: 'subview-page', style: { '--view-color': '#f59e0b' } });
     this._buildShell();
-    if (hass) this.update(hass);
+    if (hass) this.update(hass, config);
   }
 
   destroy() {
@@ -98,7 +99,7 @@ export class SolarView {
     this._flowValBat = batNodes.val;
     this._flowSubBat = batNodes.sub;
     this._flowValGrid = mkNode(352, 134, '#03a9f4', 'Netz');
-    this._flowValHouse = mkNode(210, 180, '#e5e7eb', 'Haus');
+    this._flowValHouse = mkNode(210, 180, 'var(--primary-text-color, #e5e7eb)', 'Haus');
 
     this._kpiWrap = h('div', { class: 'kpi-grid' });
     this._chartWrap = h('div', { class: 'solar-svg-wrap' },
@@ -138,8 +139,9 @@ export class SolarView {
     const seq = ++this._fetchSeq;
     if (this._statsCache) this._chartWrap.style.opacity = '0.6';
 
-    const pvId = _pickState(this.hass.states, SOLAR_SENSORS.pv)?.entity_id;
-    const houseId = _pickState(this.hass.states, SOLAR_SENSORS.house)?.entity_id;
+    const sCfg = this.config?.views?.solar || {};
+    const pvId = _pickState(this.hass.states, [sCfg.pv_entity, ...SOLAR_SENSORS.pv].filter(Boolean))?.entity_id;
+    const houseId = _pickState(this.hass.states, [sCfg.house_entity, ...SOLAR_SENSORS.house].filter(Boolean))?.entity_id;
     const entityIds = [pvId, houseId].filter(Boolean);
     if (!entityIds.length) {
       this._chartWrap.style.opacity = '1';
@@ -245,20 +247,23 @@ export class SolarView {
       svg);
   }
 
-  update(hass) {
+  update(hass, config) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
+    if (config !== undefined) this.config = config;
     const states = hass.states || {};
+    const sCfg = this.config?.views?.solar || {};
+    const pick = (key, extra = []) => _pickState(states, [sCfg[key], ...(SOLAR_SENSORS[key] || []), ...extra].filter(Boolean));
 
-    const pv = _pickState(states, SOLAR_SENSORS.pv);
-    const chg = _pickState(states, SOLAR_SENSORS.charge);
-    const dis = _pickState(states, SOLAR_SENSORS.discharge);
-    const soc = _pickState(states, SOLAR_SENSORS.soc);
-    const imp = _pickState(states, SOLAR_SENSORS.imp);
-    const exp = _pickState(states, SOLAR_SENSORS.exp);
-    const house = _pickState(states, SOLAR_SENSORS.house);
-    const dy = _pickState(states, SOLAR_SENSORS.dailyYield);
-    const dh = _pickState(states, SOLAR_SENSORS.dailyHouse);
+    const pv = pick('pv_entity', SOLAR_SENSORS.pv);
+    const chg = pick('charge_entity', SOLAR_SENSORS.charge);
+    const dis = pick('discharge_entity', SOLAR_SENSORS.discharge);
+    const soc = pick('soc_entity', SOLAR_SENSORS.soc);
+    const imp = pick('grid_import_entity', SOLAR_SENSORS.imp);
+    const exp = pick('grid_export_entity', SOLAR_SENSORS.exp);
+    const house = pick('house_entity', SOLAR_SENSORS.house);
+    const dy = pick('daily_yield_entity', SOLAR_SENSORS.dailyYield);
+    const dh = pick('daily_house_entity', SOLAR_SENSORS.dailyHouse);
     const inc = _pickState(states, SOLAR_SENSORS.dailyIncome);
     const sch = _pickState(states, SOLAR_SENSORS.schimmeldry);
 
@@ -313,7 +318,7 @@ export class SolarView {
       style: { '--kpi-color': k.color },
       onClick: () => { if (k.id) moreInfo(this.el, k.id); },
     },
-    h('div', { class: 'kpi-top' }, icon(k.icon), k.label),
+    h('div', { class: 'kpi-top' }, icon(k.icon), h('span', {}, k.label)),
     h('div', { class: 'kpi-val' }, k.val),
     k.sub ? h('div', { class: 'kpi-sub' }, k.sub) : null)));
 
@@ -321,17 +326,21 @@ export class SolarView {
     const totalToday = _num(wToday) + _num(eToday);
     const fCards = [];
     if (wNow || eNow) {
+      const primForecastId = (wNow || eNow)?.entity_id;
       fCards.push(
-        h('div', { class: 'kpi-card', style: { '--kpi-color': '#f59e0b' } },
-          h('div', { class: 'kpi-top' }, icon('mdi:solar-power'), 'Gesamt Prognose'),
+        h('div', {
+          class: 'kpi-card', style: { '--kpi-color': '#f59e0b' },
+          onClick: () => { if (primForecastId) moreInfo(this.el, primForecastId); },
+        },
+          h('div', { class: 'kpi-top' }, icon('mdi:solar-power'), h('span', {}, 'Gesamt Prognose')),
           h('div', { class: 'kpi-val' }, _fmtWatts(totalNow)),
           h('div', { class: 'kpi-sub' }, `Heute ca. ${totalToday.toFixed(1)} kWh`)),
         h('div', { class: 'kpi-card', style: { '--kpi-color': '#fb923c' }, onClick: () => wNow && moreInfo(this.el, wNow.entity_id) },
-          h('div', { class: 'kpi-top' }, icon('mdi:weather-sunset-down'), 'Westen'),
+          h('div', { class: 'kpi-top' }, icon('mdi:weather-sunset-down'), h('span', {}, 'Westen')),
           h('div', { class: 'kpi-val' }, _fmtWatts(_num(wNow))),
           h('div', { class: 'kpi-sub' }, `Heute ${_num(wToday).toFixed(1)} kWh${wPeak ? ` · Peak ${wPeak.state}` : ''}`)),
         h('div', { class: 'kpi-card', style: { '--kpi-color': '#38bdf8' }, onClick: () => eNow && moreInfo(this.el, eNow.entity_id) },
-          h('div', { class: 'kpi-top' }, icon('mdi:weather-sunset-up'), 'Osten'),
+          h('div', { class: 'kpi-top' }, icon('mdi:weather-sunset-up'), h('span', {}, 'Osten')),
           h('div', { class: 'kpi-val' }, _fmtWatts(_num(eNow))),
           h('div', { class: 'kpi-sub' }, `Heute ${_num(eToday).toFixed(1)} kWh${ePeak ? ` · Peak ${ePeak.state}` : ''}`)),
       );

@@ -5,9 +5,18 @@ import {
 
 const _AUTO_BMW_DEVICE_ID = '7ae00fdd4f8a117f65bb4f5275b021fc';
 const _AUTO_DEFAULT_VOLVO_URL = 'http://192.168.178.188:6176/';
+const _AUTO_UTILITY_RE = /(overcharge|protection|kindersicherung|child_lock|childlock|led_mode|ledmode)/i;
 
-function _autoMatchId(id) {
+function _autoMatchId(id, extraPrefix = '') {
+  if (_AUTO_UTILITY_RE.test(id)) return false;
+  if (extraPrefix && id.toLowerCase().includes(String(extraPrefix).toLowerCase())) return true;
   return /(?:^|\.)(?:.*(?:bmw|gv_jm_13|cardata).*)$/i.test(id);
+}
+
+function _autoIsUtility(st, entry) {
+  if (entry && (entry.disabled_by || ['config', 'diagnostic'].includes(entry.entity_category))) return true;
+  const hay = `${st?.entity_id || ''} ${st?.attributes?.friendly_name || ''}`;
+  return _AUTO_UTILITY_RE.test(hay);
 }
 
 function _autoClassify(states, ids) {
@@ -18,7 +27,7 @@ function _autoClassify(states, ids) {
 
   for (const id of ids) {
     const st = states[id];
-    if (!st) continue;
+    if (!st || _autoIsUtility(st, null)) continue;
     const dom = id.split('.')[0];
     const dc = st.attributes?.device_class || '';
     const unit = st.attributes?.unit_of_measurement || '';
@@ -46,14 +55,11 @@ export class AutoView {
     this.config = config;
     this.onBack = onBack;
     this._destroyed = false;
-    this._deviceEntityIds = null;
-    this._loadingRegistry = false;
     this._bmwSig = '';
     this._volvoUrlRendered = null;
 
     this.el = h('div', { class: 'subview-page', style: { '--view-color': '#3b82f6' } });
     this._buildShell();
-    this._loadDeviceEntities();
     if (hass) this.update(hass, config);
   }
 
@@ -102,47 +108,40 @@ export class AutoView {
     this.el.append(head, bmwSec, this._volvoSec);
   }
 
-  async _loadDeviceEntities() {
-    if (!this.hass || this._loadingRegistry || this._deviceEntityIds) return;
-    this._loadingRegistry = true;
-    try {
-      const reg = await this.hass.callWS({ type: 'config/entity_registry/list' });
-      if (this._destroyed) return;
-      if (Array.isArray(reg)) {
-        const matched = reg
-          .filter((e) => !e.disabled_by && (
-            e.device_id === _AUTO_BMW_DEVICE_ID ||
-            e.platform === 'bmw_cardata' ||
-            _autoMatchId(e.entity_id)
-          ))
-          .map((e) => e.entity_id);
-        this._deviceEntityIds = new Set(matched);
-        if (this.hass) this._renderBmw(this.hass.states || {});
-      }
-    } catch (_) {
-      // Fallback to state prefix scan only (non-admins or mocks)
-    } finally {
-      this._loadingRegistry = false;
-    }
-  }
-
   update(hass, config) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
-    if (config) this.config = config;
+    if (config !== undefined) this.config = config;
+    const plate = this.config?.views?.auto?.plate || 'GV-JM-13';
+    if (this._bmwPlateChip) {
+      this._bmwPlateChip.textContent = plate;
+      this._bmwPlateChip.hidden = !plate;
+    }
     this._renderBmw(hass.states || {});
     this._renderVolvo();
   }
 
   _collectBmwIds(states) {
+    const autoCfg = this.config?.views?.auto || {};
+    const extraPrefix = autoCfg.entity_prefix || '';
+    const devId = autoCfg.bmw_device_id || _AUTO_BMW_DEVICE_ID;
     const ids = new Set();
-    if (this._deviceEntityIds) {
-      for (const id of this._deviceEntityIds) {
-        if (states[id]) ids.add(id);
+    const haEnts = this.hass?.entities || {};
+    for (const [eid, entry] of Object.entries(haEnts)) {
+      if (!entry || entry.disabled_by) continue;
+      if (['config', 'diagnostic'].includes(entry.entity_category)) continue;
+      if (!states[eid]) continue;
+      if (
+        (entry.device_id === devId || entry.platform === 'bmw_cardata' || _autoMatchId(eid, extraPrefix))
+        && !_autoIsUtility(states[eid], entry)
+      ) {
+        ids.add(eid);
       }
     }
     for (const id of Object.keys(states)) {
-      if (_autoMatchId(id)) ids.add(id);
+      if (_autoMatchId(id, extraPrefix) && !_autoIsUtility(states[id], haEnts[id])) {
+        ids.add(id);
+      }
     }
     return [...ids].sort();
   }
@@ -171,7 +170,7 @@ export class AutoView {
     },
       h('div', { class: 'kpi-top' },
         icon(st.attributes?.icon || 'mdi:car-info'),
-        st.attributes?.friendly_name || st.entity_id),
+        h('span', {}, st.attributes?.friendly_name || st.entity_id)),
       h('div', { class: 'kpi-val' }, formatState(st)),
       h('div', { class: 'kpi-sub' }, st.entity_id))));
 
@@ -182,7 +181,7 @@ export class AutoView {
       return h('button', {
         type: 'button',
         class: `btn${active ? ' primary' : ''}`,
-        disabled: isUnavailable(st),
+        disabled: dom === 'button' ? (!st || st.state === 'unavailable') : isUnavailable(st),
         onClick: () => {
           if (!this.hass) return;
           if (dom === 'button') this.hass.callService('button', 'press', { entity_id: st.entity_id });

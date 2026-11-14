@@ -164,16 +164,36 @@ export class TrashCard {
   }
 
   async _load(hass, today) {
-    const entities = (this.cfg.calendar_entities || []).filter(Boolean);
+    const states = hass?.states || {};
+    let entities = (this.cfg.calendar_entities || []).filter((id) => id && states[id]);
+    if (!entities.length && states['calendar.muellplan']) entities = ['calendar.muellplan'];
+    if (!entities.length) entities = (this.cfg.calendar_entities || []).filter(Boolean);
     if (!entities.length) { this.el.hidden = true; return; }
     this._loading = true;
     try {
       const days = Math.max(1, Number(this.cfg.next_days) || 2);
       const start = startOfDay(new Date());
       const end = new Date(start.getTime() + days * DAY);
-      const results = await Promise.all(entities.map((eid) => hass
-        .callApi('GET', `calendars/${eid}?start=${start.toISOString()}&end=${end.toISOString()}`)
-        .catch(() => [])));
+      const qs = `start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
+      const results = await Promise.all(entities.map(async (eid) => {
+        if (typeof hass.callApi === 'function') {
+          try {
+            const list = await hass.callApi('GET', `calendars/${eid}?${qs}`);
+            if (Array.isArray(list)) return list;
+          } catch (_) { /* fall back to calendar/get_events WS */ }
+        }
+        try {
+          const res = await hass.callWS({
+            type: 'calendar/get_events',
+            entity_id: eid,
+            start_date_time: start.toISOString(),
+            end_date_time: end.toISOString(),
+          });
+          return res?.events || (Array.isArray(res) ? res : []);
+        } catch (_) {
+          return [];
+        }
+      }));
       this._render(results.flat(), start, days);
       this._day = today;
       this._lastLoad = Date.now();

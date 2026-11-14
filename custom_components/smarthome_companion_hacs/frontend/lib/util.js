@@ -441,22 +441,26 @@ export function debounce(fn, ms) {
 
 /**
  * Sets a range slider's value and computes the exact CSS `--val` gradient stop
- * so the colored fill matches the right edge of the 6px rounded thumb pill
- * at every percentage from 0% to 100%.
+ * aligned to the geometric center of the 6px thumb inside a 5px-padded track.
  */
 export function setSliderVal(slider, val) {
   if (!slider) return;
   const min = Number(slider.min || 0);
   const max = Number(slider.max || 100);
-  const v = Math.max(min, Math.min(max, Number(val)));
+  const num = Number(val);
+  const v = Number.isFinite(num) ? Math.max(min, Math.min(max, num)) : min;
   slider.value = String(v);
   if (min === 0 && v <= 0) {
     slider.style.setProperty('--val', '0%');
     return;
   }
   const p = max > min ? (v - min) / (max - min) : 0;
+  if (p >= 1) {
+    slider.style.setProperty('--val', '100%');
+    return;
+  }
   const pct = (p * 100).toFixed(2);
-  const offsetPx = ((1 - p) * 6).toFixed(2);
+  const offsetPx = ((0.5 - p) * 16).toFixed(2);
   slider.style.setProperty('--val', `calc(${pct}% + ${offsetPx}px)`);
 }
 

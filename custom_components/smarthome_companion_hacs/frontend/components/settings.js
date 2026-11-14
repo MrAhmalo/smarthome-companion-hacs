@@ -64,7 +64,8 @@ export class Settings {
     this.tab = 'rooms';
     this.tabs = [
       ['rooms', 'Räume & Kacheln', () => this._tabRooms()],
-      ['home', 'Startseite & Infos', () => this._tabHome()],
+      ['home', 'Startseite', () => this._tabHome()],
+      ['infos', 'Infos & Dienste', () => this._tabInfos()],
       ['nav', 'Navigation & Design', () => this._tabNavAndDesign()],
       ['devices', 'Geräte', () => this._tabDevices()],
     ];
@@ -248,6 +249,116 @@ export class Settings {
       onChange: (e) => { obj[key] = e.target.checked; onChange?.(e.target.checked); },
     });
     return h('label', { class: 'field check' }, input, label);
+  }
+
+  _multiEntity(obj, key, label, opts = {}) {
+    obj[key] ||= [];
+    const chipsWrap = h('div', { class: 'user-chips' });
+    const renderChips = () => {
+      const list = Array.isArray(obj[key]) ? obj[key] : [];
+      if (!list.length) {
+        chipsWrap.replaceChildren(h('span', { class: 'hint' }, opts.emptyText || 'Keine Entität ausgewählt'));
+        return;
+      }
+      chipsWrap.replaceChildren(...list.map((eid, idx) => {
+        const fname = this.hass?.states?.[eid]?.attributes?.friendly_name || eid;
+        return h('span', { class: 'badge-chip', style: { gap: '6px' } },
+          h('span', { title: eid }, fname),
+          h('button', {
+            type: 'button',
+            class: 'mini-btn',
+            style: { width: '20px', height: '20px', minWidth: '20px', minHeight: '20px' },
+            'aria-label': `${fname} entfernen`,
+            onClick: () => {
+              obj[key].splice(idx, 1);
+              renderChips();
+              opts.onChange?.(obj[key]);
+            },
+          }, icon('mdi:close')));
+      }));
+    };
+
+    const picker = this._track(new EntityPicker({
+      hass: this.hass,
+      value: '',
+      placeholder: opts.placeholder || 'Entität hinzufügen...',
+      domain: opts.domain,
+      filter: opts.filter,
+      allowClear: false,
+      onChange: (val) => {
+        if (!val) return;
+        obj[key] ||= [];
+        if (!obj[key].includes(val)) {
+          obj[key].push(val);
+          renderChips();
+          opts.onChange?.(obj[key]);
+        }
+        picker.setValue?.('');
+      },
+    }));
+    renderChips();
+    return this._field(label, h('div', { style: { display: 'grid', gap: '8px', minWidth: '0' } }, chipsWrap, picker.el));
+  }
+
+  _navPathField(obj, key, label) {
+    const cur = obj[key] || '';
+    const known = VIEW_NAV_CHOICES.filter(([v]) => v).map(([v, l]) => [
+      v.startsWith('companion:') ? `/lovelace/${v.slice('companion:'.length)}` : v,
+      l,
+    ]);
+    const isKnown = known.some(([p]) => p === cur);
+    const mode = { sel: !cur ? '' : (isKnown ? cur : '__custom__') };
+    const wrap = h('div', { style: { display: 'grid', gap: '6px', minWidth: '0' } });
+    const customInput = h('input', {
+      type: 'text',
+      value: isKnown ? '' : cur,
+      placeholder: '/lovelace/... oder /todo?entity_id=...',
+      hidden: mode.sel !== '__custom__',
+      onInput: (e) => {
+        const v = e.target.value;
+        if (v) obj[key] = v; else delete obj[key];
+      },
+    });
+    const cdd = this._track(new CustomDropdown({
+      options: [
+        { value: '', label: 'Kein Ziel' },
+        ...known.map(([v, l]) => ({ value: v, label: l })),
+        { value: '__custom__', label: 'Benutzerdefinierter Pfad...' },
+      ],
+      value: mode.sel,
+      onChange: (v) => {
+        mode.sel = v;
+        customInput.hidden = v !== '__custom__';
+        if (v && v !== '__custom__') obj[key] = v;
+        else if (!v) delete obj[key];
+        else obj[key] = customInput.value || '';
+      },
+    }));
+    wrap.append(cdd.el, customInput);
+    return this._field(label, wrap);
+  }
+
+  _serviceField(obj, key, label) {
+    const cur = obj[key] || '';
+    const svcs = [];
+    const reg = this.hass?.services || {};
+    for (const [dom, actions] of Object.entries(reg)) {
+      if (!actions || typeof actions !== 'object') continue;
+      for (const act of Object.keys(actions)) {
+        svcs.push(`${dom}.${act}`);
+      }
+    }
+    svcs.sort();
+    const common = ['input_boolean.turn_on', 'input_boolean.toggle', 'script.turn_on', 'light.toggle', 'switch.toggle', 'homeassistant.toggle'];
+    const allOpts = [...new Set([...(cur ? [cur] : []), ...common, ...svcs.slice(0, 60)])];
+    const cdd = this._track(new CustomDropdown({
+      options: [{ value: '', label: 'Dienst wählen...' }, ...allOpts.map((s) => ({ value: s, label: s }))],
+      value: cur,
+      onChange: (v) => {
+        if (v) obj[key] = v; else delete obj[key];
+      },
+    }));
+    return this._field(label, cdd.el);
   }
 
   _csv(obj, key, label, placeholder = '') {
@@ -573,21 +684,15 @@ export class Settings {
     ];
   }
 
-  // ═══════════ TAB 2: Startseite & Infos ═══════════
+  // ═══════════ TAB 2: Startseite ═══════════
   _tabHome() {
     const d = this.draft;
     d.badges ||= [];
-    d.warning ||= {};
-    d.announce ||= {};
-    d.announce.chips ||= [];
     d.persons ||= [];
-    d.trash ||= {};
-    d.trash.patterns ||= [];
-    d.trash.calendar_entities ||= [];
 
     return [
       this._title('Begrüßung'),
-      h('div', { class: 'fields' }, this._entity(d, 'greeting_entity', 'Begrüßungs-Sensor (optional)')),
+      h('div', { class: 'fields' }, this._entity(d, 'greeting_entity', 'Begrüßungs-Sensor (optional)', { domain: 'sensor' })),
       this._hint('• Leer = automatische Tageszeit-Begrüßung\n• Sensorwert ersetzt Text'),
 
       this._title('Status-Badges'),
@@ -608,8 +713,8 @@ export class Settings {
             this._check(b, 'show_name', 'Name anzeigen'),
             this._check(b, 'show_state', 'Status anzeigen'),
             this._select(b, 'tap', 'Bei Tipp', TAP_OPTIONS, 'more-info', () => rerender()),
-            ...(tapMode === 'navigate' ? [this._text(b, 'path', 'Pfad / Ansicht', { placeholder: '/lovelace/solar' })] : []),
-            ...(tapMode === 'service' ? [this._text(b, 'service', 'Dienst', { placeholder: 'input_boolean.turn_on' })] : []),
+            ...(tapMode === 'navigate' ? [this._navPathField(b, 'path', 'Ziel-Ansicht / Pfad')] : []),
+            ...(tapMode === 'service' ? [this._serviceField(b, 'service', 'Dienst')] : []),
             this._select(b, 'visible_when', 'Sichtbarkeit', VISIBLE_OPTIONS, 'always', () => rerender()),
             ...(visMode !== 'always' ? [this._text(b, 'visible_value', 'Vergleichswert', { placeholder: '0 / unavailable, off' })] : []),
           ];
@@ -617,43 +722,45 @@ export class Settings {
         addLabel: 'Badge hinzufügen',
       }),
 
-      this._title('Wetterwarnung'),
-      h('div', { class: 'fields' },
-        this._entity(d.warning, 'entity_id', 'Warnstufen-Sensor'),
-        this._text(d.warning, 'headline_attribute', 'Attribut für Überschrift', { placeholder: 'warning_1_headline' }),
-        this._text(d.warning, 'path', 'Pfad bei Tipp', { placeholder: '/dashboard-warnungen/dash-warnungen' })),
-      this._hint('• Anzeige ab Warnstufe > 0\n• Rauchmelder immer aktiv'),
-
-      this._title('Ankündigung'),
-      h('div', { class: 'fields' },
-        this._entity(d.announce, 'entity_id', 'Skript / Entität'),
-        this._text(d.announce, 'name', 'Anzeigename'),
-        this._icon(d.announce, 'icon', 'Icon'),
-        this._entity(d.announce, 'chips_visible_entity', 'Chip-Verfügbarkeit (Sensor)')),
-      this._list(d.announce.chips, {
-        groupKey: 'achip',
-        rowTitle: (c) => c.entity_id || 'Chip',
-        make: () => ({ entity_id: '', icon: '' }),
-        fields: (c) => [this._entity(c, 'entity_id', 'Entität'), this._icon(c, 'icon', 'Icon')],
-        addLabel: 'Chip hinzufügen',
-      }),
-
       this._title('Personen'),
       this._hint('• Anzeige nur „Zuhause“\n• Pro Benutzer filterbar'),
       this._list(d.persons, {
         groupKey: 'person',
-        rowTitle: (p) => p.entity_id || 'Person',
+        rowTitle: (p) => this.hass?.states?.[p.entity_id]?.attributes?.friendly_name || p.entity_id || 'Person',
         make: () => ({ entity_id: '', users: [] }),
         fields: (p) => {
           p.users ||= [];
-          return [this._entity(p, 'entity_id', 'Person / Tracker'), this._usersField(p.users, 'Sichtbar für')];
+          return [
+            this._entity(p, 'entity_id', 'Person / Tracker', { domain: ['person', 'device_tracker'] }),
+            this._usersField(p.users, 'Sichtbar für'),
+          ];
         },
         addLabel: 'Person hinzufügen',
       }),
+    ];
+  }
 
+  // ═══════════ TAB 3: Infos & Dienste ═══════════
+  _tabInfos() {
+    const d = this.draft;
+    d.warning ||= {};
+    d.announce ||= {};
+    d.announce.chips ||= [];
+    d.trash ||= {};
+    d.trash.patterns ||= [];
+    d.trash.calendar_entities ||= [];
+    d.views ||= {};
+    const moreCfg = (d.views.more ||= {});
+
+    return [
       this._title('Müllkalender'),
+      this._hint('• Mehrere Kalender per Picker wählbar\n• Vorschau & Tonnenfarben pro Termin'),
       h('div', { class: 'fields' },
-        this._csv(d.trash, 'calendar_entities', 'Kalender (kommagetrennt)', 'calendar.muellplan'),
+        this._multiEntity(d.trash, 'calendar_entities', 'Kalender-Entitäten', {
+          domain: 'calendar',
+          placeholder: 'Kalender suchen...',
+          emptyText: 'Noch kein Kalender verknüpft',
+        }),
         this._text(d.trash, 'next_days', 'Vorschau (Tage)', { type: 'number' })),
       this._list(d.trash.patterns, {
         groupKey: 'trash',
@@ -681,10 +788,37 @@ export class Settings {
         },
         addLabel: 'Tonne hinzufügen',
       }),
+
+      this._title('Wetter & Außentemperatur'),
+      this._hint('• Quellen für „Mehr & Bereiche“\n• Leer = automatische Erkennung'),
+      h('div', { class: 'fields' },
+        this._entity(moreCfg, 'weather_entity', 'Wetter-Entität', { domain: 'weather' }),
+        this._entity(moreCfg, 'temp_entity', 'Außentemperatur-Sensor', { domain: 'sensor' })),
+
+      this._title('Wetterwarnung'),
+      h('div', { class: 'fields' },
+        this._entity(d.warning, 'entity_id', 'Warnstufen-Sensor', { domain: 'sensor' }),
+        this._text(d.warning, 'headline_attribute', 'Attribut für Überschrift', { placeholder: 'warning_1_headline' }),
+        this._navPathField(d.warning, 'path', 'Pfad bei Tipp')),
+      this._hint('• Anzeige ab Warnstufe > 0\n• Rauchmelder immer aktiv'),
+
+      this._title('Ankündigung'),
+      h('div', { class: 'fields' },
+        this._entity(d.announce, 'entity_id', 'Skript / Entität', { domain: ['script', 'automation', 'input_boolean'] }),
+        this._text(d.announce, 'name', 'Anzeigename'),
+        this._icon(d.announce, 'icon', 'Icon'),
+        this._entity(d.announce, 'chips_visible_entity', 'Chip-Verfügbarkeit (Sensor)', { domain: 'sensor' })),
+      this._list(d.announce.chips, {
+        groupKey: 'achip',
+        rowTitle: (c) => this.hass?.states?.[c.entity_id]?.attributes?.friendly_name || c.entity_id || 'Chip',
+        make: () => ({ entity_id: '', icon: '' }),
+        fields: (c) => [this._entity(c, 'entity_id', 'Entität'), this._icon(c, 'icon', 'Icon')],
+        addLabel: 'Chip hinzufügen',
+      }),
     ];
   }
 
-  // ═══════════ TAB 3: Navigation & Design ═══════════
+  // ═══════════ TAB 4: Navigation & Design ═══════════
   _tabNavAndDesign() {
     this.draft.nav ||= [];
     this.draft.views ||= {};
@@ -704,8 +838,29 @@ export class Settings {
             h('div', { class: 'acc-sub' }, v.desc)),
           this._check(vc, 'enabled', 'Aktiviert')),
         h('div', { class: 'fields' },
-          ...(v.id === 'auto' ? [this._text(vc, 'webview_url', 'Fahrzeug-Webansicht URL (optional)', { placeholder: 'http://192.168.178.188:6176/' })] : []),
-          ...(v.id === 'security' ? [this._entity(vc, 'alarm_entity', 'Alarmanlage (optional)', { domain: 'alarm_control_panel' })] : []),
+          ...(v.id === 'auto' ? [
+            this._text(vc, 'plate', 'Kennzeichen (optional)', { placeholder: 'GV-JM-13' }),
+            this._text(vc, 'entity_prefix', 'Entitäten-Präfix (optional)', { placeholder: 'bmw / cardata' }),
+            this._text(vc, 'webview_url', 'Fahrzeug-Webansicht URL (optional)', { placeholder: 'http://192.168.178.188:6176/' }),
+          ] : []),
+          ...(v.id === 'security' ? [
+            this._entity(vc, 'alarm_entity', 'Alarmanlage (optional)', { domain: 'alarm_control_panel' }),
+            this._entity(vc, 'router_entity', 'Router-Status (optional)', { domain: 'binary_sensor' }),
+            this._entity(vc, 'timer_entity', 'Rauchalarm-Timer (optional)', { domain: 'timer' }),
+            this._entity(vc, 'abort_entity', 'Alarm-Abbruch Schalter (optional)', { domain: 'input_boolean' }),
+          ] : []),
+          ...(v.id === 'solar' ? [
+            this._entity(vc, 'pv_entity', 'PV-Leistung (optional)', { domain: 'sensor' }),
+            this._entity(vc, 'house_entity', 'Hausverbrauch (optional)', { domain: 'sensor' }),
+            this._entity(vc, 'soc_entity', 'Batterie-Ladestand (optional)', { domain: 'sensor' }),
+          ] : []),
+          ...(v.id === 'printer3d' ? [
+            this._entity(vc, 'light_entity', 'Drucker-Licht (optional)', { domain: 'light' }),
+            this._text(vc, 'entity_prefix', 'Drucker-Präfix (optional)', { placeholder: '3dprinter_a1mini' }),
+          ] : []),
+          ...(v.id === 'more' ? [
+            this._entity(vc, 'router_entity', 'Router-Status (optional)', { domain: 'binary_sensor' }),
+          ] : []),
           this._usersField(vc.users, 'Sichtbar für')));
       return row;
     });
@@ -758,7 +913,7 @@ export class Settings {
       }),
 
       this._title('Integrierte Themen-Ansichten'),
-      this._hint('• Sichtbarkeit & Zusatzoptionen pro Bereich\n• Im „Mehr“-Hub & Navigation verfügbar'),
+      this._hint('• Sichtbarkeit & Entitäten pro Bereich\n• Im „Mehr“-Hub & Navigation verfügbar'),
       ...viewCards,
 
       this._title('Licht-Farbpresets'),
@@ -767,12 +922,12 @@ export class Settings {
     ];
   }
 
-  // ═══════════ TAB 4: Geräte ═══════════
+  // ═══════════ TAB 5: Geräte-Verwaltung ═══════════
   _tabDevices() {
     const wrap = h('div', { class: 'settings-devices-tab' });
     this._renderDevicesTab(wrap);
     return [
-      this._title('Geräte'),
+      this._title('Geräte-Verwaltung'),
       h('div', { class: 'inline-notice' },
         icon('mdi:information-outline'),
         h('span', {}, 'Geräte- & Gruppenänderungen werden sofort gespeichert.')),

@@ -15,6 +15,8 @@ const STYLES = `
   --cd-radius: 20px;
   --cd-tile-radius: 12px;
   --cd-secondary: var(--secondary-text-color, #9b9b9b);
+  --cd-text: var(--primary-text-color, #e6e6e6);
+  --cd-border: rgba(128, 128, 128, 0.22);
   --cd-accent: var(--primary-color, #03a9f4);
   --cd-tile-bg: rgba(128, 128, 128, 0.12);
   --cd-tile-bg: color-mix(in srgb, var(--primary-text-color, #fff) 6%, transparent);
@@ -129,18 +131,19 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .device-room-section:first-child { margin-top: 2px; }
 .device-room-header {
   display: flex; align-items: center; gap: 8px; padding: 6px 4px 8px;
-  font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  font-size: 14px; font-weight: 700; letter-spacing: 0.1px;
   color: var(--primary-text-color, inherit);
   border-bottom: 1px solid rgba(128, 128, 128, .22); margin-bottom: 8px;
 }
 .device-room-header ha-icon { color: var(--cd-accent); --mdc-icon-size: 18px; flex: none; }
 .device-room-header .room-count { font-size: 12px; font-weight: 500; color: var(--cd-secondary); }
 .greeting { text-align: center; margin: 0 0 10px; }
-.greeting h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.3px; }
+.greeting h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.3px; }
 .badges {
   display: flex; gap: 8px; overflow-x: auto; justify-content: center; flex-wrap: wrap;
   padding: 4px 0 14px; scrollbar-width: none;
 }
+.badges:not(:has(> :not([hidden]))) { display: none; }
 .badge {
   display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 14px 0 10px;
   border-radius: 19px; background: var(--cd-card); cursor: pointer; border: 0; white-space: nowrap;
@@ -155,6 +158,8 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-items: start; }
 @container cdpage (min-width: 960px) {
   .layout.has-side { grid-template-columns: minmax(290px, 350px) minmax(0, 1fr); }
+  .layout.has-side:not(:has(.side > :not([hidden]))) { grid-template-columns: minmax(0, 1fr); }
+  .layout.has-side:not(:has(.side > :not([hidden]))) .side { display: none; }
 }
 .side, .main { display: grid; gap: 12px; min-width: 0; align-content: start; }
 .rooms {
@@ -366,36 +371,36 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .swatch::after { content: ''; position: absolute; inset: -8px; }
 .swatch:active { transform: scale(0.9); }
 input[type=range].slider {
-  -webkit-appearance: none; appearance: none; flex: 1 1 0%; min-width: 0; width: 100%; height: 44px; border-radius: 14px; outline: none; cursor: pointer;
-  background: transparent;
+  -webkit-appearance: none; appearance: none; flex: 1 1 0%; min-width: 0; width: 100%; height: 28px; border-radius: 14px; outline: none; cursor: pointer;
+  background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
   touch-action: none;
   box-sizing: border-box;
-  padding: 0;
-  margin: -8px 0;
+  padding: 0 5px;
+  margin: 0;
 }
 input[type=range].slider::-webkit-slider-runnable-track {
   height: 28px;
   border-radius: 14px;
-  background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
+  background: transparent;
 }
 input[type=range].slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 6px;
-  height: 18px;
+  height: 16px;
   background-color: #fff;
   border-radius: 3px;
-  margin-top: 5px;
+  margin-top: 6px;
   border: 0;
   box-shadow: 0 1px 3px rgba(0,0,0,.4);
 }
 input[type=range].slider::-moz-range-track {
   height: 28px;
   border-radius: 14px;
-  background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
+  background: transparent;
 }
 input[type=range].slider::-moz-range-thumb {
   width: 6px;
-  height: 18px;
+  height: 16px;
   background-color: #fff;
   border-radius: 3px;
   border: 0;
@@ -582,7 +587,7 @@ input[type=range].slider::-moz-range-thumb {
 .confirm-modal-body { flex: 0 1 auto; }
 .confirm-modal-msg { margin: 0; font-size: 14px; line-height: 1.45; color: var(--primary-text-color, inherit); }
 .hint { font-size: 12px; color: var(--cd-secondary); line-height: 1.45; white-space: pre-line; }
-.section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--cd-secondary); margin-top: 4px; }
+.section-title { font-size: 13px; font-weight: 700; letter-spacing: .1px; color: var(--cd-secondary); margin-top: 4px; }
 .row-card { border-radius: var(--cd-tile-radius, 12px); background: var(--cd-tile-bg); padding: 10px 12px; display: grid; gap: 10px; min-width: 0; }
 .row-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .row-head .row-title { flex: 1; font-weight: 600; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -607,7 +612,7 @@ input[type=range].slider::-moz-range-thumb {
   background: var(--cd-tile-bg); color: var(--primary-text-color, inherit);
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
 }
-.btn.small { min-height: 36px; padding: 0 12px; border-radius: 18px; font-size: 12px; }
+.btn.small, .btn.sm { min-height: 36px; padding: 0 12px; border-radius: 18px; font-size: 12px; }
 .btn.secondary { background: var(--cd-tile-bg); border: 1px solid rgba(128,128,128,.22); color: var(--primary-text-color, inherit); }
 .btn.primary { background: var(--cd-accent); color: #fff; }
 .btn.success { background: var(--success-color, #43a047); color: #fff; }
@@ -992,7 +997,7 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .warning-level-badge {
   display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
   border-radius: 8px; font-size: 12px; font-weight: 700; color: #fff;
-  text-transform: uppercase; letter-spacing: 0.5px;
+  letter-spacing: 0.2px;
 }
 .warning-time {
   display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
@@ -1008,7 +1013,7 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 }
 .warning-instruction-title {
   display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .5px; color: #fb8c00;
+  letter-spacing: .2px; color: #fb8c00;
 }
 .warning-instruction-title ha-icon { --mdc-icon-size: 16px; }
 .warning-instruction-text { font-size: 13px; line-height: 1.5; color: var(--primary-text-color, inherit); opacity: 0.9; }
@@ -1081,36 +1086,36 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .cover-slider-label { font-size: 11px; color: var(--cd-secondary); font-weight: 600; flex: none; min-width: 0; }
 .cover-slider-wrap input[type=range].slider {
   --tile-color: #9c27b0;
-  height: 44px;
+  height: 24px;
   border-radius: 12px;
   box-sizing: border-box;
-  padding: 0;
-  margin: -8px 0;
-  background: transparent;
+  padding: 0 5px;
+  margin: 2px 0;
+  background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
 }
 .cover-slider-wrap input[type=range].slider::-webkit-slider-runnable-track {
   height: 24px;
   border-radius: 12px;
-  background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
+  background: transparent;
 }
 .cover-slider-wrap input[type=range].slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 6px;
-  height: 16px;
+  height: 14px;
   background-color: #fff;
   border-radius: 3px;
-  margin-top: 4px;
+  margin-top: 5px;
   border: 0;
   box-shadow: 0 1px 3px rgba(0,0,0,.4);
 }
 .cover-slider-wrap input[type=range].slider::-moz-range-track {
   height: 24px;
   border-radius: 12px;
-  background: linear-gradient(to right, var(--tile-color) var(--val, 0%), rgba(128,128,128,.25) var(--val, 0%));
+  background: transparent;
 }
 .cover-slider-wrap input[type=range].slider::-moz-range-thumb {
   width: 6px;
-  height: 16px;
+  height: 14px;
   background-color: #fff;
   border-radius: 3px;
   border: 0;
@@ -1895,7 +1900,7 @@ details.adv-options summary {
 
 .kpi-grid {
   display: grid; gap: 10px; min-width: 0;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 148px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 175px), 1fr));
 }
 .kpi-card {
   background: var(--cd-tile-bg); border-radius: var(--cd-tile-radius, 12px);
@@ -1905,10 +1910,69 @@ details.adv-options summary {
 @media (hover: hover) {
   .kpi-card:hover { border-color: rgba(128,128,128,.32); }
 }
-.kpi-top { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--cd-secondary); text-transform: uppercase; letter-spacing: .4px; }
+.kpi-top {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  font-size: 12px; font-weight: 600; color: var(--cd-secondary); letter-spacing: .1px;
+}
+.kpi-top span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kpi-top ha-icon { --mdc-icon-size: 16px; color: var(--kpi-color, var(--cd-accent)); flex: none; }
-.kpi-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kpi-sub { font-size: 11px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kpi-val { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kpi-sub { font-size: 12px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.badge-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: var(--cd-tile-bg); border: 1px solid var(--cd-border);
+  color: var(--cd-text); white-space: nowrap;
+}
+.badge-chip ha-icon { --mdc-icon-size: 15px; flex: none; }
+.empty-hint {
+  padding: 18px 14px; border-radius: var(--cd-tile-radius, 12px);
+  background: var(--cd-tile-bg); color: var(--cd-secondary);
+  font-size: 13px; text-align: center; line-height: 1.45;
+}
+.section-label {
+  font-size: 13px; font-weight: 700; color: var(--cd-secondary);
+  padding: 2px 2px 0;
+}
+.filter-chips {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0;
+}
+.filter-chip {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 32px;
+  padding: 0 12px; border-radius: 999px; border: 1px solid var(--cd-border);
+  background: var(--cd-tile-bg); color: var(--cd-text);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background .14s, border-color .14s, color .14s;
+}
+.filter-chip[data-active] {
+  background: color-mix(in srgb, var(--view-color, var(--cd-accent)) 18%, transparent);
+  border-color: color-mix(in srgb, var(--view-color, var(--cd-accent)) 55%, transparent);
+  color: var(--cd-text);
+}
+.blinds-room-card { gap: 0; padding: 0; overflow: hidden; }
+.blinds-room-head {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 12px 14px; border: 0; background: transparent;
+  cursor: pointer; text-align: left; min-width: 0;
+}
+.blinds-room-head-left {
+  display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;
+}
+.blinds-room-head-left ha-icon { --mdc-icon-size: 18px; color: var(--view-color, var(--cd-accent)); flex: none; }
+.blinds-room-title {
+  font-size: 14px; font-weight: 700; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.blinds-room-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.blinds-room-chevron {
+  --mdc-icon-size: 20px; color: var(--cd-secondary); transition: transform .18s ease; flex: none;
+}
+.blinds-room-card[data-open] .blinds-room-chevron { transform: rotate(180deg); }
+.blinds-room-body {
+  display: grid; gap: 8px; padding: 0 14px 14px; min-width: 0;
+}
+.blinds-room-body[hidden] { display: none; }
 
 .smoke-alert-banner {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
@@ -2042,7 +2106,7 @@ details.adv-options summary {
 /* ── More Hub & Progress Bars ── */
 .more-grid {
   display: grid; gap: 10px; min-width: 0;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 215px), 1fr));
 }
 .more-tile {
   display: flex; align-items: center; gap: 12px; padding: 14px; min-height: 64px;
@@ -2525,22 +2589,26 @@ function debounce(fn, ms) {
 
 /**
  * Sets a range slider's value and computes the exact CSS `--val` gradient stop
- * so the colored fill matches the right edge of the 6px rounded thumb pill
- * at every percentage from 0% to 100%.
+ * aligned to the geometric center of the 6px thumb inside a 5px-padded track.
  */
 function setSliderVal(slider, val) {
   if (!slider) return;
   const min = Number(slider.min || 0);
   const max = Number(slider.max || 100);
-  const v = Math.max(min, Math.min(max, Number(val)));
+  const num = Number(val);
+  const v = Number.isFinite(num) ? Math.max(min, Math.min(max, num)) : min;
   slider.value = String(v);
   if (min === 0 && v <= 0) {
     slider.style.setProperty('--val', '0%');
     return;
   }
   const p = max > min ? (v - min) / (max - min) : 0;
+  if (p >= 1) {
+    slider.style.setProperty('--val', '100%');
+    return;
+  }
   const pct = (p * 100).toFixed(2);
-  const offsetPx = ((1 - p) * 6).toFixed(2);
+  const offsetPx = ((0.5 - p) * 16).toFixed(2);
   slider.style.setProperty('--val', `calc(${pct}% + ${offsetPx}px)`);
 }
 const ROOM_ICON_OPTIONS = [
@@ -3776,6 +3844,11 @@ class EntityPicker {
 
     this.el = h('div', { class: 'entity-picker' }, this.box, this.dropdown);
 
+    this._updateBox();
+  }
+
+  setValue(val) {
+    this.value = val || '';
     this._updateBox();
   }
 
@@ -5590,16 +5663,6 @@ class RoomDetailView {
     this.el = h('div', { class: 'room-detail-page' }, head, bodyCard);
   }
 
-  _coverService(spec, action, data = {}) {
-    const rawDom = domainOf(spec.entity_id);
-    if (rawDom !== 'cover') {
-      if (action === 'open_cover') return this.hass?.callService(rawDom, 'turn_on', { entity_id: spec.entity_id });
-      if (action === 'close_cover') return this.hass?.callService(rawDom, 'turn_off', { entity_id: spec.entity_id });
-      if (action === 'stop_cover') return this.hass?.callService(rawDom, 'turn_off', { entity_id: spec.entity_id });
-    }
-    return this.hass?.callService('cover', action, { entity_id: spec.entity_id, ...data });
-  }
-
   _toggleGroup(group) {
     if (!this.hass) return;
     const states = group.ids.map((id) => this.hass.states[id]).filter(Boolean);
@@ -5993,16 +6056,36 @@ class TrashCard {
   }
 
   async _load(hass, today) {
-    const entities = (this.cfg.calendar_entities || []).filter(Boolean);
+    const states = hass?.states || {};
+    let entities = (this.cfg.calendar_entities || []).filter((id) => id && states[id]);
+    if (!entities.length && states['calendar.muellplan']) entities = ['calendar.muellplan'];
+    if (!entities.length) entities = (this.cfg.calendar_entities || []).filter(Boolean);
     if (!entities.length) { this.el.hidden = true; return; }
     this._loading = true;
     try {
       const days = Math.max(1, Number(this.cfg.next_days) || 2);
       const start = startOfDay(new Date());
       const end = new Date(start.getTime() + days * DAY);
-      const results = await Promise.all(entities.map((eid) => hass
-        .callApi('GET', `calendars/${eid}?start=${start.toISOString()}&end=${end.toISOString()}`)
-        .catch(() => [])));
+      const qs = `start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
+      const results = await Promise.all(entities.map(async (eid) => {
+        if (typeof hass.callApi === 'function') {
+          try {
+            const list = await hass.callApi('GET', `calendars/${eid}?${qs}`);
+            if (Array.isArray(list)) return list;
+          } catch (_) { /* fall back to calendar/get_events WS */ }
+        }
+        try {
+          const res = await hass.callWS({
+            type: 'calendar/get_events',
+            entity_id: eid,
+            start_date_time: start.toISOString(),
+            end_date_time: end.toISOString(),
+          });
+          return res?.events || (Array.isArray(res) ? res : []);
+        } catch (_) {
+          return [];
+        }
+      }));
       this._render(results.flat(), start, days);
       this._day = today;
       this._lastLoad = Date.now();
@@ -6614,7 +6697,8 @@ class Settings {
     this.tab = 'rooms';
     this.tabs = [
       ['rooms', 'Räume & Kacheln', () => this._tabRooms()],
-      ['home', 'Startseite & Infos', () => this._tabHome()],
+      ['home', 'Startseite', () => this._tabHome()],
+      ['infos', 'Infos & Dienste', () => this._tabInfos()],
       ['nav', 'Navigation & Design', () => this._tabNavAndDesign()],
       ['devices', 'Geräte', () => this._tabDevices()],
     ];
@@ -6798,6 +6882,116 @@ class Settings {
       onChange: (e) => { obj[key] = e.target.checked; onChange?.(e.target.checked); },
     });
     return h('label', { class: 'field check' }, input, label);
+  }
+
+  _multiEntity(obj, key, label, opts = {}) {
+    obj[key] ||= [];
+    const chipsWrap = h('div', { class: 'user-chips' });
+    const renderChips = () => {
+      const list = Array.isArray(obj[key]) ? obj[key] : [];
+      if (!list.length) {
+        chipsWrap.replaceChildren(h('span', { class: 'hint' }, opts.emptyText || 'Keine Entität ausgewählt'));
+        return;
+      }
+      chipsWrap.replaceChildren(...list.map((eid, idx) => {
+        const fname = this.hass?.states?.[eid]?.attributes?.friendly_name || eid;
+        return h('span', { class: 'badge-chip', style: { gap: '6px' } },
+          h('span', { title: eid }, fname),
+          h('button', {
+            type: 'button',
+            class: 'mini-btn',
+            style: { width: '20px', height: '20px', minWidth: '20px', minHeight: '20px' },
+            'aria-label': `${fname} entfernen`,
+            onClick: () => {
+              obj[key].splice(idx, 1);
+              renderChips();
+              opts.onChange?.(obj[key]);
+            },
+          }, icon('mdi:close')));
+      }));
+    };
+
+    const picker = this._track(new EntityPicker({
+      hass: this.hass,
+      value: '',
+      placeholder: opts.placeholder || 'Entität hinzufügen...',
+      domain: opts.domain,
+      filter: opts.filter,
+      allowClear: false,
+      onChange: (val) => {
+        if (!val) return;
+        obj[key] ||= [];
+        if (!obj[key].includes(val)) {
+          obj[key].push(val);
+          renderChips();
+          opts.onChange?.(obj[key]);
+        }
+        picker.setValue?.('');
+      },
+    }));
+    renderChips();
+    return this._field(label, h('div', { style: { display: 'grid', gap: '8px', minWidth: '0' } }, chipsWrap, picker.el));
+  }
+
+  _navPathField(obj, key, label) {
+    const cur = obj[key] || '';
+    const known = VIEW_NAV_CHOICES.filter(([v]) => v).map(([v, l]) => [
+      v.startsWith('companion:') ? `/lovelace/${v.slice('companion:'.length)}` : v,
+      l,
+    ]);
+    const isKnown = known.some(([p]) => p === cur);
+    const mode = { sel: !cur ? '' : (isKnown ? cur : '__custom__') };
+    const wrap = h('div', { style: { display: 'grid', gap: '6px', minWidth: '0' } });
+    const customInput = h('input', {
+      type: 'text',
+      value: isKnown ? '' : cur,
+      placeholder: '/lovelace/... oder /todo?entity_id=...',
+      hidden: mode.sel !== '__custom__',
+      onInput: (e) => {
+        const v = e.target.value;
+        if (v) obj[key] = v; else delete obj[key];
+      },
+    });
+    const cdd = this._track(new CustomDropdown({
+      options: [
+        { value: '', label: 'Kein Ziel' },
+        ...known.map(([v, l]) => ({ value: v, label: l })),
+        { value: '__custom__', label: 'Benutzerdefinierter Pfad...' },
+      ],
+      value: mode.sel,
+      onChange: (v) => {
+        mode.sel = v;
+        customInput.hidden = v !== '__custom__';
+        if (v && v !== '__custom__') obj[key] = v;
+        else if (!v) delete obj[key];
+        else obj[key] = customInput.value || '';
+      },
+    }));
+    wrap.append(cdd.el, customInput);
+    return this._field(label, wrap);
+  }
+
+  _serviceField(obj, key, label) {
+    const cur = obj[key] || '';
+    const svcs = [];
+    const reg = this.hass?.services || {};
+    for (const [dom, actions] of Object.entries(reg)) {
+      if (!actions || typeof actions !== 'object') continue;
+      for (const act of Object.keys(actions)) {
+        svcs.push(`${dom}.${act}`);
+      }
+    }
+    svcs.sort();
+    const common = ['input_boolean.turn_on', 'input_boolean.toggle', 'script.turn_on', 'light.toggle', 'switch.toggle', 'homeassistant.toggle'];
+    const allOpts = [...new Set([...(cur ? [cur] : []), ...common, ...svcs.slice(0, 60)])];
+    const cdd = this._track(new CustomDropdown({
+      options: [{ value: '', label: 'Dienst wählen...' }, ...allOpts.map((s) => ({ value: s, label: s }))],
+      value: cur,
+      onChange: (v) => {
+        if (v) obj[key] = v; else delete obj[key];
+      },
+    }));
+    return this._field(label, cdd.el);
   }
 
   _csv(obj, key, label, placeholder = '') {
@@ -7123,21 +7317,15 @@ class Settings {
     ];
   }
 
-  // ═══════════ TAB 2: Startseite & Infos ═══════════
+  // ═══════════ TAB 2: Startseite ═══════════
   _tabHome() {
     const d = this.draft;
     d.badges ||= [];
-    d.warning ||= {};
-    d.announce ||= {};
-    d.announce.chips ||= [];
     d.persons ||= [];
-    d.trash ||= {};
-    d.trash.patterns ||= [];
-    d.trash.calendar_entities ||= [];
 
     return [
       this._title('Begrüßung'),
-      h('div', { class: 'fields' }, this._entity(d, 'greeting_entity', 'Begrüßungs-Sensor (optional)')),
+      h('div', { class: 'fields' }, this._entity(d, 'greeting_entity', 'Begrüßungs-Sensor (optional)', { domain: 'sensor' })),
       this._hint('• Leer = automatische Tageszeit-Begrüßung\n• Sensorwert ersetzt Text'),
 
       this._title('Status-Badges'),
@@ -7158,8 +7346,8 @@ class Settings {
             this._check(b, 'show_name', 'Name anzeigen'),
             this._check(b, 'show_state', 'Status anzeigen'),
             this._select(b, 'tap', 'Bei Tipp', TAP_OPTIONS, 'more-info', () => rerender()),
-            ...(tapMode === 'navigate' ? [this._text(b, 'path', 'Pfad / Ansicht', { placeholder: '/lovelace/solar' })] : []),
-            ...(tapMode === 'service' ? [this._text(b, 'service', 'Dienst', { placeholder: 'input_boolean.turn_on' })] : []),
+            ...(tapMode === 'navigate' ? [this._navPathField(b, 'path', 'Ziel-Ansicht / Pfad')] : []),
+            ...(tapMode === 'service' ? [this._serviceField(b, 'service', 'Dienst')] : []),
             this._select(b, 'visible_when', 'Sichtbarkeit', VISIBLE_OPTIONS, 'always', () => rerender()),
             ...(visMode !== 'always' ? [this._text(b, 'visible_value', 'Vergleichswert', { placeholder: '0 / unavailable, off' })] : []),
           ];
@@ -7167,43 +7355,45 @@ class Settings {
         addLabel: 'Badge hinzufügen',
       }),
 
-      this._title('Wetterwarnung'),
-      h('div', { class: 'fields' },
-        this._entity(d.warning, 'entity_id', 'Warnstufen-Sensor'),
-        this._text(d.warning, 'headline_attribute', 'Attribut für Überschrift', { placeholder: 'warning_1_headline' }),
-        this._text(d.warning, 'path', 'Pfad bei Tipp', { placeholder: '/dashboard-warnungen/dash-warnungen' })),
-      this._hint('• Anzeige ab Warnstufe > 0\n• Rauchmelder immer aktiv'),
-
-      this._title('Ankündigung'),
-      h('div', { class: 'fields' },
-        this._entity(d.announce, 'entity_id', 'Skript / Entität'),
-        this._text(d.announce, 'name', 'Anzeigename'),
-        this._icon(d.announce, 'icon', 'Icon'),
-        this._entity(d.announce, 'chips_visible_entity', 'Chip-Verfügbarkeit (Sensor)')),
-      this._list(d.announce.chips, {
-        groupKey: 'achip',
-        rowTitle: (c) => c.entity_id || 'Chip',
-        make: () => ({ entity_id: '', icon: '' }),
-        fields: (c) => [this._entity(c, 'entity_id', 'Entität'), this._icon(c, 'icon', 'Icon')],
-        addLabel: 'Chip hinzufügen',
-      }),
-
       this._title('Personen'),
       this._hint('• Anzeige nur „Zuhause“\n• Pro Benutzer filterbar'),
       this._list(d.persons, {
         groupKey: 'person',
-        rowTitle: (p) => p.entity_id || 'Person',
+        rowTitle: (p) => this.hass?.states?.[p.entity_id]?.attributes?.friendly_name || p.entity_id || 'Person',
         make: () => ({ entity_id: '', users: [] }),
         fields: (p) => {
           p.users ||= [];
-          return [this._entity(p, 'entity_id', 'Person / Tracker'), this._usersField(p.users, 'Sichtbar für')];
+          return [
+            this._entity(p, 'entity_id', 'Person / Tracker', { domain: ['person', 'device_tracker'] }),
+            this._usersField(p.users, 'Sichtbar für'),
+          ];
         },
         addLabel: 'Person hinzufügen',
       }),
+    ];
+  }
 
+  // ═══════════ TAB 3: Infos & Dienste ═══════════
+  _tabInfos() {
+    const d = this.draft;
+    d.warning ||= {};
+    d.announce ||= {};
+    d.announce.chips ||= [];
+    d.trash ||= {};
+    d.trash.patterns ||= [];
+    d.trash.calendar_entities ||= [];
+    d.views ||= {};
+    const moreCfg = (d.views.more ||= {});
+
+    return [
       this._title('Müllkalender'),
+      this._hint('• Mehrere Kalender per Picker wählbar\n• Vorschau & Tonnenfarben pro Termin'),
       h('div', { class: 'fields' },
-        this._csv(d.trash, 'calendar_entities', 'Kalender (kommagetrennt)', 'calendar.muellplan'),
+        this._multiEntity(d.trash, 'calendar_entities', 'Kalender-Entitäten', {
+          domain: 'calendar',
+          placeholder: 'Kalender suchen...',
+          emptyText: 'Noch kein Kalender verknüpft',
+        }),
         this._text(d.trash, 'next_days', 'Vorschau (Tage)', { type: 'number' })),
       this._list(d.trash.patterns, {
         groupKey: 'trash',
@@ -7231,10 +7421,37 @@ class Settings {
         },
         addLabel: 'Tonne hinzufügen',
       }),
+
+      this._title('Wetter & Außentemperatur'),
+      this._hint('• Quellen für „Mehr & Bereiche“\n• Leer = automatische Erkennung'),
+      h('div', { class: 'fields' },
+        this._entity(moreCfg, 'weather_entity', 'Wetter-Entität', { domain: 'weather' }),
+        this._entity(moreCfg, 'temp_entity', 'Außentemperatur-Sensor', { domain: 'sensor' })),
+
+      this._title('Wetterwarnung'),
+      h('div', { class: 'fields' },
+        this._entity(d.warning, 'entity_id', 'Warnstufen-Sensor', { domain: 'sensor' }),
+        this._text(d.warning, 'headline_attribute', 'Attribut für Überschrift', { placeholder: 'warning_1_headline' }),
+        this._navPathField(d.warning, 'path', 'Pfad bei Tipp')),
+      this._hint('• Anzeige ab Warnstufe > 0\n• Rauchmelder immer aktiv'),
+
+      this._title('Ankündigung'),
+      h('div', { class: 'fields' },
+        this._entity(d.announce, 'entity_id', 'Skript / Entität', { domain: ['script', 'automation', 'input_boolean'] }),
+        this._text(d.announce, 'name', 'Anzeigename'),
+        this._icon(d.announce, 'icon', 'Icon'),
+        this._entity(d.announce, 'chips_visible_entity', 'Chip-Verfügbarkeit (Sensor)', { domain: 'sensor' })),
+      this._list(d.announce.chips, {
+        groupKey: 'achip',
+        rowTitle: (c) => this.hass?.states?.[c.entity_id]?.attributes?.friendly_name || c.entity_id || 'Chip',
+        make: () => ({ entity_id: '', icon: '' }),
+        fields: (c) => [this._entity(c, 'entity_id', 'Entität'), this._icon(c, 'icon', 'Icon')],
+        addLabel: 'Chip hinzufügen',
+      }),
     ];
   }
 
-  // ═══════════ TAB 3: Navigation & Design ═══════════
+  // ═══════════ TAB 4: Navigation & Design ═══════════
   _tabNavAndDesign() {
     this.draft.nav ||= [];
     this.draft.views ||= {};
@@ -7254,8 +7471,29 @@ class Settings {
             h('div', { class: 'acc-sub' }, v.desc)),
           this._check(vc, 'enabled', 'Aktiviert')),
         h('div', { class: 'fields' },
-          ...(v.id === 'auto' ? [this._text(vc, 'webview_url', 'Fahrzeug-Webansicht URL (optional)', { placeholder: 'http://192.168.178.188:6176/' })] : []),
-          ...(v.id === 'security' ? [this._entity(vc, 'alarm_entity', 'Alarmanlage (optional)', { domain: 'alarm_control_panel' })] : []),
+          ...(v.id === 'auto' ? [
+            this._text(vc, 'plate', 'Kennzeichen (optional)', { placeholder: 'GV-JM-13' }),
+            this._text(vc, 'entity_prefix', 'Entitäten-Präfix (optional)', { placeholder: 'bmw / cardata' }),
+            this._text(vc, 'webview_url', 'Fahrzeug-Webansicht URL (optional)', { placeholder: 'http://192.168.178.188:6176/' }),
+          ] : []),
+          ...(v.id === 'security' ? [
+            this._entity(vc, 'alarm_entity', 'Alarmanlage (optional)', { domain: 'alarm_control_panel' }),
+            this._entity(vc, 'router_entity', 'Router-Status (optional)', { domain: 'binary_sensor' }),
+            this._entity(vc, 'timer_entity', 'Rauchalarm-Timer (optional)', { domain: 'timer' }),
+            this._entity(vc, 'abort_entity', 'Alarm-Abbruch Schalter (optional)', { domain: 'input_boolean' }),
+          ] : []),
+          ...(v.id === 'solar' ? [
+            this._entity(vc, 'pv_entity', 'PV-Leistung (optional)', { domain: 'sensor' }),
+            this._entity(vc, 'house_entity', 'Hausverbrauch (optional)', { domain: 'sensor' }),
+            this._entity(vc, 'soc_entity', 'Batterie-Ladestand (optional)', { domain: 'sensor' }),
+          ] : []),
+          ...(v.id === 'printer3d' ? [
+            this._entity(vc, 'light_entity', 'Drucker-Licht (optional)', { domain: 'light' }),
+            this._text(vc, 'entity_prefix', 'Drucker-Präfix (optional)', { placeholder: '3dprinter_a1mini' }),
+          ] : []),
+          ...(v.id === 'more' ? [
+            this._entity(vc, 'router_entity', 'Router-Status (optional)', { domain: 'binary_sensor' }),
+          ] : []),
           this._usersField(vc.users, 'Sichtbar für')));
       return row;
     });
@@ -7308,7 +7546,7 @@ class Settings {
       }),
 
       this._title('Integrierte Themen-Ansichten'),
-      this._hint('• Sichtbarkeit & Zusatzoptionen pro Bereich\n• Im „Mehr“-Hub & Navigation verfügbar'),
+      this._hint('• Sichtbarkeit & Entitäten pro Bereich\n• Im „Mehr“-Hub & Navigation verfügbar'),
       ...viewCards,
 
       this._title('Licht-Farbpresets'),
@@ -7317,12 +7555,12 @@ class Settings {
     ];
   }
 
-  // ═══════════ TAB 4: Geräte ═══════════
+  // ═══════════ TAB 5: Geräte-Verwaltung ═══════════
   _tabDevices() {
     const wrap = h('div', { class: 'settings-devices-tab' });
     this._renderDevicesTab(wrap);
     return [
-      this._title('Geräte'),
+      this._title('Geräte-Verwaltung'),
       h('div', { class: 'inline-notice' },
         icon('mdi:information-outline'),
         h('span', {}, 'Geräte- & Gruppenänderungen werden sofort gespeichert.')),
@@ -9285,7 +9523,12 @@ class DeviceWizard {
     });
 
     this.smokeEntityId = smokeEntities[0]?.entity_id || devEntities.find((e) => domainOf(e.entity_id) === 'binary_sensor')?.entity_id || '';
-    this.primaryEntityId = existing?.entities?.primary
+    const savedPrimary = existing?.entities?.primary || '';
+    const validSavedPrimary = savedPrimary && (
+      controllable.some((e) => e.entity_id === savedPrimary)
+      || (this.selectedCategory === 'rauchmelder' && savedPrimary === this.smokeEntityId)
+    ) ? savedPrimary : '';
+    this.primaryEntityId = validSavedPrimary
       || controllable[0]?.entity_id
       || (this.selectedCategory === 'rauchmelder' ? this.smokeEntityId : '')
       || '';
@@ -10498,21 +10741,29 @@ class SecurityView {
     this.hass = hass;
     const states = hass.states || {};
 
+    const secCfg = this.config?.views?.security || {};
     const alarmId = this._findAlarmEntity(hass);
-    const timerSt = states['timer.rauchalarm_countdown'];
+    const timerId = secCfg.timer_entity && states[secCfg.timer_entity] ? secCfg.timer_entity : 'timer.rauchalarm_countdown';
+    const timerSt = states[timerId];
+    const abortId = secCfg.abort_entity && states[secCfg.abort_entity] ? secCfg.abort_entity : 'input_boolean.rauchalarm_abbrechen';
     const smokeSensors = Object.keys(states).filter((id) => id.startsWith('binary_sensor.') && states[id]?.attributes?.device_class === 'smoke');
     const sirens = Object.keys(states).filter((id) => (id.startsWith('switch.') || id.startsWith('siren.')) && /sirene|siren/i.test(id));
     const camIds = Object.keys(states).filter((id) => id.startsWith('camera.'));
     const windowDoors = Object.keys(states).filter((id) => id.startsWith('binary_sensor.') && ['window', 'door', 'garage_door', 'opening'].includes(states[id]?.attributes?.device_class));
     const coverAutos = Object.keys(states).filter((id) => id.startsWith('automation.') && /rollladen|jalousie/i.test(id));
-    const batteries = Object.keys(states).filter((id) => id.startsWith('binary_sensor.') === false && id.startsWith('sensor.') && states[id]?.attributes?.device_class === 'battery' && !/iphone/i.test(id));
-    const fritz = states['binary_sensor.fritz_box_7590_ax_verbindung'] || Object.values(states).find((s) => /fritz.*verbindung/i.test(s.entity_id));
+    const batteries = Object.keys(states).filter((id) => id.startsWith('sensor.') && states[id]?.attributes?.device_class === 'battery' && !/iphone|ipad|handy|phone|pixel|galaxy|watch|macbook|ios_/i.test(`${id} ${states[id]?.attributes?.friendly_name || ''}`));
+    const fritz = (secCfg.router_entity && states[secCfg.router_entity])
+      || states['binary_sensor.fritz_box_7590_ax_verbindung']
+      || Object.values(states).find((s) => /fritz.*verbindung|router.*online/i.test(s.entity_id));
+    const presenceId = secCfg.presence_entity && states[secCfg.presence_entity] ? secCfg.presence_entity : 'switch.anwesenheitssimulation';
+    const pumpId = secCfg.water_pump_entity && states[secCfg.water_pump_entity] ? secCfg.water_pump_entity : 'switch.garten_wasserpumpe_fenster';
 
     const trackedIds = [
       alarmId,
-      'timer.rauchalarm_countdown',
-      'switch.anwesenheitssimulation',
-      'switch.garten_wasserpumpe_fenster',
+      timerId,
+      abortId,
+      presenceId,
+      pumpId,
       fritz?.entity_id,
       ...smokeSensors,
       ...sirens,
@@ -10536,7 +10787,7 @@ class SecurityView {
 
     const children = [];
 
-    // 1. Header
+    // 1. Header (clean — no isolated floating status chip)
     const fritzOffline = fritz && (fritz.state === 'off' || isUnavailable(fritz));
     children.push(h('div', { class: 'subview-head' },
       h('div', { class: 'subview-head-left' },
@@ -10544,12 +10795,7 @@ class SecurityView {
         h('div', { class: 'subview-hero-icon' }, icon('mdi:shield-home')),
         h('div', { style: { minWidth: '0' } },
           h('h2', { class: 'subview-title' }, 'Sicherheit'),
-          h('div', { class: 'subview-sub' }, 'Alarmanlage, Rauchmelder, Kameras & Sensoren'))),
-      fritz ? h('span', {
-        class: 'badge-tag',
-        style: fritzOffline ? { background: 'rgba(239,68,68,.2)', color: '#ef4444' } : { background: 'rgba(76,175,80,.18)', color: '#4caf50' },
-        onClick: () => moreInfo(this.el, fritz.entity_id),
-      }, icon(fritzOffline ? 'mdi:cloud-off-outline' : 'mdi:router-wireless'), fritzOffline ? 'Internet Offline' : 'Router Online') : null));
+          h('div', { class: 'subview-sub' }, 'Alarmanlage, Rauchmelder, Kameras & Sensoren')))));
 
     // 2. Active Smoke Alarm or Timer Banner
     const activeSmokes = smokeSensors.filter((id) => ['on', 'detected', 'smoke'].includes(states[id]?.state));
@@ -10575,13 +10821,13 @@ class SecurityView {
         }
       }
 
-      const abortEntity = states['input_boolean.rauchalarm_abbrechen'] ? 'input_boolean.rauchalarm_abbrechen' : null;
+      const abortEntity = states[abortId] ? abortId : null;
       children.push(h('div', { class: 'smoke-alert-banner' },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
           icon('mdi:fire-alert'),
           h('div', {},
             h('div', { style: { fontWeight: '800', fontSize: '15px', color: '#fecaca' } },
-              activeSmokes.length ? `RAUCH ERKANNT (${activeSmokes.map((id) => states[id]?.attributes?.friendly_name || id).join(', ')})` : 'Rauchalarm-Countdown aktiv'),
+              activeSmokes.length ? `Rauch erkannt (${activeSmokes.map((id) => states[id]?.attributes?.friendly_name || id).join(', ')})` : 'Rauchalarm-Countdown aktiv'),
             h('div', { class: 'hint', style: { color: '#fee2e2' } }, '• Sirenen-Auslösung prüfen\n• Abbruch über Button'))),
         timerActive ? timerDigits : null,
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
@@ -10591,7 +10837,7 @@ class SecurityView {
           }, icon('mdi:smoke-detector-variant-off'), 'Rauchalarm abbrechen') : null,
           timerActive ? h('button', {
             type: 'button', class: 'btn secondary',
-            onClick: () => hass.callService('timer', 'cancel', { entity_id: 'timer.rauchalarm_countdown' }),
+            onClick: () => hass.callService('timer', 'cancel', { entity_id: timerId }),
           }, 'Timer stoppen') : null)));
     }
 
@@ -10650,8 +10896,8 @@ class SecurityView {
 
     // 4. Quick Security Toggles (Presence Sim, Water Pump, Sirens)
     const quickEntities = [
-      { id: 'switch.anwesenheitssimulation', name: 'Anwesenheitssimulation', icon: 'mdi:home-clock', color: '#8b5cf6' },
-      { id: 'switch.garten_wasserpumpe_fenster', name: 'Garten Wasserpumpe', icon: 'mdi:water-pump', color: '#0ea5e9' },
+      { id: presenceId, name: 'Anwesenheitssimulation', icon: 'mdi:home-clock', color: '#8b5cf6' },
+      { id: pumpId, name: 'Garten Wasserpumpe', icon: 'mdi:water-pump', color: '#0ea5e9' },
       ...sirens.map((id) => ({
         id,
         name: states[id]?.attributes?.friendly_name || id,
@@ -10749,9 +10995,9 @@ class SecurityView {
             },
             h('div', { class: 'kpi-top' },
               icon(alarm ? 'mdi:fire-alert' : 'mdi:smoke-detector'),
-              st?.attributes?.friendly_name || id),
+              h('span', {}, st?.attributes?.friendly_name || id)),
             h('div', { class: 'kpi-val', style: { fontSize: '15px', color: alarm ? '#ef4444' : (unav ? 'var(--cd-secondary)' : '#4caf50') } },
-              unav ? 'Nicht verfügbar' : (alarm ? 'RAUCH!' : 'OK · Kein Rauch')));
+              unav ? 'Nicht verfügbar' : (alarm ? 'Rauchalarm' : 'OK · Kein Rauch')));
           }))));
     }
 
@@ -10791,19 +11037,38 @@ class SecurityView {
           }))));
     }
 
-    if (batteries.length) {
-      const sortedBat = [...batteries].sort((a, b) => Number(states[a]?.state ?? 999) - Number(states[b]?.state ?? 999)).slice(0, 16);
+    const batThreshold = Number(secCfg.battery_threshold ?? 20);
+    const critBat = batteries
+      .map((id) => {
+        const st = states[id];
+        const raw = st?.state;
+        const val = raw != null && raw !== '' ? Number(raw) : NaN;
+        return { id, st, val, name: st?.attributes?.friendly_name || id };
+      })
+      .filter((b) => Number.isFinite(b.val) && b.val <= batThreshold)
+      .sort((a, b) => a.val - b.val || a.name.localeCompare(b.name, 'de'));
+
+    if (critBat.length) {
       children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:battery-check-outline'), 'Geräte-Batterien (ohne iPhones)'),
+        h('div', { class: 'subview-section-head' },
+          h('div', { class: 'subview-section-title' }, icon('mdi:battery-alert'), `Kritische Geräte-Batterien (≤ ${batThreshold} %)`),
+          h('span', { class: 'badge-tag', style: { color: '#ef4444' } }, `${critBat.length} schwach`)),
         h('div', { class: 'kpi-grid' },
-          ...sortedBat.map((id) => {
-            const st = states[id];
-            const val = Number(st?.state);
-            const low = Number.isFinite(val) && val <= 25;
-            return h('div', { class: 'kpi-card', onClick: () => moreInfo(this.el, id) },
-              h('div', { class: 'kpi-top' }, icon(low ? 'mdi:battery-alert' : 'mdi:battery'), st?.attributes?.friendly_name || id),
-              h('div', { class: 'kpi-val', style: { fontSize: '16px', color: low ? '#ef4444' : 'inherit' } }, formatState(st)));
-          }))));
+          ...critBat.map((b) => h('div', { class: 'kpi-card', onClick: () => moreInfo(this.el, b.id) },
+            h('div', { class: 'kpi-top' }, icon('mdi:battery-alert'), h('span', {}, b.name)),
+            h('div', { class: 'kpi-val', style: { fontSize: '16px', color: '#ef4444' } }, formatState(b.st)))))));
+    }
+
+    if (fritz) {
+      children.push(h('div', { class: 'subview-section' },
+        h('div', { class: 'subview-section-head' },
+          h('div', { class: 'subview-section-title' }, icon(fritzOffline ? 'mdi:cloud-off-outline' : 'mdi:router-wireless'), 'System & Konnektivität')),
+        h('div', { class: 'log-row', style: { cursor: 'pointer' }, onClick: () => moreInfo(this.el, fritz.entity_id) },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1' } },
+            icon(fritzOffline ? 'mdi:router-wireless-off' : 'mdi:router-wireless'),
+            h('span', { class: 'log-row-main' }, fritz.attributes?.friendly_name || 'Router / Internet')),
+          h('span', { class: 'badge-tag', style: fritzOffline ? { color: '#ef4444' } : { color: '#4caf50' } },
+            fritzOffline ? 'Offline' : 'Online'))));
     }
 
     if (!alarmId && !smokeSensors.length && !camIds.length && !quickEntities.length) {
@@ -10858,8 +11123,9 @@ function _fmtWatts(w) {
   return abs >= 1000 ? `${(w / 1000).toFixed(2)} kW` : `${Math.round(w)} W`;
 }
 class SolarView {
-  constructor({ hass, onBack }) {
+  constructor({ hass, config, onBack }) {
     this.hass = hass;
+    this.config = config || {};
     this.onBack = onBack;
     this._destroyed = false;
     this._lastSig = '';
@@ -10869,7 +11135,7 @@ class SolarView {
 
     this.el = h('div', { class: 'subview-page', style: { '--view-color': '#f59e0b' } });
     this._buildShell();
-    if (hass) this.update(hass);
+    if (hass) this.update(hass, config);
   }
 
   destroy() {
@@ -10915,7 +11181,7 @@ class SolarView {
     this._flowValBat = batNodes.val;
     this._flowSubBat = batNodes.sub;
     this._flowValGrid = mkNode(352, 134, '#03a9f4', 'Netz');
-    this._flowValHouse = mkNode(210, 180, '#e5e7eb', 'Haus');
+    this._flowValHouse = mkNode(210, 180, 'var(--primary-text-color, #e5e7eb)', 'Haus');
 
     this._kpiWrap = h('div', { class: 'kpi-grid' });
     this._chartWrap = h('div', { class: 'solar-svg-wrap' },
@@ -10955,8 +11221,9 @@ class SolarView {
     const seq = ++this._fetchSeq;
     if (this._statsCache) this._chartWrap.style.opacity = '0.6';
 
-    const pvId = _pickState(this.hass.states, SOLAR_SENSORS.pv)?.entity_id;
-    const houseId = _pickState(this.hass.states, SOLAR_SENSORS.house)?.entity_id;
+    const sCfg = this.config?.views?.solar || {};
+    const pvId = _pickState(this.hass.states, [sCfg.pv_entity, ...SOLAR_SENSORS.pv].filter(Boolean))?.entity_id;
+    const houseId = _pickState(this.hass.states, [sCfg.house_entity, ...SOLAR_SENSORS.house].filter(Boolean))?.entity_id;
     const entityIds = [pvId, houseId].filter(Boolean);
     if (!entityIds.length) {
       this._chartWrap.style.opacity = '1';
@@ -11062,20 +11329,23 @@ class SolarView {
       svg);
   }
 
-  update(hass) {
+  update(hass, config) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
+    if (config !== undefined) this.config = config;
     const states = hass.states || {};
+    const sCfg = this.config?.views?.solar || {};
+    const pick = (key, extra = []) => _pickState(states, [sCfg[key], ...(SOLAR_SENSORS[key] || []), ...extra].filter(Boolean));
 
-    const pv = _pickState(states, SOLAR_SENSORS.pv);
-    const chg = _pickState(states, SOLAR_SENSORS.charge);
-    const dis = _pickState(states, SOLAR_SENSORS.discharge);
-    const soc = _pickState(states, SOLAR_SENSORS.soc);
-    const imp = _pickState(states, SOLAR_SENSORS.imp);
-    const exp = _pickState(states, SOLAR_SENSORS.exp);
-    const house = _pickState(states, SOLAR_SENSORS.house);
-    const dy = _pickState(states, SOLAR_SENSORS.dailyYield);
-    const dh = _pickState(states, SOLAR_SENSORS.dailyHouse);
+    const pv = pick('pv_entity', SOLAR_SENSORS.pv);
+    const chg = pick('charge_entity', SOLAR_SENSORS.charge);
+    const dis = pick('discharge_entity', SOLAR_SENSORS.discharge);
+    const soc = pick('soc_entity', SOLAR_SENSORS.soc);
+    const imp = pick('grid_import_entity', SOLAR_SENSORS.imp);
+    const exp = pick('grid_export_entity', SOLAR_SENSORS.exp);
+    const house = pick('house_entity', SOLAR_SENSORS.house);
+    const dy = pick('daily_yield_entity', SOLAR_SENSORS.dailyYield);
+    const dh = pick('daily_house_entity', SOLAR_SENSORS.dailyHouse);
     const inc = _pickState(states, SOLAR_SENSORS.dailyIncome);
     const sch = _pickState(states, SOLAR_SENSORS.schimmeldry);
 
@@ -11130,7 +11400,7 @@ class SolarView {
       style: { '--kpi-color': k.color },
       onClick: () => { if (k.id) moreInfo(this.el, k.id); },
     },
-    h('div', { class: 'kpi-top' }, icon(k.icon), k.label),
+    h('div', { class: 'kpi-top' }, icon(k.icon), h('span', {}, k.label)),
     h('div', { class: 'kpi-val' }, k.val),
     k.sub ? h('div', { class: 'kpi-sub' }, k.sub) : null)));
 
@@ -11138,17 +11408,21 @@ class SolarView {
     const totalToday = _num(wToday) + _num(eToday);
     const fCards = [];
     if (wNow || eNow) {
+      const primForecastId = (wNow || eNow)?.entity_id;
       fCards.push(
-        h('div', { class: 'kpi-card', style: { '--kpi-color': '#f59e0b' } },
-          h('div', { class: 'kpi-top' }, icon('mdi:solar-power'), 'Gesamt Prognose'),
+        h('div', {
+          class: 'kpi-card', style: { '--kpi-color': '#f59e0b' },
+          onClick: () => { if (primForecastId) moreInfo(this.el, primForecastId); },
+        },
+          h('div', { class: 'kpi-top' }, icon('mdi:solar-power'), h('span', {}, 'Gesamt Prognose')),
           h('div', { class: 'kpi-val' }, _fmtWatts(totalNow)),
           h('div', { class: 'kpi-sub' }, `Heute ca. ${totalToday.toFixed(1)} kWh`)),
         h('div', { class: 'kpi-card', style: { '--kpi-color': '#fb923c' }, onClick: () => wNow && moreInfo(this.el, wNow.entity_id) },
-          h('div', { class: 'kpi-top' }, icon('mdi:weather-sunset-down'), 'Westen'),
+          h('div', { class: 'kpi-top' }, icon('mdi:weather-sunset-down'), h('span', {}, 'Westen')),
           h('div', { class: 'kpi-val' }, _fmtWatts(_num(wNow))),
           h('div', { class: 'kpi-sub' }, `Heute ${_num(wToday).toFixed(1)} kWh${wPeak ? ` · Peak ${wPeak.state}` : ''}`)),
         h('div', { class: 'kpi-card', style: { '--kpi-color': '#38bdf8' }, onClick: () => eNow && moreInfo(this.el, eNow.entity_id) },
-          h('div', { class: 'kpi-top' }, icon('mdi:weather-sunset-up'), 'Osten'),
+          h('div', { class: 'kpi-top' }, icon('mdi:weather-sunset-up'), h('span', {}, 'Osten')),
           h('div', { class: 'kpi-val' }, _fmtWatts(_num(eNow))),
           h('div', { class: 'kpi-sub' }, `Heute ${_num(eToday).toFixed(1)} kWh${ePeak ? ` · Peak ${ePeak.state}` : ''}`)),
       );
@@ -11176,7 +11450,7 @@ function _blCoverSignature(states, rooms) {
     .filter((id) => id.startsWith('cover.'))
     .sort();
   const avail = covers.map((id) => `${id}:${isUnavailable(states[id]) ? '0' : '1'}`).join(',');
-  const roomSig = (rooms || []).map((r) => `${r.id}:${r.name}`).join('|');
+  const roomSig = (rooms || []).map((r) => `${r.area_id}:${r.name}:${r.expanded ? 1 : 0}`).join('|');
   return `${avail}##${roomSig}`;
 }
 
@@ -11198,6 +11472,8 @@ class BlindsView {
     this.onBack = onBack;
     this._destroyed = false;
     this._structSig = '';
+    this._sunFacadeSig = '';
+    this._setupSig = '';
     this._rowCtrls = new Map();
     this._logCache = null;
     this._logFetchedAt = 0;
@@ -11325,6 +11601,10 @@ class BlindsView {
 
   _updateSunAndFacades(states) {
     const sun = states['sun.sun'];
+    const sig = `${sun?.state || ''}:${sun?.attributes?.elevation ?? ''}|` + _BL_FACADES.map((f) => `${states[f.intensity]?.state || ''}:${states[f.peak]?.state || ''}`).join('|');
+    if (sig === this._sunFacadeSig) return;
+    this._sunFacadeSig = sig;
+
     if (sun) {
       const above = sun.state === 'above_horizon';
       const elev = sun.attributes?.elevation != null ? ` (${Math.round(sun.attributes.elevation)}°)` : '';
@@ -11365,13 +11645,17 @@ class BlindsView {
   _updateSetupStatus(states) {
     const cfg = states['sensor.smarthome_companion_eingerichtete_rollladen'];
     const uncfg = states['sensor.smarthome_companion_nicht_eingerichtete_rollladen'];
+    const cfgList = Array.isArray(cfg?.attributes?.configured_blinds) ? cfg.attributes.configured_blinds : [];
+    const uncfgList = Array.isArray(uncfg?.attributes?.unconfigured_blinds) ? uncfg.attributes.unconfigured_blinds : [];
+    const setupSig = `${cfg?.state ?? ''}:${cfgList.length}|${uncfg?.state ?? ''}:${uncfgList.map((b) => b.entity_id || b.name || b).join(',')}`;
+    if (setupSig === this._setupSig) return;
+    this._setupSig = setupSig;
+
     if (!cfg && !uncfg) {
       this._setupSec.hidden = true;
       return;
     }
     this._setupSec.hidden = false;
-    const cfgList = Array.isArray(cfg?.attributes?.configured_blinds) ? cfg.attributes.configured_blinds : [];
-    const uncfgList = Array.isArray(uncfg?.attributes?.unconfigured_blinds) ? uncfg.attributes.unconfigured_blinds : [];
 
     this._setupGrid.replaceChildren(
       h('div', {
@@ -11427,9 +11711,10 @@ class BlindsView {
     const entityToRoom = new Map();
     const roomById = new Map();
     for (const r of rooms) {
-      roomById.set(r.id, r);
+      if (!r?.area_id) continue;
+      roomById.set(r.area_id, r);
       for (const t of r.tiles || []) {
-        if (t.entity_id?.startsWith('cover.')) entityToRoom.set(t.entity_id, r.id);
+        if (t.entity_id?.startsWith('cover.')) entityToRoom.set(t.entity_id, r.area_id);
       }
     }
 
@@ -11443,13 +11728,14 @@ class BlindsView {
     // Order rooms matching dashboard order, followed by extra areas and __other__
     const orderedIds = [];
     for (const r of rooms) {
-      if (grouped.has(r.id)) orderedIds.push(r.id);
+      if (r?.area_id && grouped.has(r.area_id)) orderedIds.push(r.area_id);
     }
     for (const k of grouped.keys()) {
       if (k !== '__other__' && !orderedIds.includes(k)) orderedIds.push(k);
     }
     if (grouped.has('__other__')) orderedIds.push('__other__');
 
+    if (!this._roomOpen) this._roomOpen = new Map();
     const sections = [];
     for (const rId of orderedIds) {
       const ids = grouped.get(rId) || [];
@@ -11463,6 +11749,10 @@ class BlindsView {
       const areaMeta = this.hass?.areas?.[rId];
       const title = roomMeta?.name || areaMeta?.name || (rId === '__other__' ? 'Weitere Rollläden' : rId);
       const rIcon = roomMeta?.icon || areaMeta?.icon || 'mdi:window-shutter';
+      if (!this._roomOpen.has(rId)) {
+        this._roomOpen.set(rId, !!(roomMeta && roomMeta.expanded));
+      }
+      const isOpen = !!this._roomOpen.get(rId);
 
       const rows = ids.map((id) => {
         const st = states[id];
@@ -11475,19 +11765,50 @@ class BlindsView {
         return ctrl.row;
       });
 
-      sections.push(h('section', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon(rIcon), title),
-          h('div', { class: 'tile-btns' },
-            h('button', {
-              type: 'button', class: 'mini-btn', 'aria-label': `${title} öffnen`,
-              onClick: () => this.hass?.callService('cover', 'open_cover', { entity_id: ids }),
-            }, icon('mdi:arrow-up')),
-            h('button', {
-              type: 'button', class: 'mini-btn', 'aria-label': `${title} schließen`,
-              onClick: () => this.hass?.callService('cover', 'close_cover', { entity_id: ids }),
-            }, icon('mdi:arrow-down')))),
-        h('div', { class: 'cover-detail-list' }, ...rows)));
+      const body = h('div', { class: 'blinds-room-body', hidden: !isOpen },
+        h('div', { class: 'cover-detail-list' }, ...rows));
+      const card = h('section', { class: 'subview-section blinds-room-card' });
+      if (isOpen) card.setAttribute('data-open', '');
+
+      const head = h('div', {
+        class: 'blinds-room-head',
+        role: 'button',
+        tabindex: '0',
+        'aria-expanded': isOpen ? 'true' : 'false',
+        onClick: () => {
+          const next = !this._roomOpen.get(rId);
+          this._roomOpen.set(rId, next);
+          card.toggleAttribute('data-open', next);
+          body.hidden = !next;
+          head.setAttribute('aria-expanded', next ? 'true' : 'false');
+        },
+        onKeydown: (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); head.click(); }
+        },
+      },
+        h('div', { class: 'blinds-room-head-left' },
+          icon(rIcon),
+          h('span', { class: 'blinds-room-title' }, title),
+          h('span', { class: 'badge-chip' }, `${ids.length}`)),
+        h('div', { class: 'blinds-room-actions' },
+          h('button', {
+            type: 'button', class: 'mini-btn', 'aria-label': `${title} öffnen`,
+            onClick: (e) => {
+              e.stopPropagation();
+              this.hass?.callService('cover', 'open_cover', { entity_id: ids });
+            },
+          }, icon('mdi:arrow-up')),
+          h('button', {
+            type: 'button', class: 'mini-btn', 'aria-label': `${title} schließen`,
+            onClick: (e) => {
+              e.stopPropagation();
+              this.hass?.callService('cover', 'close_cover', { entity_id: ids });
+            },
+          }, icon('mdi:arrow-down')),
+          icon('mdi:chevron-down', 'blinds-room-chevron')));
+
+      card.append(head, body);
+      sections.push(card);
     }
 
     if (!sections.length) {
@@ -11551,9 +11872,18 @@ class BlindsView {
 // Auto View: Dynamic BMW CarData Entity/Device Discovery & Configurable Volvo Webview (with HTTPS Mixed-Content Guard).
 const _AUTO_BMW_DEVICE_ID = '7ae00fdd4f8a117f65bb4f5275b021fc';
 const _AUTO_DEFAULT_VOLVO_URL = 'http://192.168.178.188:6176/';
+const _AUTO_UTILITY_RE = /(overcharge|protection|kindersicherung|child_lock|childlock|led_mode|ledmode)/i;
 
-function _autoMatchId(id) {
+function _autoMatchId(id, extraPrefix = '') {
+  if (_AUTO_UTILITY_RE.test(id)) return false;
+  if (extraPrefix && id.toLowerCase().includes(String(extraPrefix).toLowerCase())) return true;
   return /(?:^|\.)(?:.*(?:bmw|gv_jm_13|cardata).*)$/i.test(id);
+}
+
+function _autoIsUtility(st, entry) {
+  if (entry && (entry.disabled_by || ['config', 'diagnostic'].includes(entry.entity_category))) return true;
+  const hay = `${st?.entity_id || ''} ${st?.attributes?.friendly_name || ''}`;
+  return _AUTO_UTILITY_RE.test(hay);
 }
 
 function _autoClassify(states, ids) {
@@ -11564,7 +11894,7 @@ function _autoClassify(states, ids) {
 
   for (const id of ids) {
     const st = states[id];
-    if (!st) continue;
+    if (!st || _autoIsUtility(st, null)) continue;
     const dom = id.split('.')[0];
     const dc = st.attributes?.device_class || '';
     const unit = st.attributes?.unit_of_measurement || '';
@@ -11591,14 +11921,11 @@ class AutoView {
     this.config = config;
     this.onBack = onBack;
     this._destroyed = false;
-    this._deviceEntityIds = null;
-    this._loadingRegistry = false;
     this._bmwSig = '';
     this._volvoUrlRendered = null;
 
     this.el = h('div', { class: 'subview-page', style: { '--view-color': '#3b82f6' } });
     this._buildShell();
-    this._loadDeviceEntities();
     if (hass) this.update(hass, config);
   }
 
@@ -11647,47 +11974,40 @@ class AutoView {
     this.el.append(head, bmwSec, this._volvoSec);
   }
 
-  async _loadDeviceEntities() {
-    if (!this.hass || this._loadingRegistry || this._deviceEntityIds) return;
-    this._loadingRegistry = true;
-    try {
-      const reg = await this.hass.callWS({ type: 'config/entity_registry/list' });
-      if (this._destroyed) return;
-      if (Array.isArray(reg)) {
-        const matched = reg
-          .filter((e) => !e.disabled_by && (
-            e.device_id === _AUTO_BMW_DEVICE_ID ||
-            e.platform === 'bmw_cardata' ||
-            _autoMatchId(e.entity_id)
-          ))
-          .map((e) => e.entity_id);
-        this._deviceEntityIds = new Set(matched);
-        if (this.hass) this._renderBmw(this.hass.states || {});
-      }
-    } catch (_) {
-      // Fallback to state prefix scan only (non-admins or mocks)
-    } finally {
-      this._loadingRegistry = false;
-    }
-  }
-
   update(hass, config) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
-    if (config) this.config = config;
+    if (config !== undefined) this.config = config;
+    const plate = this.config?.views?.auto?.plate || 'GV-JM-13';
+    if (this._bmwPlateChip) {
+      this._bmwPlateChip.textContent = plate;
+      this._bmwPlateChip.hidden = !plate;
+    }
     this._renderBmw(hass.states || {});
     this._renderVolvo();
   }
 
   _collectBmwIds(states) {
+    const autoCfg = this.config?.views?.auto || {};
+    const extraPrefix = autoCfg.entity_prefix || '';
+    const devId = autoCfg.bmw_device_id || _AUTO_BMW_DEVICE_ID;
     const ids = new Set();
-    if (this._deviceEntityIds) {
-      for (const id of this._deviceEntityIds) {
-        if (states[id]) ids.add(id);
+    const haEnts = this.hass?.entities || {};
+    for (const [eid, entry] of Object.entries(haEnts)) {
+      if (!entry || entry.disabled_by) continue;
+      if (['config', 'diagnostic'].includes(entry.entity_category)) continue;
+      if (!states[eid]) continue;
+      if (
+        (entry.device_id === devId || entry.platform === 'bmw_cardata' || _autoMatchId(eid, extraPrefix))
+        && !_autoIsUtility(states[eid], entry)
+      ) {
+        ids.add(eid);
       }
     }
     for (const id of Object.keys(states)) {
-      if (_autoMatchId(id)) ids.add(id);
+      if (_autoMatchId(id, extraPrefix) && !_autoIsUtility(states[id], haEnts[id])) {
+        ids.add(id);
+      }
     }
     return [...ids].sort();
   }
@@ -11716,7 +12036,7 @@ class AutoView {
     },
       h('div', { class: 'kpi-top' },
         icon(st.attributes?.icon || 'mdi:car-info'),
-        st.attributes?.friendly_name || st.entity_id),
+        h('span', {}, st.attributes?.friendly_name || st.entity_id)),
       h('div', { class: 'kpi-val' }, formatState(st)),
       h('div', { class: 'kpi-sub' }, st.entity_id))));
 
@@ -11727,7 +12047,7 @@ class AutoView {
       return h('button', {
         type: 'button',
         class: `btn${active ? ' primary' : ''}`,
-        disabled: isUnavailable(st),
+        disabled: dom === 'button' ? (!st || st.state === 'unavailable') : isUnavailable(st),
         onClick: () => {
           if (!this.hass) return;
           if (dom === 'button') this.hass.callService('button', 'press', { entity_id: st.entity_id });
@@ -11823,29 +12143,43 @@ const _P3D_KNOWN = {
   speedSelect: 'select.3dprinter_a1mini_druckgeschwindigkeit',
 };
 class Printer3DView {
-  constructor({ hass, onBack }) {
+  constructor({ hass, config, onBack }) {
     this.hass = hass;
+    this.config = config || {};
     this.onBack = onBack;
     this._destroyed = false;
-    this._deviceEntityIds = null;
-    this._loadingRegistry = false;
     this._lastSig = '';
 
     this.el = h('div', { class: 'subview-page', style: { '--view-color': '#10b981' } });
     this._buildShell();
-    this._loadDeviceEntities();
-    if (hass) this.update(hass);
+    if (hass) this.update(hass, config);
   }
 
   destroy() {
     this._destroyed = true;
   }
 
+  _lightId() {
+    return this.config?.views?.printer3d?.light_entity || _P3D_LIGHT_ID;
+  }
+
+  _knownState(states, key) {
+    const baseId = _P3D_KNOWN[key];
+    if (!baseId) return null;
+    if (states[baseId]) return states[baseId];
+    const prefix = (this.config?.views?.printer3d?.entity_prefix || '').trim();
+    if (prefix && prefix !== '3dprinter_a1mini') {
+      const altId = baseId.replace('3dprinter_a1mini', prefix);
+      if (states[altId]) return states[altId];
+    }
+    return null;
+  }
+
   _buildShell() {
     this._subEl = h('div', { class: 'subview-sub' }, 'Bambu Lab A1 Mini');
     this._lightBtn = h('button', {
       type: 'button', class: 'btn', hidden: true,
-      onClick: () => this.hass?.callService('light', 'toggle', { entity_id: _P3D_LIGHT_ID }),
+      onClick: () => this.hass?.callService('light', 'toggle', { entity_id: this._lightId() }),
     }, icon('mdi:lightbulb-outline'), 'Drucker-Licht');
 
     const head = h('div', { class: 'subview-head' },
@@ -11892,47 +12226,41 @@ class Printer3DView {
     this.el.append(head, statusSec, ctrlSec, detailsSec);
   }
 
-  async _loadDeviceEntities() {
-    if (!this.hass || this._loadingRegistry || this._deviceEntityIds) return;
-    this._loadingRegistry = true;
-    try {
-      const reg = await this.hass.callWS({ type: 'config/entity_registry/list' });
-      if (this._destroyed) return;
-      if (Array.isArray(reg)) {
-        const matched = reg
-          .filter((e) => !e.disabled_by && (e.device_id === _P3D_DEVICE_ID || /3dprinter_a1mini/i.test(e.entity_id)))
-          .map((e) => e.entity_id);
-        this._deviceEntityIds = new Set(matched);
-        if (this.hass) this.update(this.hass);
-      }
-    } catch (_) {
-      // Fallback to state scan
-    } finally {
-      this._loadingRegistry = false;
-    }
-  }
-
   _collectEntityIds(states) {
+    const p3dCfg = this.config?.views?.printer3d || {};
+    const devId = p3dCfg.device_id || _P3D_DEVICE_ID;
+    const prefix = p3dCfg.entity_prefix || '3dprinter_a1mini';
+    const haEnts = this.hass?.entities || {};
     const ids = new Set();
-    if (this._deviceEntityIds) {
-      for (const id of this._deviceEntityIds) if (states[id]) ids.add(id);
+
+    for (const [eid, entry] of Object.entries(haEnts)) {
+      if (!entry || entry.disabled_by) continue;
+      if (['config', 'diagnostic'].includes(entry.entity_category)) continue;
+      if (!states[eid]) continue;
+      if (entry.device_id === devId || eid.toLowerCase().includes(prefix.toLowerCase())) {
+        ids.add(eid);
+      }
     }
     for (const id of Object.values(_P3D_KNOWN)) {
+      const altId = prefix && prefix !== '3dprinter_a1mini' ? id.replace('3dprinter_a1mini', prefix) : id;
       if (states[id]) ids.add(id);
+      if (states[altId]) ids.add(altId);
     }
     for (const id of Object.keys(states)) {
-      if (/3dprinter_a1mini/i.test(id)) ids.add(id);
+      if (id.toLowerCase().includes(prefix.toLowerCase())) ids.add(id);
     }
     return [...ids].sort();
   }
 
-  update(hass) {
+  update(hass, config) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
+    if (config !== undefined) this.config = config;
     const states = hass.states || {};
     const ids = this._collectEntityIds(states);
 
-    const lightSt = states[_P3D_LIGHT_ID];
+    const lightId = this._lightId();
+    const lightSt = states[lightId];
     if (lightSt) {
       this._lightBtn.hidden = false;
       this._lightBtn.classList.toggle('primary', lightSt.state === 'on');
@@ -11940,19 +12268,19 @@ class Printer3DView {
       this._lightBtn.hidden = true;
     }
 
-    const sig = ids.map((id) => `${id}:${states[id]?.state}:${states[id]?.attributes?.percentage ?? ''}`).join('|');
+    const sig = `${lightId}|` + ids.map((id) => `${id}:${states[id]?.state}:${states[id]?.attributes?.percentage ?? ''}`).join('|');
     if (sig === this._lastSig) return;
     this._lastSig = sig;
 
-    const stepSt = states[_P3D_KNOWN.step];
-    const taskSt = states[_P3D_KNOWN.task];
-    const remSt = states[_P3D_KNOWN.remaining];
-    const etaSt = states[_P3D_KNOWN.eta];
-    const progSt = states[_P3D_KNOWN.progress];
-    const curL = states[_P3D_KNOWN.layerCur];
-    const totL = states[_P3D_KNOWN.layerTotal];
-    const nozzleSize = states[_P3D_KNOWN.nozzleSize];
-    const nozzleType = states[_P3D_KNOWN.nozzleType];
+    const stepSt = this._knownState(states, 'step');
+    const taskSt = this._knownState(states, 'task');
+    const remSt = this._knownState(states, 'remaining');
+    const etaSt = this._knownState(states, 'eta');
+    const progSt = this._knownState(states, 'progress');
+    const curL = this._knownState(states, 'layerCur');
+    const totL = this._knownState(states, 'layerTotal');
+    const nozzleSize = this._knownState(states, 'nozzleSize');
+    const nozzleType = this._knownState(states, 'nozzleType');
 
     const stepRaw = stepSt ? String(stepSt.state) : 'offline';
     const isOffline = !stepSt || isUnavailable(stepSt) || stepRaw === 'offline';
@@ -11998,7 +12326,7 @@ class Printer3DView {
   _renderControls(states, ids) {
     const rows = [];
 
-    const fan = states[_P3D_KNOWN.fan];
+    const fan = this._knownState(states, 'fan');
     if (fan) {
       const isOn = fan.state === 'on';
       rows.push(h('div', { class: 'log-row', style: { padding: '10px 12px' } },
@@ -12012,7 +12340,7 @@ class Printer3DView {
         }, isOn ? `Ein (${fan.attributes?.percentage ?? 100}%)` : 'Aus')));
     }
 
-    const speed = states[_P3D_KNOWN.speedSelect];
+    const speed = this._knownState(states, 'speedSelect');
     if (speed && Array.isArray(speed.attributes?.options)) {
       const sel = h('select', {
         class: 'text-input',
@@ -12036,12 +12364,13 @@ class Printer3DView {
         sel));
     }
 
-    for (const [id, label, ic] of [
-      [_P3D_KNOWN.nozzleTempTarget, 'Zieltemperatur Düse', 'mdi:thermometer'],
-      [_P3D_KNOWN.bedTempTarget, 'Zieltemperatur Druckbett', 'mdi:radiator'],
+    for (const [key, label, ic] of [
+      ['nozzleTempTarget', 'Zieltemperatur Düse', 'mdi:thermometer'],
+      ['bedTempTarget', 'Zieltemperatur Druckbett', 'mdi:radiator'],
     ]) {
-      const st = states[id];
+      const st = this._knownState(states, key);
       if (!st) continue;
+      const id = st.entity_id;
       const cur = numeric(st) ?? 0;
       const step = Number(st.attributes?.step || 5);
       const min = Number(st.attributes?.min ?? 0);
@@ -12071,9 +12400,17 @@ class Printer3DView {
           return h('button', {
             type: 'button',
             class: `btn sm${isStop ? ' danger' : ''}`,
-            disabled: isUnavailable(st),
-            onClick: () => {
-              if (isStop && !window.confirm('Druckauftrag wirklich abbrechen?')) return;
+            disabled: !st || st.state === 'unavailable',
+            onClick: async () => {
+              if (isStop) {
+                const ok = await showConfirmDialog(this.el, {
+                  title: 'Druckauftrag abbrechen?',
+                  message: 'Möchtest du den laufenden Druckauftrag wirklich abbrechen?',
+                  confirmLabel: 'Abbrechen',
+                  danger: true,
+                });
+                if (!ok) return;
+              }
               this.hass?.callService('button', 'press', { entity_id: id });
             },
           }, icon(st?.attributes?.icon || 'mdi:gesture-tap-button'), st?.attributes?.friendly_name || id);
@@ -12143,6 +12480,25 @@ function _moreFmtTrashDate(ev) {
   if (diffDays > 1 && diffDays < 7) return `In ${diffDays} Tagen`;
   return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
 }
+
+function _moreEventMs(ev) {
+  const raw = ev?.start?.date || ev?.start?.dateTime || ev?.start || '';
+  if (!raw) return Infinity;
+  const ms = new Date(raw.length === 10 ? `${raw}T00:00:00` : raw).getTime();
+  return Number.isFinite(ms) ? ms : Infinity;
+}
+
+function _moreIsPhoneBattery(st) {
+  const hay = `${st?.entity_id || ''} ${st?.attributes?.friendly_name || ''}`;
+  return /iphone|ipad|handy|phone|pixel|galaxy|watch|macbook|ios_/i.test(hay);
+}
+
+const _WEATHER_DE = {
+  'clear-night': 'Klare Nacht', cloudy: 'Bewölkt', fog: 'Nebel', hail: 'Hagel',
+  lightning: 'Gewitter', 'lightning-rainy': 'Gewitter & Regen', partlycloudy: 'Teilw. bewölkt',
+  pouring: 'Starkregen', rainy: 'Regen', snowy: 'Schnee', 'snowy-rainy': 'Schneeregen',
+  sunny: 'Sonnig', windy: 'Windig', 'windy-variant': 'Windig', exceptional: 'Ausnahme',
+};
 class MoreView {
   constructor({ hass, config, user, isAdmin, onNavigate, onOpenSettings, onBack }) {
     this.hass = hass;
@@ -12154,8 +12510,11 @@ class MoreView {
     this.onBack = onBack;
     this._destroyed = false;
     this._lastSig = '';
+    this._hubSig = '';
     this._trashEvents = null;
     this._trashFetchedAt = 0;
+    this._trashCalSig = '';
+    this._batFilter = 'all';
 
     this.el = h('div', { class: 'subview-page', style: { '--view-color': '#03a9f4' } });
     this._buildShell();
@@ -12167,15 +12526,13 @@ class MoreView {
   }
 
   _buildShell() {
-    this._fritzChip = h('span', { class: 'badge-chip', hidden: true });
     const head = h('div', { class: 'subview-head' },
       h('div', { class: 'subview-head-left' },
         h('div', { class: 'subview-hero-icon' }, icon('mdi:view-grid-plus-outline')),
         h('div', { style: { minWidth: '0' } },
           h('h2', { class: 'subview-title' }, 'Mehr & Bereiche'),
-          h('div', { class: 'subview-sub' }, 'Themen, Familie, Müllplan & Helfer'))),
+          h('div', { class: 'subview-sub' }, 'Themen, Batterien, Wetter & Müllplan'))),
       h('div', { class: 'subview-actions' },
-        this._fritzChip,
         this.onBack ? h('button', { type: 'button', class: 'btn', onClick: this.onBack }, icon('mdi:arrow-left'), 'Zurück') : null));
 
     // Topic Hub Grid
@@ -12189,17 +12546,26 @@ class MoreView {
     this._peopleGrid = h('div', { class: 'kpi-grid' });
     this._peopleSec = h('section', { class: 'subview-section' },
       h('div', { class: 'subview-section-head' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:account-group-outline'), 'Personen & iPhones')),
+        h('div', { class: 'subview-section-title' }, icon('mdi:account-group-outline'), 'Personen & Smartphones')),
       this._peopleGrid);
 
-    // Climate & Trash Preview
+    // Climate, System Status & Trash Preview
     this._tempCard = h('div', { class: 'kpi-grid' });
     this._trashList = h('div', { class: 'log-list' });
     const infoSec = h('section', { class: 'subview-section' },
       h('div', { class: 'subview-section-head' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:calendar-month-outline'), 'Wetter & Müllplan')),
+        h('div', { class: 'subview-section-title' }, icon('mdi:calendar-month-outline'), 'Wetter, System & Müllplan')),
       this._tempCard,
       this._trashList);
+
+    // Full Battery Overview with filter chips & low-first sorting
+    this._batFilters = h('div', { class: 'filter-chips' });
+    this._batList = h('div', { class: 'log-list' });
+    this._batSec = h('section', { class: 'subview-section', hidden: true },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:battery-charging-80'), 'Batterie-Übersicht'),
+        this._batFilters),
+      this._batList);
 
     // Schimmeldry & Helpers
     this._helpersWrap = h('div', { class: 'log-list' });
@@ -12208,7 +12574,7 @@ class MoreView {
         h('div', { class: 'subview-section-title' }, icon('mdi:fan'), 'Schimmeldry & Automationen')),
       this._helpersWrap);
 
-    this.el.append(head, hubSec, this._peopleSec, infoSec, this._helpersSec);
+    this.el.append(head, hubSec, this._peopleSec, infoSec, this._batSec, this._helpersSec);
   }
 
   _viewVisible(viewId) {
@@ -12223,6 +12589,12 @@ class MoreView {
   }
 
   _renderHub() {
+    const navSig = (this.config?.nav || []).map((n) => `${n.path || ''}:${n.view || ''}:${n.name || ''}:${n.icon || ''}:${n.show_in_more !== false ? 1 : 0}`).join('|');
+    const viewsSig = Object.entries(this.config?.views || {}).map(([k, v]) => `${k}:${v?.enabled !== false ? 1 : 0}:${v?.title || ''}:${v?.icon || ''}:${v?.color || ''}:${(v?.users || v?.visible_users || []).join(',')}`).join('|');
+    const hubSig = `${this.isAdmin ? 1 : 0}#${this.user?.id || ''}#${navSig}#${viewsSig}`;
+    if (hubSig === this._hubSig) return;
+    this._hubSig = hubSig;
+
     const hubOrder = ['auto', 'printer3d', 'blinds', 'solar', 'security'];
     const tiles = [];
 
@@ -12241,8 +12613,8 @@ class MoreView {
       },
         h('div', { class: 'more-tile-icon' }, icon(ic)),
         h('div', { style: { minWidth: '0', flex: '1' } },
-          h('div', { style: { fontSize: '14px', fontWeight: '700' } }, title),
-          h('div', { style: { fontSize: '11.5px', color: 'var(--cd-secondary)' } }, def.desc || def.subtitle || 'Bereich öffnen')),
+          h('div', { style: { fontSize: '14px', fontWeight: '700', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, title),
+          h('div', { style: { fontSize: '11.5px', color: 'var(--cd-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, def.desc || def.subtitle || 'Bereich öffnen')),
         icon('mdi:chevron-right')));
     }
 
@@ -12261,6 +12633,38 @@ class MoreView {
     this._hubGrid.replaceChildren(...tiles);
   }
 
+  _trashCalendars(states) {
+    const configured = (this.config?.trash?.calendar_entities || []).filter((id) => id && states[id]);
+    if (configured.length) return configured;
+    if (states['calendar.muellplan']) return ['calendar.muellplan'];
+    return Object.keys(states).filter((id) => id.startsWith('calendar.') && /m[uü]ll|abfall|trash/i.test(id));
+  }
+
+  _weatherEntity(states) {
+    const cfgId = this.config?.views?.more?.weather_entity || this.config?.weather_entity;
+    if (cfgId && states[cfgId]) return cfgId;
+    if (states['weather.forecast_home']) return 'weather.forecast_home';
+    return Object.keys(states).find((id) => id.startsWith('weather.')) || '';
+  }
+
+  _tempEntity(states) {
+    const cfgId = this.config?.views?.more?.temp_entity;
+    if (cfgId && states[cfgId]) return cfgId;
+    if (states['sensor.aussentemperatur_fallback']) return 'sensor.aussentemperatur_fallback';
+    return Object.keys(states).find((id) => (
+      id.startsWith('sensor.')
+      && states[id]?.attributes?.device_class === 'temperature'
+      && /aussen|außen|outdoor|exterior/i.test(`${id} ${states[id]?.attributes?.friendly_name || ''}`)
+    )) || '';
+  }
+
+  _routerEntity(states) {
+    const cfgId = this.config?.views?.more?.router_entity || this.config?.views?.security?.router_entity;
+    if (cfgId && states[cfgId]) return cfgId;
+    if (states['binary_sensor.fritz_box_7590_ax_verbindung']) return 'binary_sensor.fritz_box_7590_ax_verbindung';
+    return Object.keys(states).find((id) => /fritz.*verbindung|router.*online/i.test(id)) || '';
+  }
+
   update(hass, config, user, isAdmin) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
@@ -12271,31 +12675,40 @@ class MoreView {
     this._renderHub();
 
     const states = hass.states || {};
-    const fritz = states['binary_sensor.fritz_box_7590_ax_verbindung'];
-    if (fritz) {
-      this._fritzChip.hidden = false;
-      const online = fritz.state === 'on';
-      this._fritzChip.textContent = online ? 'Fritz!Box Online' : 'Fritz!Box Offline';
-      this._fritzChip.style.color = online ? '#10b981' : '#ef4444';
-    } else {
-      this._fritzChip.hidden = true;
-    }
+    const cals = this._trashCalendars(states);
+    const weatherId = this._weatherEntity(states);
+    const tempId = this._tempEntity(states);
+    const routerId = this._routerEntity(states);
+    const batIds = Object.keys(states)
+      .filter((id) => id.startsWith('sensor.') && states[id]?.attributes?.device_class === 'battery')
+      .sort();
 
     const trackedIds = [
       ..._MORE_PEOPLE_TRACKERS.flatMap((p) => [p.tracker, p.battery]),
-      'sensor.aussentemperatur_fallback',
-      'calendar.muellplan',
+      ...((this.config?.persons || []).map((p) => p.entity_id).filter(Boolean)),
+      weatherId,
+      tempId,
+      routerId,
+      ...cals,
+      ...batIds,
       ..._MORE_SCHIMMELDRY.map((s) => s.id),
-    ];
-    const sig = trackedIds.map((id) => `${id}:${states[id]?.state}`).join('|');
+    ].filter(Boolean);
+
+    const sig = trackedIds.map((id) => `${id}:${states[id]?.state}`).join('|') + `|bf:${this._batFilter}`;
     if (sig !== this._lastSig) {
       this._lastSig = sig;
       this._renderPeople(states);
       this._renderTempAndTrash(states);
+      this._renderBatteries(states, batIds);
       this._renderHelpers(states);
     }
 
-    if (Date.now() - this._trashFetchedAt > 300000) {
+    const calSig = cals.join(',');
+    if (calSig !== this._trashCalSig) {
+      this._trashCalSig = calSig;
+      this._trashFetchedAt = 0;
+    }
+    if (cals.length && Date.now() - this._trashFetchedAt > 300000) {
       this._fetchTrash();
     }
   }
@@ -12315,26 +12728,31 @@ class MoreView {
         style: { '--kpi-color': isHome ? '#10b981' : '#64748b' },
         onClick: () => moreInfo(this.el, (tr || bat).entity_id),
       },
-        h('div', { class: 'kpi-top' }, icon(isHome ? 'mdi:home-account' : 'mdi:account-arrow-right'), p.name),
+        h('div', { class: 'kpi-top' }, icon(isHome ? 'mdi:home-account' : 'mdi:account-arrow-right'), h('span', {}, p.name)),
         h('div', { class: 'kpi-val', style: { fontSize: '16px' } },
           tr ? (isHome ? 'Zuhause' : tr.state === 'not_home' ? 'Abwesend' : tr.state) : '—'),
         h('div', {
           class: 'kpi-sub',
           style: { color: batPct != null ? batColor : 'var(--cd-secondary)', fontWeight: '600' },
           onClick: (e) => { if (bat) { e.stopPropagation(); moreInfo(this.el, bat.entity_id); } },
-        }, bat ? `iPhone Batterie: ${formatState(bat)}` : 'Kein Akku-Sensor')));
+        }, bat ? `Akku: ${formatState(bat)}` : 'Kein Akku-Sensor')));
     }
 
     if (!cards.length) {
-      const fallbackPersons = Object.values(states).filter((s) => s.entity_id.startsWith('person.')).slice(0, 6);
+      const configuredPersons = (this.config?.persons || [])
+        .map((p) => states[p.entity_id])
+        .filter(Boolean);
+      const fallbackPersons = configuredPersons.length
+        ? configuredPersons
+        : Object.values(states).filter((s) => s.entity_id.startsWith('person.')).slice(0, 6);
       for (const s of fallbackPersons) {
         const isHome = s.state === 'home';
         cards.push(h('div', {
           class: 'kpi-card', style: { '--kpi-color': isHome ? '#10b981' : '#64748b' },
           onClick: () => moreInfo(this.el, s.entity_id),
         },
-          h('div', { class: 'kpi-top' }, icon('mdi:account'), s.attributes?.friendly_name || s.entity_id),
-          h('div', { class: 'kpi-val', style: { fontSize: '16px' } }, isHome ? 'Zuhause' : s.state)));
+          h('div', { class: 'kpi-top' }, icon('mdi:account'), h('span', {}, s.attributes?.friendly_name || s.entity_id)),
+          h('div', { class: 'kpi-val', style: { fontSize: '16px' } }, isHome ? 'Zuhause' : s.state === 'not_home' ? 'Abwesend' : s.state)));
       }
     }
 
@@ -12343,26 +12761,86 @@ class MoreView {
   }
 
   _renderTempAndTrash(states) {
-    const ext = states['sensor.aussentemperatur_fallback'];
-    this._tempCard.replaceChildren(ext
-      ? h('div', {
-          class: 'kpi-card', style: { '--kpi-color': '#4dd0e1' },
-          onClick: () => moreInfo(this.el, ext.entity_id),
-        },
-          h('div', { class: 'kpi-top' }, icon('mdi:thermometer'), 'Außentemperatur'),
-          h('div', { class: 'kpi-val' }, formatState(ext)),
-          h('div', { class: 'kpi-sub' }, 'Tippen für 24h Verlauf'))
-      : h('div', { class: 'kpi-card' },
-          h('div', { class: 'kpi-top' }, icon('mdi:thermometer'), 'Außentemperatur'),
-          h('div', { class: 'kpi-val' }, '—'),
-          h('div', { class: 'kpi-sub' }, 'Kein Sensor')));
+    const cards = [];
+    const wId = this._weatherEntity(states);
+    const wst = wId ? states[wId] : null;
+    if (wst) {
+      const wTemp = wst.attributes?.temperature;
+      const cond = _WEATHER_DE[wst.state] || wst.state;
+      const unit = this.hass?.config?.unit_system?.temperature || '°C';
+      cards.push(h('div', {
+        class: 'kpi-card', style: { '--kpi-color': '#38bdf8' },
+        onClick: () => moreInfo(this.el, wst.entity_id),
+      },
+        h('div', { class: 'kpi-top' }, icon('mdi:weather-partly-cloudy'), h('span', {}, wst.attributes?.friendly_name || 'Wetter')),
+        h('div', { class: 'kpi-val' }, wTemp != null ? `${wTemp}${unit}` : cond),
+        h('div', { class: 'kpi-sub' }, cond)));
+    }
+
+    const extId = this._tempEntity(states);
+    const ext = extId ? states[extId] : null;
+    if (ext) {
+      cards.push(h('div', {
+        class: 'kpi-card', style: { '--kpi-color': '#4dd0e1' },
+        onClick: () => moreInfo(this.el, ext.entity_id),
+      },
+        h('div', { class: 'kpi-top' }, icon('mdi:thermometer'), h('span', {}, 'Außentemperatur')),
+        h('div', { class: 'kpi-val' }, formatState(ext)),
+        h('div', { class: 'kpi-sub' }, 'Tippen für Verlauf')));
+    } else if (!wst) {
+      cards.push(h('div', { class: 'kpi-card' },
+        h('div', { class: 'kpi-top' }, icon('mdi:thermometer'), h('span', {}, 'Außentemperatur')),
+        h('div', { class: 'kpi-val' }, '—'),
+        h('div', { class: 'kpi-sub' }, 'Kein Sensor')));
+    }
+
+    const rId = this._routerEntity(states);
+    const fritz = rId ? states[rId] : null;
+    if (fritz) {
+      const online = fritz.state === 'on';
+      cards.push(h('div', {
+        class: 'kpi-card', style: { '--kpi-color': online ? '#10b981' : '#ef4444' },
+        onClick: () => moreInfo(this.el, fritz.entity_id),
+      },
+        h('div', { class: 'kpi-top' }, icon(online ? 'mdi:router-wireless' : 'mdi:router-wireless-off'), h('span', {}, 'Router')),
+        h('div', { class: 'kpi-val', style: { fontSize: '16px', color: online ? '#10b981' : '#ef4444' } }, online ? 'Online' : 'Offline'),
+        h('div', { class: 'kpi-sub' }, fritz.attributes?.friendly_name || fritz.entity_id)));
+    }
+
+    this._tempCard.replaceChildren(...cards);
     this._renderTrashList();
   }
 
+  _matchTrashPattern(summary) {
+    const s = (summary || '').toLowerCase();
+    for (const pat of this.config?.trash?.patterns || []) {
+      const p = (pat?.pattern || '').toLowerCase();
+      if (p && s.includes(p)) {
+        return {
+          icon: pat.icon || 'mdi:delete-outline',
+          color: resolveColor(pat.color) || pat.color || null,
+        };
+      }
+    }
+    if (/gelb|leichtverpack|wertstoff|grüner punkt|verpackung/.test(s)) {
+      return { icon: 'mdi:recycle-variant', color: resolveColor('amber') };
+    }
+    if (/papier|pappe|karton|blau/.test(s)) {
+      return { icon: 'mdi:newspaper', color: resolveColor('blue') };
+    }
+    if (/bio|kompost|braun|grünschnitt|laub/.test(s)) {
+      return { icon: 'mdi:flower', color: resolveColor('lime') };
+    }
+    if (/rest|hausmüll|grau|schwarz/.test(s)) {
+      return { icon: 'mdi:trash-can-outline', color: resolveColor('grey') };
+    }
+    return { icon: 'mdi:delete-outline', color: null };
+  }
+
   _renderTrashList() {
+    const cals = this._trashCalendars(this.hass?.states || {});
     if (!this._trashEvents) {
-      const cal = this.hass?.states?.['calendar.muellplan'];
-      if (!cal) {
+      if (!cals.length) {
         this._trashList.replaceChildren();
         return;
       }
@@ -12374,28 +12852,54 @@ class MoreView {
       this._trashList.replaceChildren(h('div', { class: 'empty-hint' }, 'Keine Abholungen in den nächsten 14 Tagen.'));
       return;
     }
-    this._trashList.replaceChildren(...this._trashEvents.slice(0, 6).map((ev) => h('div', {
-      class: 'log-row', style: { cursor: 'pointer' },
-      onClick: () => moreInfo(this.el, 'calendar.muellplan'),
-    },
-      h('span', { class: 'log-row-main' }, ev.summary || ev.title || 'Abholung'),
-      h('span', { class: 'log-row-time' }, _moreFmtTrashDate(ev)))));
+    this._trashList.replaceChildren(...this._trashEvents.slice(0, 8).map((ev) => {
+      const targetCal = ev._entityId || cals[0] || 'calendar.muellplan';
+      const title = ev.summary || ev.title || 'Abholung';
+      const match = this._matchTrashPattern(title);
+      return h('div', {
+        class: 'log-row', style: { cursor: 'pointer' },
+        onClick: () => moreInfo(this.el, targetCal),
+      },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1' } },
+          h('span', { style: { color: match.color || 'var(--cd-secondary)', display: 'inline-flex', flex: 'none' } }, icon(match.icon)),
+          h('span', { class: 'log-row-main' }, title)),
+        h('span', { class: 'log-row-time' }, _moreFmtTrashDate(ev)));
+    }));
   }
 
   async _fetchTrash() {
-    if (!this.hass || this._destroyed || !this.hass.states?.['calendar.muellplan']) return;
+    if (!this.hass || this._destroyed) return;
+    const cals = this._trashCalendars(this.hass.states || {});
+    if (!cals.length) return;
     this._trashFetchedAt = Date.now();
     try {
-      const start = new Date().toISOString();
-      const end = new Date(Date.now() + 14 * 86400 * 1000).toISOString();
-      const res = await this.hass.callWS({
-        type: 'calendars/get_events',
-        entity_id: 'calendar.muellplan',
-        start_date_time: start,
-        end_date_time: end,
-      });
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start.getTime() + 14 * 86400 * 1000);
+      const qs = `start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
+
+      const batches = await Promise.all(cals.map(async (eid) => {
+        try {
+          if (typeof this.hass.callApi === 'function') {
+            const list = await this.hass.callApi('GET', `calendars/${eid}?${qs}`);
+            return Array.isArray(list) ? list.map((ev) => ({ ...ev, _entityId: eid })) : [];
+          }
+          const res = await this.hass.callWS({
+            type: 'calendar/get_events',
+            entity_id: eid,
+            start_date_time: start.toISOString(),
+            end_date_time: end.toISOString(),
+          });
+          const arr = res?.events || (Array.isArray(res) ? res : []);
+          return arr.map((ev) => ({ ...ev, _entityId: eid }));
+        } catch (_) {
+          return [];
+        }
+      }));
+
       if (this._destroyed) return;
-      this._trashEvents = Array.isArray(res?.events) ? res.events : (Array.isArray(res) ? res : []);
+      const merged = batches.flat().sort((a, b) => _moreEventMs(a) - _moreEventMs(b));
+      this._trashEvents = merged;
       this._renderTrashList();
     } catch (_) {
       if (this._destroyed) return;
@@ -12404,9 +12908,94 @@ class MoreView {
     }
   }
 
+  _renderBatteries(states, batIds) {
+    if (!batIds.length) {
+      this._batSec.hidden = true;
+      return;
+    }
+    this._batSec.hidden = false;
+
+    const all = batIds.map((id) => {
+      const st = states[id];
+      const pct = numeric(st);
+      const phone = _moreIsPhoneBattery(st);
+      return {
+        id,
+        st,
+        pct,
+        phone,
+        name: st?.attributes?.friendly_name || id,
+      };
+    });
+
+    all.sort((a, b) => {
+      const va = a.pct !== null && Number.isFinite(a.pct) ? a.pct : Infinity;
+      const vb = b.pct !== null && Number.isFinite(b.pct) ? b.pct : Infinity;
+      if (va !== vb) return va - vb;
+      return a.name.localeCompare(b.name, 'de');
+    });
+
+    const lowCount = all.filter((b) => b.pct !== null && b.pct <= 25).length;
+    const deviceCount = all.filter((b) => !b.phone).length;
+    const phoneCount = all.filter((b) => b.phone).length;
+
+    const filterOpts = [
+      ['all', `Alle (${all.length})`],
+      ['low', `Niedrig ≤ 25 % (${lowCount})`],
+      ['devices', `Geräte (${deviceCount})`],
+      ['phones', `Handys (${phoneCount})`],
+    ];
+    this._batFilters.replaceChildren(...filterOpts.map(([k, lbl]) => {
+      const btn = h('button', {
+        type: 'button',
+        class: 'filter-chip',
+        onClick: () => {
+          this._batFilter = k;
+          this._lastSig = '';
+          this.update(this.hass, this.config, this.user, this.isAdmin);
+        },
+      }, lbl);
+      if (this._batFilter === k) btn.setAttribute('data-active', '');
+      return btn;
+    }));
+
+    let filtered = all;
+    if (this._batFilter === 'low') filtered = all.filter((b) => b.pct !== null && b.pct <= 25);
+    else if (this._batFilter === 'devices') filtered = all.filter((b) => !b.phone);
+    else if (this._batFilter === 'phones') filtered = all.filter((b) => b.phone);
+
+    if (!filtered.length) {
+      this._batList.replaceChildren(h('div', { class: 'empty-hint' }, 'Keine passenden Batterien in diesem Filter.'));
+      return;
+    }
+
+    this._batList.replaceChildren(...filtered.map((b) => {
+      const pct = b.pct;
+      const col = _moreBatColor(pct);
+      const label = pct !== null ? `${Math.round(pct)} %` : 'Nicht verfügbar';
+      const batIcon = pct === null
+        ? 'mdi:battery-unknown'
+        : pct <= 15 ? 'mdi:battery-alert'
+          : pct <= 35 ? 'mdi:battery-30'
+            : pct <= 65 ? 'mdi:battery-60'
+              : pct <= 90 ? 'mdi:battery-80'
+                : 'mdi:battery';
+      return h('div', {
+        class: 'log-row', style: { cursor: 'pointer' },
+        onClick: () => moreInfo(this.el, b.id),
+      },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1' } },
+          h('span', { style: { color: col, display: 'inline-flex', flex: 'none' } }, icon(batIcon)),
+          h('span', { class: 'log-row-main' }, b.name)),
+        h('span', { class: 'log-row-time', style: { color: col, fontWeight: '700' } }, label));
+    }));
+  }
+
   _renderHelpers(states) {
+    const customHelpers = this.config?.views?.more?.helpers;
+    const items = Array.isArray(customHelpers) && customHelpers.length ? customHelpers : _MORE_SCHIMMELDRY;
     const rows = [];
-    for (const item of _MORE_SCHIMMELDRY) {
+    for (const item of items) {
       const st = states[item.id];
       if (!st) continue;
       if (item.toggle) {
@@ -12414,8 +13003,8 @@ class MoreView {
         const dom = item.id.split('.')[0];
         rows.push(h('div', { class: 'log-row', style: { padding: '8px 12px' } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1', cursor: 'pointer' }, onClick: () => moreInfo(this.el, item.id) },
-            icon(item.icon),
-            h('span', { class: 'log-row-main' }, st.attributes?.friendly_name || item.name)),
+            icon(item.icon || 'mdi:toggle-switch'),
+            h('span', { class: 'log-row-main' }, st.attributes?.friendly_name || item.name || item.id)),
           h('button', {
             type: 'button', class: `btn sm${isOn ? ' primary' : ''}`,
             disabled: isUnavailable(st),
@@ -12424,8 +13013,8 @@ class MoreView {
       } else {
         rows.push(h('div', { class: 'log-row', style: { cursor: 'pointer' }, onClick: () => moreInfo(this.el, item.id) },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1' } },
-            icon(item.icon),
-            h('span', { class: 'log-row-main' }, st.attributes?.friendly_name || item.name)),
+            icon(item.icon || 'mdi:information-outline'),
+            h('span', { class: 'log-row-main' }, st.attributes?.friendly_name || item.name || item.id)),
           h('span', { class: 'log-row-time' }, formatState(st))));
       }
     }
@@ -12734,10 +13323,10 @@ class CompanionDashboardPanel extends HTMLElement {
       let viewInst = null;
       const goBack = () => this._navigate(this._prevView === 'more' && ['auto', 'printer3d'].includes(activeView) ? 'more' : 'overview');
       if (activeView === 'security') viewInst = new SecurityView({ hass: this._hass, config, onBack: goBack });
-      else if (activeView === 'solar') viewInst = new SolarView({ hass: this._hass, onBack: goBack });
-      else if (activeView === 'blinds') viewInst = new BlindsView({ hass: this._hass, layout, onBack: goBack });
+      else if (activeView === 'solar') viewInst = new SolarView({ hass: this._hass, config, onBack: goBack });
+      else if (activeView === 'blinds') viewInst = new BlindsView({ hass: this._hass, layout, config, onBack: goBack });
       else if (activeView === 'auto') viewInst = new AutoView({ hass: this._hass, config, onBack: goBack });
-      else if (activeView === 'printer3d') viewInst = new Printer3DView({ hass: this._hass, onBack: goBack });
+      else if (activeView === 'printer3d') viewInst = new Printer3DView({ hass: this._hass, config, onBack: goBack });
       else if (activeView === 'more') {
         viewInst = new MoreView({
           hass: this._hass,
