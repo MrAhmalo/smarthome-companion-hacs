@@ -1,0 +1,386 @@
+// Blinds View: Sun & Facade Solar Intensity, Configured/Unconfigured Stats, Grouped Cover Controls & 24h Logbook.
+import {
+  h, icon, isUnavailable, moreInfo, areaIdForEntity, formatState,
+} from '../lib/util.js';
+import { createCoverRow, updateCoverRow } from './cover_row.js';
+
+const _BL_FACADES = [
+  { key: 'ost', label: 'Osten', intensity: 'sensor.geschatzte_sonnenintensitat_hauswand_osten', peak: 'sensor.sonneneinstrahlung_hoehepunkt_hauswand_osten' },
+  { key: 'sued', label: 'Süden', intensity: 'sensor.geschatzte_sonnenintensitat_hauswand_suden', peak: 'sensor.power_highest_peak_time_today_3' },
+  { key: 'west', label: 'Westen', intensity: 'sensor.geschatzte_sonnenintensitat_hauswand_westen', peak: 'sensor.power_highest_peak_time_today_2' },
+];
+
+function _blCoverSignature(states, rooms) {
+  const covers = Object.keys(states)
+    .filter((id) => id.startsWith('cover.'))
+    .sort();
+  const avail = covers.map((id) => `${id}:${isUnavailable(states[id]) ? '0' : '1'}`).join(',');
+  const roomSig = (rooms || []).map((r) => `${r.id}:${r.name}`).join('|');
+  return `${avail}##${roomSig}`;
+}
+
+function _blFmtTime(raw) {
+  if (raw == null) return '';
+  let d;
+  if (typeof raw === 'number') {
+    d = new Date(raw < 1e12 ? raw * 1000 : raw);
+  } else {
+    d = new Date(raw);
+  }
+  if (Number.isNaN(d.getTime())) return String(raw);
+  return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+}
+
+export class BlindsView {
+  constructor({ hass, layout, onBack }) {
+    this.hass = hass;
+    this.layout = layout;
+    this.onBack = onBack;
+    this._destroyed = false;
+    this._structSig = '';
+    this._rowCtrls = new Map();
+    this._logCache = null;
+    this._logFetchedAt = 0;
+    this._logSeq = 0;
+
+    this.el = h('div', { class: 'subview-page', style: { '--view-color': '#9c27b0' } });
+    this._buildShell();
+    if (hass) this.update(hass, layout);
+  }
+
+  destroy() {
+    this._destroyed = true;
+    this._rowCtrls.clear();
+  }
+
+  _buildShell() {
+    this._subEl = h('div', { class: 'subview-sub' }, 'Alle Rollläden nach Räumen');
+
+    const openIntegrationBtn = h('button', {
+      type: 'button', class: 'btn',
+      onClick: () => {
+        const target = '/config/integrations/integration/smarthome_companion_hacs';
+        window.history.pushState(null, '', target);
+        window.dispatchEvent(new CustomEvent('location-changed', { bubbles: true, composed: true }));
+      },
+    }, icon('mdi:clock-outline'), 'Planung');
+
+    const allOpenBtn = h('button', {
+      type: 'button', class: 'btn',
+      onClick: () => this._allAction('open_cover'),
+    }, icon('mdi:arrow-up'), 'Alle auf');
+
+    const allCloseBtn = h('button', {
+      type: 'button', class: 'btn',
+      onClick: () => this._allAction('close_cover'),
+    }, icon('mdi:arrow-down'), 'Alle zu');
+
+    const head = h('div', { class: 'subview-head' },
+      h('div', { class: 'subview-head-left' },
+        h('div', { class: 'subview-hero-icon' }, icon('mdi:window-shutter-cog')),
+        h('div', { style: { minWidth: '0' } },
+          h('h2', { class: 'subview-title' }, 'Rollläden'),
+          this._subEl)),
+      h('div', { class: 'subview-actions' },
+        allOpenBtn,
+        allCloseBtn,
+        openIntegrationBtn,
+        this.onBack ? h('button', { type: 'button', class: 'btn', onClick: this.onBack }, icon('mdi:arrow-left'), 'Zurück') : null));
+
+    // Sun & Facades
+    this._sunSummaryEl = h('span', { class: 'badge-chip' });
+    this._facadeGrid = h('div', { class: 'kpi-grid' });
+    const facadeSec = h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:weather-sunny'), 'Sonnenstand & Fassaden'),
+        this._sunSummaryEl),
+      this._facadeGrid);
+
+    // Offline warning section
+    this._offlineWrap = h('div', { class: 'log-list' });
+    this._offlineSec = h('section', { class: 'subview-section', hidden: true },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:cloud-off-outline'), 'Offline Rollläden')),
+      this._offlineWrap);
+
+    // Grouped Covers container
+    this._groupsWrap = h('div', { style: { display: 'grid', gap: '12px', minWidth: '0' } });
+
+    // Setup status (configured / unconfigured sensors)
+    this._setupGrid = h('div', { class: 'kpi-grid' });
+    this._setupLists = h('div', { style: { display: 'grid', gap: '8px' } });
+    this._setupSec = h('section', { class: 'subview-section', hidden: true },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:clipboard-check-outline'), 'Rollladen-Automatik Einrichtung')),
+      this._setupGrid,
+      this._setupLists);
+
+    // 24h Logbook
+    this._logWrap = h('div', { class: 'log-list' },
+      h('div', { class: 'log-row' }, h('span', { class: 'log-row-main' }, 'Lade Aktivitäten...')));
+    const logSec = h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:history'), 'Aktivitäten (24h)'),
+        h('button', {
+          type: 'button', class: 'btn sm',
+          onClick: () => { this._logFetchedAt = 0; this._fetchLogbook(); },
+        }, icon('mdi:refresh'), 'Aktualisieren')),
+      this._logWrap);
+
+    this.el.append(head, facadeSec, this._offlineSec, this._groupsWrap, this._setupSec, logSec);
+  }
+
+  _allAction(svc) {
+    if (!this.hass) return;
+    const ids = Object.keys(this.hass.states || {})
+      .filter((id) => id.startsWith('cover.') && !isUnavailable(this.hass.states[id]));
+    if (!ids.length) return;
+    this.hass.callService('cover', svc, { entity_id: ids });
+  }
+
+  update(hass, layout) {
+    if (this._destroyed || !hass) return;
+    this.hass = hass;
+    if (layout) this.layout = layout;
+    const states = hass.states || {};
+    const rooms = this.layout?.rooms || [];
+
+    this._updateSunAndFacades(states);
+    this._updateSetupStatus(states);
+    this._syncCoverGroups(states, rooms);
+
+    // Refresh existing persistent cover rows without DOM rebuild
+    for (const ctrl of this._rowCtrls.values()) {
+      updateCoverRow(ctrl, hass);
+    }
+
+    const activeCovers = Object.keys(states).filter((id) => id.startsWith('cover.') && !isUnavailable(states[id]));
+    const openCount = activeCovers.filter((id) => states[id].state === 'open').length;
+    this._subEl.textContent = `${openCount} von ${activeCovers.length} geöffnet`;
+
+    if (Date.now() - this._logFetchedAt > 60000) {
+      this._fetchLogbook();
+    }
+  }
+
+  _updateSunAndFacades(states) {
+    const sun = states['sun.sun'];
+    if (sun) {
+      const above = sun.state === 'above_horizon';
+      const elev = sun.attributes?.elevation != null ? ` (${Math.round(sun.attributes.elevation)}°)` : '';
+      this._sunSummaryEl.textContent = `${above ? 'Über Horizont' : 'Unter Horizont'}${elev}`;
+      this._sunSummaryEl.hidden = false;
+    } else {
+      this._sunSummaryEl.hidden = true;
+    }
+
+    const cards = [];
+    for (const fac of _BL_FACADES) {
+      const stInt = states[fac.intensity];
+      const stPeak = states[fac.peak];
+      if (!stInt && !stPeak) continue;
+      const valText = stInt ? formatState(stInt) : '—';
+      let peakText = 'Höhepunkt: —';
+      if (stPeak && !isUnavailable(stPeak)) {
+        const d = new Date(stPeak.state);
+        peakText = `Höhepunkt: ${Number.isNaN(d.getTime()) ? stPeak.state : d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`;
+      }
+      cards.push(h('div', {
+        class: 'kpi-card', style: { '--kpi-color': '#f59e0b' },
+        onClick: () => moreInfo(this.el, (stInt || stPeak).entity_id),
+      },
+        h('div', { class: 'kpi-top' }, icon('mdi:white-balance-sunny'), fac.label),
+        h('div', { class: 'kpi-val' }, valText),
+        h('div', { class: 'kpi-sub' }, peakText)));
+    }
+    if (!cards.length) {
+      cards.push(h('div', { class: 'kpi-card' },
+        h('div', { class: 'kpi-top' }, icon('mdi:weather-sunny'), 'Sonneneinstrahlung'),
+        h('div', { class: 'kpi-val' }, '—'),
+        h('div', { class: 'kpi-sub' }, 'Keine Fassaden-Sensoren')));
+    }
+    this._facadeGrid.replaceChildren(...cards);
+  }
+
+  _updateSetupStatus(states) {
+    const cfg = states['sensor.smarthome_companion_eingerichtete_rollladen'];
+    const uncfg = states['sensor.smarthome_companion_nicht_eingerichtete_rollladen'];
+    if (!cfg && !uncfg) {
+      this._setupSec.hidden = true;
+      return;
+    }
+    this._setupSec.hidden = false;
+    const cfgList = Array.isArray(cfg?.attributes?.configured_blinds) ? cfg.attributes.configured_blinds : [];
+    const uncfgList = Array.isArray(uncfg?.attributes?.unconfigured_blinds) ? uncfg.attributes.unconfigured_blinds : [];
+
+    this._setupGrid.replaceChildren(
+      h('div', {
+        class: 'kpi-card', style: { '--kpi-color': '#10b981' },
+        onClick: () => cfg && moreInfo(this.el, cfg.entity_id),
+      },
+        h('div', { class: 'kpi-top' }, icon('mdi:check-circle-outline'), 'Eingerichtet'),
+        h('div', { class: 'kpi-val' }, cfg ? String(cfg.state) : String(cfgList.length)),
+        h('div', { class: 'kpi-sub' }, 'Aktive Zeitpläne')),
+      h('div', {
+        class: 'kpi-card', style: { '--kpi-color': '#f59e0b' },
+        onClick: () => uncfg && moreInfo(this.el, uncfg.entity_id),
+      },
+        h('div', { class: 'kpi-top' }, icon('mdi:alert-circle-outline'), 'Offene Einrichtung'),
+        h('div', { class: 'kpi-val' }, uncfg ? String(uncfg.state) : String(uncfgList.length)),
+        h('div', { class: 'kpi-sub' }, 'Ohne Zeitplan')),
+    );
+
+    const blocks = [];
+    if (uncfgList.length) {
+      blocks.push(h('div', { class: 'log-list' },
+        h('div', { class: 'section-label' }, 'Noch nicht eingerichtet'),
+        ...uncfgList.slice(0, 12).map((b) => h('div', { class: 'log-row' },
+          h('span', { class: 'log-row-main' }, b.name || b.entity_id || String(b)),
+          h('span', { class: 'log-row-time' }, 'Offen')))));
+    }
+    this._setupLists.replaceChildren(...blocks);
+  }
+
+  _syncCoverGroups(states, rooms) {
+    const sig = _blCoverSignature(states, rooms);
+    if (sig === this._structSig) return;
+    this._structSig = sig;
+    this._rowCtrls.clear();
+
+    const allCovers = Object.keys(states).filter((id) => id.startsWith('cover.')).sort();
+    const offline = allCovers.filter((id) => isUnavailable(states[id]));
+    const active = allCovers.filter((id) => !isUnavailable(states[id]));
+
+    if (offline.length) {
+      this._offlineSec.hidden = false;
+      this._offlineWrap.replaceChildren(...offline.map((id) => h('div', {
+        class: 'log-row', style: { cursor: 'pointer' },
+        onClick: () => moreInfo(this.el, id),
+      },
+        h('span', { class: 'log-row-main' }, states[id]?.attributes?.friendly_name || id),
+        h('span', { class: 'log-row-time' }, states[id]?.state || 'unavailable'))));
+    } else {
+      this._offlineSec.hidden = true;
+    }
+
+    // Build entity -> room map (first from layout.rooms tiles, then HA area_id)
+    const entityToRoom = new Map();
+    const roomById = new Map();
+    for (const r of rooms) {
+      roomById.set(r.id, r);
+      for (const t of r.tiles || []) {
+        if (t.entity_id?.startsWith('cover.')) entityToRoom.set(t.entity_id, r.id);
+      }
+    }
+
+    const grouped = new Map();
+    for (const id of active) {
+      const rId = entityToRoom.get(id) || areaIdForEntity(this.hass, id) || '__other__';
+      if (!grouped.has(rId)) grouped.set(rId, []);
+      grouped.get(rId).push(id);
+    }
+
+    // Order rooms matching dashboard order, followed by extra areas and __other__
+    const orderedIds = [];
+    for (const r of rooms) {
+      if (grouped.has(r.id)) orderedIds.push(r.id);
+    }
+    for (const k of grouped.keys()) {
+      if (k !== '__other__' && !orderedIds.includes(k)) orderedIds.push(k);
+    }
+    if (grouped.has('__other__')) orderedIds.push('__other__');
+
+    const sections = [];
+    for (const rId of orderedIds) {
+      const ids = grouped.get(rId) || [];
+      ids.sort((a, b) => {
+        const na = states[a]?.attributes?.friendly_name || a;
+        const nb = states[b]?.attributes?.friendly_name || b;
+        return na.localeCompare(nb, 'de');
+      });
+
+      const roomMeta = roomById.get(rId);
+      const areaMeta = this.hass?.areas?.[rId];
+      const title = roomMeta?.name || areaMeta?.name || (rId === '__other__' ? 'Weitere Rollläden' : rId);
+      const rIcon = roomMeta?.icon || areaMeta?.icon || 'mdi:window-shutter';
+
+      const rows = ids.map((id) => {
+        const st = states[id];
+        const spec = {
+          entity_id: id,
+          name: st?.attributes?.friendly_name || id,
+        };
+        const ctrl = createCoverRow(spec, { getHass: () => this.hass });
+        this._rowCtrls.set(id, ctrl);
+        return ctrl.row;
+      });
+
+      sections.push(h('section', { class: 'subview-section' },
+        h('div', { class: 'subview-section-head' },
+          h('div', { class: 'subview-section-title' }, icon(rIcon), title),
+          h('div', { class: 'tile-btns' },
+            h('button', {
+              type: 'button', class: 'mini-btn', 'aria-label': `${title} öffnen`,
+              onClick: () => this.hass?.callService('cover', 'open_cover', { entity_id: ids }),
+            }, icon('mdi:arrow-up')),
+            h('button', {
+              type: 'button', class: 'mini-btn', 'aria-label': `${title} schließen`,
+              onClick: () => this.hass?.callService('cover', 'close_cover', { entity_id: ids }),
+            }, icon('mdi:arrow-down')))),
+        h('div', { class: 'cover-detail-list' }, ...rows)));
+    }
+
+    if (!sections.length) {
+      sections.push(h('section', { class: 'subview-section' },
+        h('div', { class: 'empty-hint' }, 'Keine Rollläden gefunden.')));
+    }
+
+    this._groupsWrap.replaceChildren(...sections);
+  }
+
+  async _fetchLogbook() {
+    if (!this.hass || this._destroyed) return;
+    const seq = ++this._logSeq;
+    this._logFetchedAt = Date.now();
+    const coverIds = Object.keys(this.hass.states || {}).filter((id) => id.startsWith('cover.'));
+    if (!coverIds.length) {
+      this._logWrap.replaceChildren(h('div', { class: 'empty-hint' }, 'Keine Rollläden vorhanden.'));
+      return;
+    }
+
+    try {
+      const start = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+      const end = new Date().toISOString();
+      const res = await this.hass.callWS({
+        type: 'logbook/get_events',
+        start_time: start,
+        end_time: end,
+        entity_ids: coverIds.slice(0, 60),
+      });
+      if (this._destroyed || seq !== this._logSeq) return;
+
+      const entries = (Array.isArray(res) ? res : [])
+        .slice(-25)
+        .reverse();
+      if (!entries.length) {
+        this._logWrap.replaceChildren(h('div', { class: 'empty-hint' }, 'Keine Aktivitäten in den letzten 24 Stunden.'));
+        return;
+      }
+
+      this._logWrap.replaceChildren(...entries.map((ev) => {
+        const label = ev.name || this.hass?.states?.[ev.entity_id]?.attributes?.friendly_name || ev.entity_id || 'Rollladen';
+        const desc = ev.message || (ev.state ? `${label}: ${ev.state}` : label);
+        const text = ev.message ? `${label} ${desc}` : desc;
+        return h('div', {
+          class: 'log-row', style: ev.entity_id ? { cursor: 'pointer' } : {},
+          onClick: () => ev.entity_id && moreInfo(this.el, ev.entity_id),
+        },
+          h('span', { class: 'log-row-main' }, text),
+          h('span', { class: 'log-row-time' }, _blFmtTime(ev.when)));
+      }));
+    } catch (_) {
+      if (this._destroyed || seq !== this._logSeq) return;
+      this._logWrap.replaceChildren(h('div', { class: 'empty-hint' }, 'Logbook aktuell nicht abrufbar.'));
+    }
+  }
+}

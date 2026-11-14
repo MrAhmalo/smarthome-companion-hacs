@@ -36,9 +36,13 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   container-type: inline-size;
   container-name: cdpage;
 }
+:host([data-lovelace]) .page {
+  padding-top: 2px;
+}
 
 /* ── Toolbar / header ── */
-.toolbar { display: flex; align-items: center; gap: 6px; min-height: 52px; padding: 4px; min-width: 0; }
+.toolbar { display: flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 2px; min-width: 0; }
+.toolbar:not(:has(> button:not([hidden]))) { display: none; }
 .toolbar .spacer { flex: 1; min-width: 8px; }
 .icon-btn {
   width: 44px; height: 44px; min-width: 44px; min-height: 44px; flex: none;
@@ -131,7 +135,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 }
 .device-room-header ha-icon { color: var(--cd-accent); --mdc-icon-size: 18px; flex: none; }
 .device-room-header .room-count { font-size: 12px; font-weight: 500; color: var(--cd-secondary); }
-.greeting { text-align: center; margin: 4px 0 12px; }
+.greeting { text-align: center; margin: 0 0 10px; }
 .greeting h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.3px; }
 .badges {
   display: flex; gap: 8px; overflow-x: auto; justify-content: center; flex-wrap: wrap;
@@ -203,7 +207,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .room-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .3s ease; }
 .room[data-open] .room-body { grid-template-rows: 1fr; }
 .room-body-inner { overflow: hidden; min-height: 0; }
-.tile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 2px 10px 10px; }
+.tile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 2px 10px 10px; min-width: 0; width: 100%; }
 @container cdpage (max-width: 340px) {
   .tile-grid, .group-sub-grid { grid-template-columns: minmax(0, 1fr); }
   .tile.wide { grid-column: span 1; }
@@ -212,7 +216,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 /* ── Tiles ── */
 .tile {
   --tile-color: var(--cd-active);
-  display: grid; gap: 8px; padding: 10px; min-width: 0; overflow: hidden; border-radius: var(--cd-tile-radius, 12px);
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px; min-width: 0; max-width: 100%; overflow: hidden; border-radius: var(--cd-tile-radius, 12px);
   background: var(--cd-tile-bg); transition: background .2s, opacity .2s;
   position: relative; touch-action: manipulation;
 }
@@ -362,7 +366,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .swatch::after { content: ''; position: absolute; inset: -8px; }
 .swatch:active { transform: scale(0.9); }
 input[type=range].slider {
-  -webkit-appearance: none; appearance: none; flex: 1; min-width: 60px; height: 44px; border-radius: 14px; outline: none; cursor: pointer;
+  -webkit-appearance: none; appearance: none; flex: 1 1 0%; min-width: 0; width: 100%; height: 44px; border-radius: 14px; outline: none; cursor: pointer;
   background: transparent;
   touch-action: none;
   box-sizing: border-box;
@@ -1048,33 +1052,33 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 
 .room-detail-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .room-detail-body {
-  display: grid; gap: 8px; padding: 8px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 8px; min-width: 0; width: 100%; max-width: 100%;
   border-radius: var(--cd-radius); background: var(--cd-card);
-  box-shadow: 0 2px 14px rgba(0,0,0,.25);
+  box-shadow: 0 2px 14px rgba(0,0,0,.25); overflow: hidden;
 }
-.room-detail-body .tile-grid { padding: 0; gap: 8px; }
-.cover-detail-list { display: grid; gap: 8px; }
+.room-detail-body .tile-grid { padding: 0; gap: 8px; min-width: 0; width: 100%; }
+.cover-detail-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; width: 100%; }
 
 .cover-detail-row {
-  display: flex; flex-direction: column; gap: 10px;
+  display: flex; flex-direction: column; gap: 10px; min-width: 0; width: 100%; max-width: 100%; overflow: hidden; position: relative;
   padding: 12px 14px; border-radius: var(--cd-tile-radius, 12px); background: var(--cd-tile-bg);
   transition: background .15s;
 }
 .cover-detail-top {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; width: 100%;
 }
-.cover-detail-info { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.cover-detail-info { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 0%; }
 .cover-detail-icon {
   width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none;
   color: #9c27b0; background: rgba(156, 39, 176, 0.18);
 }
-.cover-detail-texts { min-width: 0; }
+.cover-detail-texts { flex: 1; min-width: 0; overflow: hidden; }
 .cover-detail-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cover-detail-state { font-size: 12px; color: #ce93d8; font-weight: 500; }
+.cover-detail-state { font-size: 12px; color: #ce93d8; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cover-slider-wrap {
-  display: flex; align-items: center; gap: 10px; padding: 0 4px;
+  display: flex; align-items: center; gap: 8px; padding: 0 2px; min-width: 0; width: 100%; overflow: hidden;
 }
-.cover-slider-label { font-size: 11px; color: var(--cd-secondary); font-weight: 600; min-width: 26px; }
+.cover-slider-label { font-size: 11px; color: var(--cd-secondary); font-weight: 600; flex: none; min-width: 0; }
 .cover-slider-wrap input[type=range].slider {
   --tile-color: #9c27b0;
   height: 44px;
@@ -1390,10 +1394,10 @@ details.adv-options summary {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
-  .overlay:has(.dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog)) {
+  .overlay:has(.dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog):not(.pin-dialog)) {
     padding: 0;
   }
-  .dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog) {
+  .dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog):not(.pin-dialog) {
     width: 100%;
     height: 100vh;
     height: 100dvh;
@@ -1403,18 +1407,18 @@ details.adv-options summary {
     border-radius: 0;
     border: 0;
   }
-  .dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog) .dialog-head {
+  .dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog):not(.pin-dialog) .dialog-head {
     padding: calc(10px + var(--safe-top)) calc(10px + var(--safe-right)) 10px calc(16px + var(--safe-left));
     border-radius: 0;
   }
-  .dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog) .tabs {
+  .dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog):not(.pin-dialog) .tabs {
     padding: 4px calc(10px + var(--safe-right)) 0 calc(10px + var(--safe-left));
   }
-  .dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog) .wizard-steps {
+  .dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog):not(.pin-dialog) .wizard-steps {
     padding: 8px calc(12px + var(--safe-right)) 6px calc(12px + var(--safe-left));
     gap: 6px;
   }
-  .dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog) .dialog-body {
+  .dialog:not(.group-modal-dialog):not(.room-modal-dialog):not(.confirm-modal-dialog):not(.pin-dialog) .dialog-body {
     padding: 12px calc(14px + var(--safe-right)) 16px calc(14px + var(--safe-left));
     min-height: 0;
   }
@@ -1766,6 +1770,326 @@ details.adv-options summary {
   .wn-title { font-size: 19px; }
   .wn-features { gap: 10px; }
 }
+
+/* ── Drag & Drop + Collapsible Room & Settings Accordions ── */
+.reorder-list { display: grid; gap: 10px; min-width: 0; }
+.reorder-items { display: grid; gap: 8px; min-width: 0; position: relative; }
+.drag-handle {
+  width: 34px; height: 38px; flex: none; display: grid; place-items: center;
+  border-radius: 8px; color: var(--cd-secondary); cursor: grab;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+  transition: background .15s, color .15s;
+}
+.drag-handle.small { width: 28px; height: 32px; }
+.drag-handle:active { cursor: grabbing; color: var(--cd-accent); background: rgba(128,128,128,.14); }
+[data-dragging] {
+  position: relative; z-index: 20; opacity: 0.92;
+  box-shadow: 0 10px 28px rgba(0,0,0,.45), 0 0 0 1.5px var(--cd-accent);
+  pointer-events: none;
+}
+[data-drop-before] { box-shadow: inset 0 3px 0 var(--cd-accent); }
+[data-drop-after] { box-shadow: inset 0 -3px 0 var(--cd-accent); }
+
+.acc-toggle-head, .room-acc-head { cursor: pointer; user-select: none; gap: 8px; }
+.acc-title-wrap { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.acc-sub, .room-acc-summary {
+  font-size: 11px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.acc-chevron {
+  width: 28px; height: 28px; display: grid; place-items: center; flex: none;
+  color: var(--cd-secondary); transition: transform .22s ease;
+}
+.open > .row-head .acc-chevron { transform: rotate(180deg); color: var(--cd-accent); }
+
+.room-acc-icon {
+  width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--cd-accent) 16%, transparent); color: var(--cd-accent);
+}
+.room-acc-body {
+  display: grid; gap: 14px; padding-top: 10px;
+  border-top: 1px solid rgba(128,128,128,.16); min-width: 0;
+}
+.room-acc-footer { display: flex; justify-content: flex-start; padding-top: 4px; }
+.room-settings-form { display: grid; gap: 12px; min-width: 0; }
+.sub-tiles-list { gap: 6px; }
+.sub-tile-card {
+  border-radius: 10px; background: rgba(128,128,128,.08); padding: 4px 8px;
+  display: grid; gap: 6px; min-width: 0;
+}
+.sub-tile-card .sub-tile { border-top: 0; padding: 2px 0; }
+.sub-tile-card.is-hidden .st-name { opacity: .48; text-decoration: line-through; }
+.sub-tile-users { padding: 6px 4px 8px; border-top: 1px solid rgba(128,128,128,.12); }
+
+/* ── Per-User 3-Way Room Default Expand Pills ── */
+.user-expand-list { display: grid; gap: 6px; min-width: 0; }
+.user-expand-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  padding: 8px 10px; border-radius: 10px; background: var(--cd-card);
+  border: 1px solid rgba(128,128,128,.16); min-width: 0;
+}
+.user-expand-name {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600;
+  color: var(--primary-text-color, inherit); min-width: 0;
+}
+.user-expand-name ha-icon { --mdc-icon-size: 16px; color: var(--cd-secondary); flex: none; }
+.tri-pills {
+  display: inline-flex; padding: 2px; border-radius: 10px;
+  background: var(--cd-tile-bg); border: 1px solid rgba(128,128,128,.18); gap: 2px;
+}
+.tri-pill {
+  border: 0; background: transparent; color: var(--cd-secondary); font-size: 11px; font-weight: 600;
+  padding: 5px 9px; min-height: 28px; border-radius: 8px; cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.tri-pill[data-active] {
+  background: var(--cd-accent); color: #fff;
+}
+
+.inline-notice {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px;
+  background: color-mix(in srgb, var(--cd-accent) 12%, var(--cd-tile-bg));
+  border: 1px solid color-mix(in srgb, var(--cd-accent) 30%, transparent);
+  font-size: 12px; font-weight: 500; color: var(--primary-text-color, inherit);
+}
+.inline-notice ha-icon { --mdc-icon-size: 18px; color: var(--cd-accent); flex: none; }
+
+/* ── Bottom Navigation Enhancements ── */
+.nav-btn[data-active] {
+  background: var(--cd-accent); color: #fff;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--cd-accent) 38%, transparent);
+}
+
+/* ── Modern Redesign Subviews (Security, Solar, Auto, Blinds, 3D Print, More) ── */
+.subview-page {
+  display: flex; flex-direction: column; gap: 14px;
+  width: 100%; max-width: 1060px; margin: 0 auto; padding: 0 2px 36px; min-width: 0;
+  animation: cdFadeIn 0.2s ease-out;
+}
+.subview-head {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+  padding: 14px 16px; border-radius: var(--cd-radius); background: var(--cd-card);
+  box-shadow: 0 4px 20px rgba(0,0,0,.22); min-width: 0;
+}
+.subview-head-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 200px; }
+.subview-hero-icon {
+  width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none;
+  color: var(--view-color, var(--cd-accent));
+  background: color-mix(in srgb, var(--view-color, var(--cd-accent)) 18%, transparent);
+}
+.subview-title { margin: 0; font-size: 19px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subview-sub { font-size: 12px; color: var(--cd-secondary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subview-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.subview-section {
+  background: var(--cd-card); border-radius: var(--cd-radius); padding: 14px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0;
+  box-shadow: 0 2px 14px rgba(0,0,0,.18);
+}
+.subview-section-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+}
+.subview-section-title {
+  display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700;
+}
+.subview-section-title ha-icon { --mdc-icon-size: 18px; color: var(--view-color, var(--cd-accent)); }
+
+.kpi-grid {
+  display: grid; gap: 10px; min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 148px), 1fr));
+}
+.kpi-card {
+  background: var(--cd-tile-bg); border-radius: var(--cd-tile-radius, 12px);
+  padding: 12px 14px; display: grid; gap: 4px; min-width: 0; cursor: pointer;
+  border: 1px solid rgba(128,128,128,.12); transition: background .15s, border-color .15s;
+}
+@media (hover: hover) {
+  .kpi-card:hover { border-color: rgba(128,128,128,.32); }
+}
+.kpi-top { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--cd-secondary); text-transform: uppercase; letter-spacing: .4px; }
+.kpi-top ha-icon { --mdc-icon-size: 16px; color: var(--kpi-color, var(--cd-accent)); flex: none; }
+.kpi-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kpi-sub { font-size: 11px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.smoke-alert-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 14px 16px; border-radius: var(--cd-radius);
+  background: rgba(239, 68, 68, 0.22); border: 2px solid #ef4444;
+  box-shadow: 0 0 22px rgba(239, 68, 68, 0.35);
+  animation: cdSmokePulse 1.3s ease-in-out infinite alternate;
+}
+@keyframes cdSmokePulse {
+  from { box-shadow: 0 0 10px rgba(239, 68, 68, 0.2); }
+  to { box-shadow: 0 0 26px rgba(239, 68, 68, 0.55); }
+}
+.timer-digits { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .5px; }
+
+.alarm-hero {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  padding: 16px; border-radius: var(--cd-radius); background: var(--cd-card);
+  border: 1.5px solid color-mix(in srgb, var(--alarm-color, #4caf50) 40%, transparent);
+}
+.alarm-status-pill {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+  font-size: 13px; font-weight: 700;
+  background: color-mix(in srgb, var(--alarm-color, #4caf50) 18%, transparent);
+  color: var(--alarm-color, #4caf50);
+}
+.alarm-modes { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.alarm-mode-active {
+  background: color-mix(in srgb, var(--alarm-color, var(--cd-accent)) 20%, transparent) !important;
+  border-color: color-mix(in srgb, var(--alarm-color, var(--cd-accent)) 50%, transparent) !important;
+  color: var(--cd-text) !important;
+  opacity: .95 !important;
+}
+
+/* ── PIN Keypad Modal ── */
+.pin-dialog {
+  width: min(360px, calc(100vw - 24px - var(--safe-left) - var(--safe-right)));
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px - var(--safe-top) - var(--safe-bottom));
+  overflow: hidden;
+}
+.pin-dialog .dialog-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px 18px 16px;
+}
+.pin-mode-bar {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
+}
+.pin-mode-chip {
+  appearance: none;
+  border: 1px solid var(--cd-border);
+  background: rgba(128,128,128,.12);
+  color: var(--cd-text);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 5px;
+  cursor: pointer; font-family: inherit;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.pin-mode-chip ha-icon { --mdc-icon-size: 15px; }
+.pin-mode-chip[data-selected] {
+  background: color-mix(in srgb, var(--cd-accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--cd-accent) 55%, transparent);
+  color: var(--cd-accent);
+}
+.pin-mode-chip:disabled { opacity: .4; cursor: default; }
+.pin-dots {
+  display: flex; justify-content: center; gap: 12px; padding: 8px;
+}
+.pin-dots[data-shake] { animation: cdShake .35s ease; }
+@keyframes cdShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  50% { transform: translateX(8px); }
+  75% { transform: translateX(-5px); }
+}
+.pin-dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid rgba(128,128,128,.45); background: transparent;
+  transition: background .12s, border-color .12s, transform .12s;
+}
+.pin-dot[data-filled] {
+  background: var(--cd-accent); border-color: var(--cd-accent); transform: scale(1.1);
+}
+.pin-error {
+  text-align: center; font-size: 12px; font-weight: 600; color: #ef4444; min-height: 18px;
+}
+.pin-pad {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 4px 12px 8px;
+}
+.pin-key {
+  height: 54px; border-radius: 14px; border: 1px solid rgba(128,128,128,.2);
+  background: var(--cd-tile-bg); color: var(--primary-text-color, inherit);
+  font-size: 20px; font-weight: 700; cursor: pointer; display: grid; place-items: center;
+  transition: background .12s, transform .08s; touch-action: manipulation;
+}
+.pin-key:active { transform: scale(0.94); background: color-mix(in srgb, var(--cd-accent) 20%, var(--cd-tile-bg)); }
+
+/* ── Camera Cards ── */
+.camera-grid {
+  display: grid; gap: 12px; min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}
+.camera-card {
+  border-radius: var(--cd-tile-radius, 12px); background: var(--cd-tile-bg); overflow: hidden;
+  border: 1px solid rgba(128,128,128,.16); cursor: pointer;
+}
+.camera-frame {
+  position: relative; aspect-ratio: 16 / 9; background: #0d0d10; display: grid; place-items: center; overflow: hidden;
+}
+.camera-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.camera-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 12px; font-size: 13px; font-weight: 600;
+}
+
+/* ── Solar Flow & Trend SVGs ── */
+.solar-svg-wrap { width: 100%; overflow: hidden; }
+.solar-svg-wrap svg { display: block; width: 100%; height: auto; max-height: 290px; margin: 0 auto; }
+.flow-line { fill: none; stroke-width: 3; stroke-linecap: round; opacity: .25; transition: opacity .3s; }
+.flow-line[data-active] {
+  opacity: .95; stroke-dasharray: 8 8; animation: cdFlowDash 1.1s linear infinite;
+}
+@keyframes cdFlowDash { to { stroke-dashoffset: -16; } }
+
+/* ── More Hub & Progress Bars ── */
+.more-grid {
+  display: grid; gap: 10px; min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+}
+.more-tile {
+  display: flex; align-items: center; gap: 12px; padding: 14px; min-height: 64px;
+  border-radius: var(--cd-tile-radius, 12px); background: var(--cd-tile-bg);
+  border: 1px solid rgba(128,128,128,.14); cursor: pointer; text-align: left; min-width: 0;
+  transition: transform .12s, border-color .15s, background .15s;
+}
+.more-tile:active { transform: scale(0.97); }
+@media (hover: hover) {
+  .more-tile:hover { border-color: var(--cd-accent); background: color-mix(in srgb, var(--cd-accent) 10%, var(--cd-tile-bg)); }
+}
+.more-tile-icon {
+  width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none;
+  color: var(--tile-color, var(--cd-accent));
+  background: color-mix(in srgb, var(--tile-color, var(--cd-accent)) 18%, transparent);
+}
+.progress-bar-track {
+  width: 100%; height: 10px; border-radius: 999px; background: rgba(128,128,128,.22); overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%; border-radius: 999px; background: var(--cd-accent); transition: width .35s ease;
+}
+
+.log-list { display: grid; gap: 6px; min-width: 0; }
+.log-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 12px; border-radius: 10px; background: var(--cd-tile-bg); font-size: 12.5px; min-width: 0;
+}
+.log-row-main { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.log-row-time { flex: none; font-size: 11px; color: var(--cd-secondary); font-variant-numeric: tabular-nums; }
+
+.iframe-card {
+  width: 100%; min-height: 360px; border: 0; border-radius: 12px; background: #0f172a;
+}
+
+@media (max-width: 650px) {
+  .room-detail-head { padding: 12px; gap: 10px; }
+  .cover-detail-row { padding: 10px 12px; }
+  .subview-head { padding: 12px; }
+  .subview-section { padding: 12px; }
+  .nav { padding: 6px; gap: 4px; max-width: calc(100vw - 16px - var(--safe-left) - var(--safe-right)); }
+  .nav-btn { padding: 0 12px; min-width: 44px; height: 42px; min-height: 42px; font-size: 12.5px; gap: 5px; }
+}
+@media (max-width: 520px) {
+  .nav-btn:not([data-active]) { padding: 0 10px; min-width: 44px; }
+  .nav-btn:not([data-active]) span { display: none; }
+}
 `;
 // ─── END: lib/styles.js ───
 
@@ -2082,6 +2406,17 @@ function numeric(st) {
   if (!st) return null;
   const n = Number(st.state);
   return Number.isFinite(n) ? n : null;
+}
+const formatState = (st, hass = null) => stateLabel(hass || {}, st);
+function areaIdForEntity(hass, entityId) {
+  if (!hass || !entityId) return '';
+  const ent = hass.entities?.[entityId];
+  if (!ent) return '';
+  if (ent.area_id) return ent.area_id;
+  if (ent.device_id && hass.devices?.[ent.device_id]?.area_id) {
+    return hass.devices[ent.device_id].area_id;
+  }
+  return '';
 }
 
 const DEVICE_CLASS_ICON = {
@@ -2491,6 +2826,167 @@ function showConfirmDialog(anchorOrRoot, opts = {}) {
     }
     root.appendChild(overlayEl);
   });
+}
+
+// ── Internal Subview Registry & Hybrid Navigation ──
+const BUILTIN_VIEWS = [
+  { id: 'overview', label: 'Übersicht', icon: 'mdi:view-dashboard', color: '#03a9f4', desc: 'Räume & Startseite' },
+  { id: 'security', label: 'Sicherheit', icon: 'mdi:shield-home', color: '#ef4444', desc: 'Alarm, Rauchmelder, Kameras' },
+  { id: 'solar', label: 'Solar', icon: 'mdi:solar-power-variant', color: '#f59e0b', desc: 'PV-Ertrag, Batterie, Prognose' },
+  { id: 'blinds', label: 'Rollläden', icon: 'mdi:window-shutter-cog', color: '#9c27b0', desc: 'Steuerung, Verlauf, Sonne' },
+  { id: 'auto', label: 'Auto', icon: 'mdi:car-connected', color: '#0ea5e9', desc: 'BMW & Fahrzeugstatus' },
+  { id: 'printer3d', label: '3D-Druck', icon: 'mdi:printer-3d', color: '#10b981', desc: 'A1 Mini Status & Steuerung' },
+  { id: 'more', label: 'Mehr', icon: 'mdi:apps', color: '#6366f1', desc: 'Alle Bereiche & Helfer' },
+];
+const LEGACY_VIEW_ALIASES = {
+  '/lovelace/overview': 'overview',
+  '/lovelace/ubersicht': 'overview',
+  '/lovelace/sicherheit': 'security',
+  '/lovelace/solar': 'solar',
+  '/lovelace/auto': 'auto',
+  '/lovelace/jalousien': 'blinds',
+  '/lovelace/3d-drucker': 'printer3d',
+  '/lovelace/mehr': 'more',
+  '/dashboard-warnungen/dash-warnungen': 'warning',
+};
+function resolveInternalView(itemOrPath) {
+  if (!itemOrPath) return null;
+  if (typeof itemOrPath === 'object') {
+    if (itemOrPath.view && BUILTIN_VIEWS.some((v) => v.id === itemOrPath.view)) return itemOrPath.view;
+    return resolveInternalView(itemOrPath.path);
+  }
+  const raw = String(itemOrPath).trim();
+  if (!raw) return null;
+  if (BUILTIN_VIEWS.some((v) => v.id === raw)) return raw;
+  if (raw.startsWith('companion:')) {
+    const sub = raw.slice('companion:'.length);
+    if (BUILTIN_VIEWS.some((v) => v.id === sub) || sub === 'warning') return sub;
+  }
+  const normalized = raw.split('?')[0].replace(/\/+$/, '') || '/';
+  return LEGACY_VIEW_ALIASES[normalized] || null;
+}
+
+/**
+ * Enables touch + mouse pointer drag-and-drop reordering on a list container.
+ * Uses pointer capture exclusively on `handleSelector` so vertical scrolling stays smooth.
+ */
+function enablePointerReorder(listEl, { itemSelector = '[data-reorder-item]', handleSelector = '.drag-handle', onMove }) {
+  if (!listEl || typeof onMove !== 'function') return () => {};
+  let active = null;
+
+  const onPointerDown = (e) => {
+    if (e.button && e.button !== 0) return;
+    const handle = e.target.closest?.(handleSelector);
+    if (!handle || !listEl.contains(handle)) return;
+    const item = handle.closest?.(itemSelector);
+    if (!item || item.parentElement !== listEl) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    const items = [...listEl.children].filter((c) => c.matches?.(itemSelector));
+    const startIdx = items.indexOf(item);
+    if (startIdx < 0) return;
+
+    const rects = items.map((el) => el.getBoundingClientRect());
+    const scrollEl = listEl.closest?.('.dialog-body') || null;
+    item.setAttribute('data-dragging', '');
+    try { handle.setPointerCapture?.(e.pointerId); } catch {}
+
+    active = {
+      pointerId: e.pointerId,
+      handle,
+      item,
+      items,
+      rects,
+      startIdx,
+      currentIdx: startIdx,
+      startY: e.clientY,
+      lastY: e.clientY,
+      scrollEl,
+      raf: 0,
+    };
+
+    const tickScroll = () => {
+      if (!active || !active.scrollEl) return;
+      const box = active.scrollEl.getBoundingClientRect();
+      const dyTop = active.lastY - box.top;
+      const dyBot = box.bottom - active.lastY;
+      if (dyTop < 48) active.scrollEl.scrollTop -= Math.max(4, Math.round((48 - dyTop) * 0.35));
+      else if (dyBot < 48) active.scrollEl.scrollTop += Math.max(4, Math.round((48 - dyBot) * 0.35));
+      active.raf = requestAnimationFrame(tickScroll);
+    };
+    if (scrollEl) active.raf = requestAnimationFrame(tickScroll);
+  };
+
+  const onPointerMove = (e) => {
+    if (!active || e.pointerId !== active.pointerId) return;
+    e.preventDefault();
+    active.lastY = e.clientY;
+    const dy = e.clientY - active.startY;
+    active.item.style.transform = `translate3d(0, ${Math.round(dy)}px, 0)`;
+
+    const itemRect = active.rects[active.startIdx];
+    const center = itemRect.top + itemRect.height / 2 + dy;
+    let targetIdx = active.startIdx;
+    for (let i = 0; i < active.rects.length; i++) {
+      const r = active.rects[i];
+      if (center > r.top + r.height / 2) targetIdx = i;
+    }
+    if (dy < 0) {
+      targetIdx = active.startIdx;
+      for (let i = active.rects.length - 1; i >= 0; i--) {
+        const r = active.rects[i];
+        if (center < r.top + r.height / 2) targetIdx = i;
+      }
+    }
+    active.currentIdx = targetIdx;
+    active.items.forEach((el, idx) => {
+      if (el === active.item) return;
+      el.toggleAttribute('data-drop-before', idx === targetIdx && targetIdx < active.startIdx);
+      el.toggleAttribute('data-drop-after', idx === targetIdx && targetIdx > active.startIdx);
+    });
+  };
+
+  const cleanup = (commit) => {
+    if (!active) return;
+    if (active.raf) cancelAnimationFrame(active.raf);
+    try { active.handle.releasePointerCapture?.(active.pointerId); } catch {}
+    active.item.removeAttribute('data-dragging');
+    active.item.style.transform = '';
+    active.items.forEach((el) => {
+      el.removeAttribute('data-drop-before');
+      el.removeAttribute('data-drop-after');
+    });
+    const from = active.startIdx;
+    const to = active.currentIdx;
+    active = null;
+    if (commit && from !== to) onMove(from, to);
+  };
+
+  const onPointerUp = (e) => { if (active && e.pointerId === active.pointerId) cleanup(true); };
+  const onPointerCancel = (e) => { if (active && e.pointerId === active.pointerId) cleanup(false); };
+
+  listEl.addEventListener('pointerdown', onPointerDown);
+  listEl.addEventListener('pointermove', onPointerMove);
+  listEl.addEventListener('pointerup', onPointerUp);
+  listEl.addEventListener('pointercancel', onPointerCancel);
+  return () => {
+    cleanup(false);
+    listEl.removeEventListener('pointerdown', onPointerDown);
+    listEl.removeEventListener('pointermove', onPointerMove);
+    listEl.removeEventListener('pointerup', onPointerUp);
+    listEl.removeEventListener('pointercancel', onPointerCancel);
+  };
+}
+
+/** Formats countdown milliseconds cleanly as mm:ss or hh:mm:ss. */
+function formatCountdownMs(ms) {
+  const totalSec = Math.max(0, Math.ceil((ms || 0) / 1000));
+  const hPart = Math.floor(totalSec / 3600);
+  const mPart = Math.floor((totalSec % 3600) / 60);
+  const sPart = totalSec % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return hPart > 0 ? `${hPart}:${pad(mPart)}:${pad(sPart)}` : `${pad(mPart)}:${pad(sPart)}`;
 }
 // ─── END: lib/util.js ───
 
@@ -4854,6 +5350,138 @@ class Room {
 // ─── END: components/room.js ───
 
 
+// ─── START: components/cover_row.js ───
+// Shared Cover Row Builder used by RoomDetailView and BlindsView.
+function coverRowService(getHass, spec, svc) {
+  const hass = getHass();
+  if (!hass) return;
+  const rawDom = domainOf(spec.entity_id);
+  if (rawDom === 'cover') {
+    hass.callService('cover', svc, { entity_id: spec.entity_id });
+  } else {
+    const turnOn = svc === 'open_cover';
+    hass.callService(rawDom, turnOn ? 'turn_on' : 'turn_off', { entity_id: spec.entity_id });
+  }
+}
+function createCoverRow(spec, { getHass, ctx } = {}) {
+  const iconEl = icon('mdi:window-shutter');
+  const nameEl = h('div', { class: 'cover-detail-name' }, spec.name || spec.entity_id);
+  const stateEl = h('div', { class: 'cover-detail-state' }, 'Laden...');
+
+  const mkBtn = (ic, lbl, fn) => h('button', {
+    class: 'mini-btn', type: 'button', 'aria-label': lbl,
+    onClick: (e) => { e.stopPropagation(); fn(); },
+  }, icon(ic));
+
+  const btnUp = mkBtn('mdi:arrow-up', 'Öffnen', () => coverRowService(getHass, spec, 'open_cover'));
+  const btnStop = mkBtn('mdi:stop', 'Stopp', () => coverRowService(getHass, spec, 'stop_cover'));
+  const btnDown = mkBtn('mdi:arrow-down', 'Schließen', () => coverRowService(getHass, spec, 'close_cover'));
+
+  const slider = h('input', {
+    type: 'range', class: 'slider', min: '0', max: '100', step: '1',
+    'aria-label': `${spec.name || spec.entity_id} Position`,
+    style: { touchAction: 'none', '--tile-color': '#9c27b0' },
+  });
+  slider.addEventListener('pointerdown', (e) => e.stopPropagation());
+  slider.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+  slider.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
+  slider.addEventListener('click', (e) => e.stopPropagation());
+
+  let dragging = false;
+  slider.addEventListener('input', () => {
+    dragging = true;
+    setSliderVal(slider, slider.value);
+    stateEl.textContent = `Position: ${slider.value}%`;
+  });
+  slider.addEventListener('change', () => {
+    dragging = false;
+    const hass = getHass();
+    if (!hass) return;
+    const rawDom = domainOf(spec.entity_id);
+    if (rawDom === 'cover') {
+      hass.callService('cover', 'set_cover_position', {
+        entity_id: spec.entity_id,
+        position: Number(slider.value),
+      });
+    } else {
+      hass.callService(rawDom, Number(slider.value) > 0 ? 'turn_on' : 'turn_off', {
+        entity_id: spec.entity_id,
+      });
+    }
+  });
+
+  const sliderWrap = h('div', { class: 'cover-slider-wrap' },
+    h('span', { class: 'cover-slider-label' }, '0%'),
+    slider,
+    h('span', { class: 'cover-slider-label' }, '100%'));
+
+  const openEditDevice = () => {
+    const devId = spec.device_id || parseChannelKey(spec.key).deviceId || spec.entity_id;
+    if (devId && ctx?.onOpenDevice) ctx.onOpenDevice(devId);
+  };
+
+  const row = h('div', { class: 'cover-detail-row' },
+    h('div', { class: 'cover-detail-top' },
+      h('div', {
+        class: 'cover-detail-info',
+        onClick: () => { if (ctx?.isEditMode?.()) openEditDevice(); },
+      },
+        h('div', { class: 'cover-detail-icon' }, iconEl),
+        h('div', { class: 'cover-detail-texts' }, nameEl, stateEl)),
+      h('div', { class: 'tile-btns' }, btnUp, btnStop, btnDown)),
+    sliderWrap,
+    ctx ? editBorder(10) : null);
+
+  if (ctx) {
+    row.addEventListener('pointerdown', (e) => {
+      if (ctx.isEditMode?.()) { e.stopPropagation(); e.preventDefault(); }
+    }, true);
+    row.addEventListener('click', (e) => {
+      if (ctx.isEditMode?.()) { e.stopPropagation(); e.preventDefault(); openEditDevice(); }
+    }, true);
+  }
+
+  return {
+    spec, row, iconEl, stateEl, slider, btnUp, btnStop, btnDown,
+    get dragging() { return dragging; },
+  };
+}
+function updateCoverRow(cr, hass) {
+  const st = hass?.states?.[cr.spec.entity_id];
+  const unav = isUnavailable(st);
+  cr.row.toggleAttribute('data-unavailable', unav);
+  cr.iconEl.setAttribute('icon', entityIcon(cr.spec.entity_id, st, cr.spec.icon, cr.spec.category));
+  cr.btnUp.disabled = unav;
+  cr.btnStop.disabled = unav;
+  cr.btnDown.disabled = unav;
+  cr.slider.disabled = unav;
+
+  if (unav) {
+    cr.stateEl.textContent = 'Nicht verfügbar';
+    return;
+  }
+
+  const pos = st?.attributes?.current_position != null ? Number(st.attributes.current_position) : null;
+  const state = st?.state;
+  const moving = state === 'opening' || state === 'closing';
+
+  if (moving) {
+    cr.stateEl.textContent = state === 'opening' ? 'Öffnet...' : 'Schließt...';
+    cr.btnStop.style.color = '#9c27b0';
+  } else {
+    cr.btnStop.style.color = '';
+    const posTxt = pos != null ? ` · ${pos}%` : '';
+    cr.stateEl.textContent = (state === 'closed' ? 'Geschlossen' : 'Geöffnet') + posTxt;
+  }
+
+  if (!cr.dragging) {
+    const effectivePos = pos != null ? pos : (state === 'closed' ? 0 : 100);
+    setSliderVal(cr.slider, effectivePos);
+  }
+}
+// ─── END: components/cover_row.js ───
+
+
 // ─── START: components/room_detail.js ───
 // Room detail subview: dedicated granular control page for a single room.
 class RoomDetailView {
@@ -4926,13 +5554,12 @@ class RoomDetailView {
       })
       .filter((g) => g.ids.length > 0)
       .map((g) => {
-        const countEl = h('span', { class: 'count', hidden: true });
         const btn = h('button', {
-          class: 'ctrl-btn', 'aria-label': g.label,
+          class: 'ctrl-btn', type: 'button', 'aria-label': g.label, title: g.label,
           style: { '--group-color': g.color },
           onClick: (e) => { e.stopPropagation(); this._toggleGroup(g); },
-        }, icon(g.icon), countEl);
-        return { ...g, btn, countEl };
+        }, icon(g.icon));
+        return { ...g, btn };
       });
 
     this.actionsEl = h('div', { class: 'room-detail-actions' }, ...this.groups.map((g) => g.btn));
@@ -5008,96 +5635,13 @@ class RoomDetailView {
   }
 
   _buildCoverRow(spec) {
-    const iconEl = icon('mdi:window-shutter');
-    const nameEl = h('div', { class: 'cover-detail-name' }, spec.name);
-    const stateEl = h('div', { class: 'cover-detail-state' }, 'Laden...');
-
-    const mkBtn = (ic, lbl, fn) => h('button', {
-      class: 'mini-btn', 'aria-label': lbl,
-      onClick: (e) => { e.stopPropagation(); fn(); },
-    }, icon(ic));
-
-    const btnUp = mkBtn('mdi:arrow-up', 'Öffnen', () => this._coverService(spec, 'open_cover'));
-    const btnStop = mkBtn('mdi:stop', 'Stopp', () => this._coverService(spec, 'stop_cover'));
-    const btnDown = mkBtn('mdi:arrow-down', 'Schließen', () => this._coverService(spec, 'close_cover'));
-
-    const slider = h('input', {
-      type: 'range', class: 'slider', min: '0', max: '100', step: '1', 'aria-label': `${spec.name} Position`,
-      style: { touchAction: 'none', '--tile-color': '#9c27b0' },
-    });
-    slider.addEventListener('pointerdown', (e) => e.stopPropagation());
-    slider.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
-    slider.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
-    slider.addEventListener('click', (e) => e.stopPropagation());
-
-    let dragging = false;
-    slider.addEventListener('input', () => {
-      dragging = true;
-      setSliderVal(slider, slider.value);
-      stateEl.textContent = `Position: ${slider.value}%`;
-    });
-    slider.addEventListener('change', () => {
-      dragging = false;
-      const rawDom = domainOf(spec.entity_id);
-      if (rawDom === 'cover') {
-        this.hass?.callService('cover', 'set_cover_position', {
-          entity_id: spec.entity_id,
-          position: Number(slider.value),
-        });
-      } else {
-        this.hass?.callService(rawDom, Number(slider.value) > 0 ? 'turn_on' : 'turn_off', {
-          entity_id: spec.entity_id,
-        });
-      }
-    });
-
-    const sliderWrap = h('div', { class: 'cover-slider-wrap' },
-      h('span', { class: 'cover-slider-label' }, '0%'),
-      slider,
-      h('span', { class: 'cover-slider-label' }, '100%'));
-
-    const row = h('div', { class: 'cover-detail-row' },
-      h('div', { class: 'cover-detail-top' },
-        h('div', {
-          class: 'cover-detail-info',
-          onClick: () => {
-            if (this.ctx?.isEditMode?.()) {
-              const devId = spec.device_id || parseChannelKey(spec.key).deviceId || spec.entity_id;
-              if (devId) { this.ctx.onOpenDevice?.(devId); return; }
-            }
-          },
-        },
-          h('div', { class: 'cover-detail-icon' }, iconEl),
-          h('div', { class: 'cover-detail-texts' }, nameEl, stateEl)),
-        h('div', { class: 'tile-btns' }, btnUp, btnStop, btnDown)),
-      sliderWrap,
-      editBorder(10));
-
-    row.addEventListener('pointerdown', (e) => {
-      if (this.ctx?.isEditMode?.()) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }, true);
-    row.addEventListener('click', (e) => {
-      if (this.ctx?.isEditMode?.()) {
-        e.stopPropagation();
-        e.preventDefault();
-        const devId = spec.device_id || parseChannelKey(spec.key).deviceId || spec.entity_id;
-        if (devId) this.ctx.onOpenDevice?.(devId);
-      }
-    }, true);
-
-    return {
-      spec, row, iconEl, stateEl, slider, btnUp, btnStop, btnDown,
-      get dragging() { return dragging; },
-    };
+    return createCoverRow(spec, { getHass: () => this.hass, ctx: this.ctx });
   }
 
   update(hass) {
     this.hass = hass;
 
-    // Group quick controls
+    // Group quick controls (clean icons only, no clipped numbers)
     if (this.groups) {
       for (const g of this.groups) {
         const states = g.ids.map((id) => hass.states[id]).filter(Boolean);
@@ -5105,8 +5649,6 @@ class RoomDetailView {
           ? states.filter((s) => s.state !== 'closed').length
           : states.filter((s) => isActive(s)).length;
         g.btn.toggleAttribute('data-on', count > 0);
-        g.countEl.hidden = count === 0;
-        g.countEl.textContent = String(count);
       }
     }
 
@@ -5119,52 +5661,26 @@ class RoomDetailView {
     // Update covers with granular positions
     if (this.coverRows) {
       for (const cr of this.coverRows) {
-        const st = hass.states[cr.spec.entity_id];
-        const unav = isUnavailable(st);
-        cr.iconEl.setAttribute('icon', entityIcon(cr.spec.entity_id, st, cr.spec.icon, cr.spec.category));
-        cr.btnUp.disabled = unav;
-        cr.btnStop.disabled = unav;
-        cr.btnDown.disabled = unav;
-        cr.slider.disabled = unav;
-
-        if (unav) {
-          cr.stateEl.textContent = 'Nicht verfügbar';
-          continue;
-        }
-
-        const pos = st?.attributes?.current_position != null ? Number(st.attributes.current_position) : null;
-        const state = st?.state;
-        const moving = state === 'opening' || state === 'closing';
-
-        if (moving) {
-          cr.stateEl.textContent = state === 'opening' ? 'Öffnet...' : 'Schließt...';
-          cr.btnStop.style.color = '#9c27b0';
-        } else {
-          cr.btnStop.style.color = '';
-          const posTxt = pos != null ? ` · ${pos}%` : '';
-          cr.stateEl.textContent = (state === 'closed' ? 'Geschlossen' : 'Geöffnet') + posTxt;
-        }
-
-        if (pos != null && !cr.dragging) {
-          setSliderVal(cr.slider, pos);
-        }
+        updateCoverRow(cr, hass);
       }
     }
 
-    // Header sensors chips
+    // Header sensor chips (only mutate DOM when sensor values change)
     const { sensors } = this.spec;
-    const chips = [];
     const temp = sensors.temperature?.length ? average(hass, sensors.temperature) : null;
     const hum = sensors.humidity?.length ? average(hass, sensors.humidity) : null;
-    if (temp) chips.push(h('div', { class: 'room-detail-chip' }, icon('mdi:thermometer'), temp));
-    if (hum) chips.push(h('div', { class: 'room-detail-chip' }, icon('mdi:water-percent'), hum));
-    if ((sensors.motion || []).some((id) => hass.states[id]?.state === 'on')) {
-      chips.push(h('div', { class: 'room-detail-chip', style: { color: '#ffb74d' } }, icon('mdi:motion-sensor'), 'Bewegung'));
+    const mot = (sensors.motion || []).some((id) => hass.states[id]?.state === 'on');
+    const moi = (sensors.moisture || []).some((id) => hass.states[id]?.state === 'on');
+    const chipKey = `${temp || ''}|${hum || ''}|${mot ? 1 : 0}|${moi ? 1 : 0}`;
+    if (chipKey !== this._chipKey) {
+      this._chipKey = chipKey;
+      const chips = [];
+      if (temp) chips.push(h('div', { class: 'room-detail-chip' }, icon('mdi:thermometer'), temp));
+      if (hum) chips.push(h('div', { class: 'room-detail-chip' }, icon('mdi:water-percent'), hum));
+      if (mot) chips.push(h('div', { class: 'room-detail-chip', style: { color: '#ffb74d' } }, icon('mdi:motion-sensor'), 'Bewegung'));
+      if (moi) chips.push(h('div', { class: 'room-detail-chip', style: { color: '#e57373' } }, icon('mdi:water-alert'), 'Feuchtigkeit'));
+      this.metaEl.replaceChildren(...chips);
     }
-    if ((sensors.moisture || []).some((id) => hass.states[id]?.state === 'on')) {
-      chips.push(h('div', { class: 'room-detail-chip', style: { color: '#e57373' } }, icon('mdi:water-alert'), 'Feuchtigkeit'));
-    }
-    this.metaEl.replaceChildren(...chips);
   }
 
   _orderAndLayoutTiles() {
@@ -5339,19 +5855,22 @@ function bindPress(el, onTap, onHold) {
 
 // ═══════════════ Header badges ═══════════════
 class Badges {
-  constructor(badges, user) {
+  constructor(badges, user, onNavigate = null) {
     this.user = user;
+    this.onNavigate = onNavigate;
     this.items = (badges || []).filter((b) => b && b.entity_id).map((cfg) => this._make(cfg));
     this.el = h('div', { class: 'badges' }, this.items.map((i) => i.el));
   }
 
   _make(cfg) {
-    const el = h('button', { class: 'badge', hidden: true });
-    const item = { cfg, el };
+    const el = h('button', { class: 'badge', type: 'button', hidden: true });
+    const item = { cfg, el, key: null };
     const open = () => moreInfo(el, cfg.entity_id);
     const tap = () => {
-      if (cfg.tap === 'navigate' && cfg.path) navigate(cfg.path);
-      else if (cfg.tap === 'service' && cfg.service?.includes('.')) {
+      if (cfg.tap === 'navigate' && cfg.path) {
+        if (this.onNavigate) this.onNavigate(cfg.path);
+        else navigate(cfg.path);
+      } else if (cfg.tap === 'service' && cfg.service?.includes('.')) {
         const [domain, service] = cfg.service.split('.');
         this.hass?.callService(domain, service, { entity_id: cfg.entity_id });
       } else if (cfg.tap === 'none') { /* no-op */ } else open();
@@ -5374,16 +5893,24 @@ class Badges {
 
   update(hass) {
     this.hass = hass;
-    for (const { cfg, el } of this.items) {
+    for (const item of this.items) {
+      const { cfg, el } = item;
       const st = hass.states[cfg.entity_id];
       const show = Badges.visible(cfg, st);
-      el.hidden = !show;
+      if (el.hidden !== !show) el.hidden = !show;
       if (!show) continue;
+      const ic = cfg.icon || entityIcon(cfg.entity_id, st);
+      const nameTxt = cfg.show_name ? (cfg.name || st?.attributes?.friendly_name || cfg.entity_id) : '';
+      const valTxt = cfg.show_state ? stateLabel(hass, st) : '';
+      const color = resolveColor(cfg.color) || 'var(--cd-accent)';
+      const nextKey = `${ic}|${nameTxt}|${valTxt}|${color}`;
+      if (item.key === nextKey) continue;
+      item.key = nextKey;
       const parts = [];
-      if (cfg.show_name) parts.push(h('span', { class: 'badge-name' }, cfg.name || st?.attributes?.friendly_name || cfg.entity_id));
-      if (cfg.show_state) parts.push(h('span', {}, stateLabel(hass, st)));
-      el.style.setProperty('--badge-color', resolveColor(cfg.color) || 'var(--cd-accent)');
-      el.replaceChildren(icon(cfg.icon || entityIcon(cfg.entity_id, st)), ...parts);
+      if (cfg.show_name) parts.push(h('span', { class: 'badge-name' }, nameTxt));
+      if (cfg.show_state) parts.push(h('span', {}, valTxt));
+      el.style.setProperty('--badge-color', color);
+      el.replaceChildren(icon(ic), ...parts);
     }
   }
 }
@@ -5546,6 +6073,7 @@ class PersonCards {
     this.el = h('div', { class: 'card persons-card', hidden: true }, this.itemsWrap);
     this.items = this.persons.map((p) => ({
       cfg: p,
+      key: null,
       el: h('div', { class: 'person', hidden: true, onClick: () => moreInfo(this.el, p.entity_id) }),
     }));
     this.itemsWrap.append(...this.items.map((i) => i.el));
@@ -5553,17 +6081,23 @@ class PersonCards {
 
   update(hass) {
     let any = false;
-    for (const { cfg, el } of this.items) {
+    for (const item of this.items) {
+      const { cfg, el } = item;
       const st = hass.states[cfg.entity_id];
       const show = !!st && st.state === 'home';
-      el.hidden = !show;
+      if (el.hidden !== !show) el.hidden = !show;
       if (!show) continue;
       any = true;
-      const pic = st.attributes?.entity_picture;
+      const pic = st.attributes?.entity_picture || '';
+      const nameTxt = st.attributes?.friendly_name || cfg.entity_id;
+      const lbl = stateLabel(hass, st);
+      const nextKey = `${pic}|${nameTxt}|${lbl}`;
+      if (item.key === nextKey) continue;
+      item.key = nextKey;
       const avatar = h('div', { class: 'avatar', style: pic ? { backgroundImage: `url("${pic}")` } : {} }, pic ? null : icon('mdi:account'));
       el.replaceChildren(avatar, h('div', {},
-        h('div', { class: 'p-name' }, st.attributes?.friendly_name || cfg.entity_id),
-        h('div', { class: 'p-state' }, stateLabel(hass, st))));
+        h('div', { class: 'p-name' }, nameTxt),
+        h('div', { class: 'p-state' }, lbl)));
     }
     this.el.hidden = !any;
     this.el.style.display = any ? '' : 'none';
@@ -5597,14 +6131,432 @@ class AnnounceCard {
 
 // ═══════════════ Bottom navigation ═══════════════
 class NavBar {
-  constructor(buttons) {
-    const items = (buttons || []).filter((b) => b && b.path);
-    this.el = h('nav', { class: 'nav', hidden: items.length === 0 },
-      items.map((b) => h('button', { class: 'nav-btn', onClick: () => navigate(b.path), 'aria-label': b.name || b.path },
-        b.icon ? icon(b.icon) : null, b.name || null)));
+  constructor(buttons, opts = {}) {
+    const { activeView = 'overview', viewsConfig = {}, user = null, onNavigate = null } = opts;
+    const viewAllowed = (viewId) => {
+      const vc = viewsConfig?.[viewId];
+      if (!vc) return true;
+      if (vc.enabled === false) return false;
+      return allowed(vc.users, user?.id);
+    };
+
+    const raw = (buttons || []).filter((b) => b && (b.path || b.view));
+    const list = [];
+    const seenViews = new Set();
+
+    // Always lead with "Übersicht"
+    list.push({ name: 'Übersicht', icon: 'mdi:view-dashboard', view: 'overview' });
+    seenViews.add('overview');
+
+    for (const b of raw) {
+      const internal = resolveInternalView(b);
+      if (internal) {
+        if (!viewAllowed(internal) || seenViews.has(internal)) continue;
+        seenViews.add(internal);
+        const fallbackName = internal === 'more' ? 'Mehr' : b.name;
+        list.push({ ...b, name: fallbackName ?? b.name, view: internal });
+      } else {
+        list.push(b);
+      }
+    }
+
+    // Ensure core hubs Solar, Blinds, and Mehr are easily reachable if not already listed
+    const defaults = [
+      { view: 'security', name: 'Sicherheit', icon: 'mdi:shield-home' },
+      { view: 'solar', name: 'Solar', icon: 'mdi:solar-power-variant' },
+      { view: 'blinds', name: 'Rollläden', icon: 'mdi:window-shutter' },
+      { view: 'more', name: 'Mehr', icon: 'mdi:apps' },
+    ];
+    for (const def of defaults) {
+      if (!seenViews.has(def.view) && viewAllowed(def.view)) {
+        // Place Mehr always at the end
+        if (def.view === 'more') continue;
+        seenViews.add(def.view);
+        const moreIdx = list.findIndex((i) => i.view === 'more');
+        if (moreIdx >= 0) list.splice(moreIdx, 0, def);
+        else list.push(def);
+      }
+    }
+    if (!seenViews.has('more') && viewAllowed('more')) {
+      list.push({ view: 'more', name: 'Mehr', icon: 'mdi:apps' });
+    }
+
+    this.el = h('nav', { class: 'nav', 'aria-label': 'Hauptnavigation', hidden: list.length === 0 },
+      list.map((b) => {
+        const isActive = (b.view && b.view === activeView)
+          || (b.view === 'more' && ['auto', 'printer3d'].includes(activeView));
+        return h('button', {
+          type: 'button',
+          class: 'nav-btn',
+          ...(isActive ? { 'data-active': '', 'aria-current': 'page' } : {}),
+          'aria-label': b.name || b.view || b.path,
+          onClick: () => {
+            if (onNavigate) onNavigate(b.view || b.path);
+            else if (b.path) navigate(b.path);
+          },
+        }, b.icon ? icon(b.icon) : null, b.name ? h('span', {}, b.name) : null);
+      }));
   }
 }
 // ─── END: components/specials.js ───
+
+
+// ─── START: components/room_settings_form.js ───
+// Shared Room Configuration Form used identically by Settings ("Räume & Kacheln") and RoomEditModal (Edit Mode).
+const EXPAND_OPTIONS = [
+  ['collapsed', 'Eingeklappt'],
+  ['expanded', 'Ausgeklappt'],
+  ['always', 'Immer offen'],
+];
+
+function _roomSensorMeta(type) {
+  return ROOM_SENSOR_TYPES.find((t) => t.value === type) || {
+    value: type,
+    label: type,
+    icon: 'mdi:gauge',
+    color: 'var(--cd-accent)',
+  };
+}
+
+function _formatSensorLiveValue(hass, entityId) {
+  const st = hass?.states?.[entityId];
+  if (!st) return 'unbekannt';
+  const unit = st.attributes?.unit_of_measurement;
+  return unit ? `${st.state} ${unit}` : st.state;
+}
+
+function _sensorEntityLabel(hass, entityId) {
+  return hass?.states?.[entityId]?.attributes?.friendly_name || entityId;
+}
+
+/**
+ * Interactive selector for a sensor type with 2+ sensors in a room.
+ */
+function buildSensorPrefBlock({ hass, type, entityIds, currentPref, onChange }) {
+  const meta = _roomSensorMeta(type);
+  const isBinary = type === 'motion' || type === 'moisture';
+
+  let mode = currentPref?.mode === 'single' ? 'single' : 'average';
+  let selected = Array.isArray(currentPref?.entities)
+    ? currentPref.entities.filter((e) => entityIds.includes(e))
+    : [];
+  if (!selected.length) {
+    selected = mode === 'single' ? [entityIds[0]] : [...entityIds];
+  }
+
+  const container = h('div', { class: 'sensor-pref-card' });
+
+  const render = () => preserveScroll(container.closest?.('.dialog-body'), () => {
+    const modeRow = h('div', { class: 'sensor-mode-tabs' },
+      h('button', {
+        type: 'button',
+        class: `sensor-mode-tab${mode === 'single' ? ' active' : ''}`,
+        onClick: () => {
+          mode = 'single';
+          selected = [selected[0] || entityIds[0]];
+          onChange({ mode, entities: [...selected] });
+          render();
+        },
+      }, icon('mdi:radiobox-marked'), 'Einzelner Sensor'),
+      h('button', {
+        type: 'button',
+        class: `sensor-mode-tab${mode === 'average' ? ' active' : ''}`,
+        onClick: () => {
+          mode = 'average';
+          if (selected.length < 2) selected = [...entityIds];
+          onChange({ mode, entities: [...selected] });
+          render();
+        },
+      }, icon(isBinary ? 'mdi:checkbox-multiple-marked' : 'mdi:chart-line'), isBinary ? 'Kombiniert' : 'Durchschnitt'));
+
+    const rows = entityIds.map((eid) => {
+      const isChecked = mode === 'single' ? selected[0] === eid : selected.includes(eid);
+      const name = _sensorEntityLabel(hass, eid);
+      const liveVal = _formatSensorLiveValue(hass, eid);
+
+      return h('div', {
+        class: `sensor-choice-row${isChecked ? ' selected' : ''}`,
+        onClick: () => {
+          if (mode === 'single') {
+            selected = [eid];
+          } else {
+            if (selected.includes(eid)) {
+              if (selected.length <= 1) return;
+              selected = selected.filter((id) => id !== eid);
+            } else {
+              selected = [...selected, eid];
+            }
+          }
+          onChange({ mode, entities: [...selected] });
+          render();
+        },
+      },
+      h('div', { class: 'sensor-choice-check' },
+        icon(mode === 'single'
+          ? (isChecked ? 'mdi:radiobox-marked' : 'mdi:radiobox-blank')
+          : (isChecked ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'))),
+      h('div', { class: 'sensor-choice-info' },
+        h('div', { class: 'sensor-choice-name' }, name),
+        h('div', { class: 'sensor-choice-id' }, eid)),
+      h('span', { class: 'badge-tag' }, liveVal));
+    });
+
+    const hintText = mode === 'single'
+      ? '• Nur ausgewählter Sensor aktiv'
+      : (isBinary
+        ? '• Auswahl kombiniert gemeldet'
+        : `• Durchschnitt aus ${selected.length} von ${entityIds.length} Sensoren`);
+
+    container.replaceChildren(
+      h('div', { class: 'sensor-pref-head' },
+        h('div', { class: 'sensor-pref-title', style: { color: meta.color } },
+          icon(meta.icon),
+          h('span', {}, meta.label)),
+        h('span', { class: 'badge-tag' }, `${entityIds.length} Sensoren`)),
+      modeRow,
+      h('div', { class: 'hint', style: { marginBottom: '8px' } }, hintText),
+      h('div', { class: 'sensor-choice-list' }, ...rows),
+    );
+  });
+
+  render();
+  return container;
+}
+
+/** Ensures `user_expanded` and legacy `expanded_users` stay synchronized. */
+function normalizeUserExpanded(roomConfig) {
+  roomConfig.user_expanded = (roomConfig.user_expanded && typeof roomConfig.user_expanded === 'object')
+    ? { ...roomConfig.user_expanded }
+    : {};
+  if (Array.isArray(roomConfig.expanded_users)) {
+    for (const uid of roomConfig.expanded_users) {
+      if (uid && !roomConfig.user_expanded[uid]) {
+        roomConfig.user_expanded[uid] = 'expanded';
+      }
+    }
+  }
+  syncExpandedUsers(roomConfig);
+}
+function syncExpandedUsers(roomConfig) {
+  const ue = roomConfig.user_expanded || {};
+  roomConfig.expanded_users = Object.entries(ue)
+    .filter(([, mode]) => mode === 'expanded')
+    .map(([uid]) => uid);
+}
+
+/**
+ * Shared room configuration editor (Name, Icon, Standard-Zustand global & pro HA-Benutzer, Sichtbarkeit, Sensoren).
+ */
+class RoomSettingsForm {
+  /**
+   * @param {{
+   *   hass: object,
+   *   roomSpec: object,
+   *   roomConfig: object,
+   *   users: Array<{id:string, name?:string}>,
+   *   onChange?: Function,
+   *   onNameChange?: Function,
+   *   onIconChange?: Function,
+   * }} opts
+   */
+  constructor({ hass, roomSpec, roomConfig, users = [], onChange, onNameChange, onIconChange }) {
+    this.hass = hass;
+    this.roomSpec = roomSpec;
+    this.roomConfig = roomConfig;
+    this.users = Array.isArray(users) ? users : [];
+    this.onChange = onChange;
+    this.onNameChange = onNameChange;
+    this.onIconChange = onIconChange;
+    this._pickers = [];
+
+    this.roomConfig.expanded ||= roomSpec.mode || 'collapsed';
+    this.roomConfig.visible_users = Array.isArray(this.roomConfig.visible_users) ? [...this.roomConfig.visible_users] : [];
+    if (!this.roomConfig.user_expanded && roomSpec.user_expanded) {
+      this.roomConfig.user_expanded = { ...roomSpec.user_expanded };
+    }
+    if (!this.roomConfig.expanded_users && Array.isArray(roomSpec.expanded_users)) {
+      this.roomConfig.expanded_users = [...roomSpec.expanded_users];
+    }
+    normalizeUserExpanded(this.roomConfig);
+
+    this.roomConfig.sensor_prefs = (this.roomConfig.sensor_prefs && typeof this.roomConfig.sensor_prefs === 'object')
+      ? { ...this.roomConfig.sensor_prefs }
+      : { ...(roomSpec.sensor_prefs || {}) };
+
+    this._build();
+  }
+
+  _track(p) {
+    this._pickers.push(p);
+    return p;
+  }
+
+  destroy() {
+    for (const p of this._pickers) {
+      try { p?.destroy?.(); } catch {}
+    }
+    this._pickers = [];
+  }
+
+  _build() {
+    const { roomSpec, roomConfig, users } = this;
+    const isUnassigned = roomSpec.area_id === '__none__';
+
+    const nameInput = h('input', {
+      type: 'text',
+      value: roomConfig.name ?? roomSpec.name ?? '',
+      placeholder: 'z. B. Wohnzimmer',
+      disabled: isUnassigned,
+      onInput: (e) => {
+        const v = e.target.value;
+        roomConfig.name = v;
+        this.onNameChange?.(v);
+        this.onChange?.();
+      },
+    });
+
+    const iconPicker = this._track(new IconPicker({
+      hass: this.hass,
+      value: roomConfig.icon || roomSpec.icon || 'mdi:home-outline',
+      placeholder: 'mdi:sofa-outline',
+      options: ROOM_ICON_OPTIONS,
+      onChange: (ic) => {
+        const nextIcon = ic || 'mdi:home-outline';
+        roomConfig.icon = nextIcon;
+        this.onIconChange?.(nextIcon);
+        this.onChange?.();
+      },
+    }));
+
+    const userExpandWrap = h('div', { class: 'user-expand-list' });
+    const renderUserExpand = () => {
+      const globalMode = roomConfig.expanded || 'collapsed';
+      if (globalMode === 'always') {
+        userExpandWrap.replaceChildren(
+          h('div', { class: 'hint' }, '• Bei „Immer offen“ für alle Benutzer geöffnet'),
+        );
+        return;
+      }
+      if (!users.length) {
+        userExpandWrap.replaceChildren(
+          h('div', { class: 'hint' }, '• Keine Benutzer geladen'),
+        );
+        return;
+      }
+      const choices = [
+        ['default', 'Global'],
+        ['collapsed', 'Eingeklappt'],
+        ['expanded', 'Ausgeklappt'],
+      ];
+      userExpandWrap.replaceChildren(...users.map((u) => {
+        const uid = u.id;
+        const cur = roomConfig.user_expanded?.[uid] || 'default';
+        return h('div', { class: 'user-expand-row' },
+          h('div', { class: 'user-expand-name' }, icon('mdi:account-outline'), h('span', {}, u.name || uid)),
+          h('div', { class: 'tri-pills', role: 'group', 'aria-label': `Standard-Zustand für ${u.name || uid}` },
+            ...choices.map(([val, lbl]) => h('button', {
+              type: 'button',
+              class: 'tri-pill',
+              ...(cur === val ? { 'data-active': '' } : {}),
+              onClick: () => {
+                roomConfig.user_expanded ||= {};
+                if (val === 'default') delete roomConfig.user_expanded[uid];
+                else roomConfig.user_expanded[uid] = val;
+                syncExpandedUsers(roomConfig);
+                renderUserExpand();
+                this.onChange?.();
+              },
+            }, lbl))));
+      }));
+    };
+
+    const expandDropdown = this._track(new CustomDropdown({
+      options: EXPAND_OPTIONS.map(([v, l]) => ({ value: v, label: l })),
+      value: roomConfig.expanded || 'collapsed',
+      onChange: (v) => {
+        roomConfig.expanded = v;
+        renderUserExpand();
+        this.onChange?.();
+      },
+    }));
+    renderUserExpand();
+
+    // Visible users chips
+    const visibleWrap = h('div', { class: 'user-chips' });
+    const renderVisibleChips = () => {
+      if (!users.length) {
+        visibleWrap.replaceChildren(h('div', { class: 'hint' }, '• Für alle Benutzer sichtbar'));
+        return;
+      }
+      visibleWrap.replaceChildren(...users.map((u) => {
+        const active = roomConfig.visible_users.includes(u.id);
+        return h('button', {
+          type: 'button',
+          class: 'user-chip',
+          ...(active ? { 'data-on': '' } : {}),
+          onClick: () => {
+            const idx = roomConfig.visible_users.indexOf(u.id);
+            if (idx >= 0) roomConfig.visible_users.splice(idx, 1);
+            else roomConfig.visible_users.push(u.id);
+            renderVisibleChips();
+            this.onChange?.();
+          },
+        }, u.name || u.id);
+      }));
+    };
+    renderVisibleChips();
+
+    // Room sensors
+    const allSensors = roomSpec.all_sensors || {};
+    const sensorTypes = Object.keys(allSensors);
+    const sensorBlocks = [];
+    for (const sType of sensorTypes) {
+      const eids = allSensors[sType] || [];
+      if (eids.length >= 2) {
+        sensorBlocks.push(buildSensorPrefBlock({
+          hass: this.hass,
+          type: sType,
+          entityIds: eids,
+          currentPref: roomConfig.sensor_prefs[sType],
+          onChange: (pref) => {
+            roomConfig.sensor_prefs[sType] = pref;
+            this.onChange?.();
+          },
+        }));
+      } else if (eids.length === 1) {
+        const meta = _roomSensorMeta(sType);
+        sensorBlocks.push(h('div', { class: 'sensor-pref-card' },
+          h('div', { class: 'sensor-pref-head', style: { marginBottom: '0' } },
+            h('div', { class: 'sensor-pref-title', style: { color: meta.color } },
+              icon(meta.icon),
+              h('span', {}, `${meta.label}: ${_sensorEntityLabel(this.hass, eids[0])}`)),
+            h('span', { class: 'badge-tag' }, _formatSensorLiveValue(this.hass, eids[0])))));
+      }
+    }
+
+    this.el = h('div', { class: 'room-settings-form' },
+      h('div', { class: 'fields' },
+        h('div', { class: 'field' },
+          h('span', { class: 'field-label' }, isUnassigned ? 'Raumname (System)' : 'Raumname'),
+          nameInput),
+        h('div', { class: 'field' },
+          h('span', { class: 'field-label' }, 'Raum-Icon'),
+          iconPicker.el)),
+      h('div', { class: 'fields' },
+        h('div', { class: 'field' },
+          h('span', { class: 'field-label' }, 'Standard-Zustand (Global)'),
+          expandDropdown.el),
+        h('div', { class: 'field' },
+          h('span', { class: 'field-label' }, 'Sichtbar für Benutzer (leer = alle)'),
+          visibleWrap)),
+      h('div', { class: 'field' },
+        h('span', { class: 'field-label' }, 'Standard-Zustand pro Benutzer'),
+        userExpandWrap),
+      sensorBlocks.length ? h('div', { class: 'section-title' }, 'Raumsensoren') : null,
+      ...sensorBlocks);
+  }
+}
+// ─── END: components/room_settings_form.js ───
 
 
 // ─── START: components/settings.js ───
@@ -5617,39 +6569,54 @@ const VISIBLE_OPTIONS = [
   ['always', 'Immer'], ['above', 'Wert größer als'], ['below', 'Wert kleiner als'],
   ['state_in', 'Status ist (Liste)'], ['state_not_in', 'Status ist nicht (Liste)'],
 ];
-const EXPAND_OPTIONS = [['collapsed', 'Eingeklappt'], ['expanded', 'Ausgeklappt'], ['always', 'Immer offen']];
+const VIEW_NAV_CHOICES = [
+  ['', 'Benutzerdefinierter Pfad'],
+  ...BUILTIN_VIEWS.map((v) => [`companion:${v.id}`, `Ansicht: ${v.label}`]),
+];
 class Settings {
   /**
-   * @param {{hass:object, config:object, layout:object, users:Array, onClose:Function, onSaved:Function, onOpenDevice?:Function}} opts
+   * @param {{hass:object, config:object, layout:object, users:Array, onClose:Function, onSaved:Function, onOpenDevice?:Function, onOpenGroup?:Function}} opts
    */
   constructor({ hass, config, layout, users, onClose, onSaved, onOpenDevice, onOpenGroup }) {
     this.hass = hass;
-    this.users = users;
-    this.areas = layout.areas;
+    this.users = users || [];
+    this.areas = layout.areas || [];
     this.onClose = onClose;
     this.onSaved = onSaved;
     this.onOpenDevice = onOpenDevice;
     this.onOpenGroup = onOpenGroup;
-    this.draft = clone(config);
+    this.draft = clone(config) || {};
     this.draft.rooms ||= {};
+    this.draft.views ||= {};
 
-    // Local, editable copy of the room/tile structure (includes hidden tiles).
-    this.rooms = layout.rooms.map((r) => ({
+    // Keep complete editable room metadata (icon, sensor specs, user_expanded, visible_users, tiles)
+    this.rooms = (layout.rooms || []).map((r) => ({
       area_id: r.area_id,
       name: r.name,
-      tiles: r.tiles.map((t) => ({ key: t.key, name: t.name, entity_id: t.entity_id, hidden: !!t.hidden, users: [...(t.users || [])] })),
+      origName: r.name,
+      icon: r.icon || 'mdi:home-outline',
+      all_sensors: r.all_sensors || {},
+      sensor_prefs: clone(r.sensor_prefs || {}),
+      mode: r.mode || 'collapsed',
+      expanded_users: [...(r.expanded_users || [])],
+      user_expanded: clone(r.user_expanded || {}),
+      visible_users: [...(r.visible_users || [])],
+      tiles: (r.tiles || []).map((t) => ({
+        key: t.key, name: t.name, entity_id: t.entity_id,
+        hidden: !!t.hidden, users: [...(t.users || [])],
+      })),
     }));
 
-    this.tab = 'devices';
+    this._openRoomIds = new Set();
+    this._openRowKeys = new Set();
+    this._dndCleanups = [];
+
+    this.tab = 'rooms';
     this.tabs = [
-      ['devices', 'Geräte', () => this._tabDevices()],
-      ['header', 'Kopfzeile', () => this._tabHeader()],
-      ['info', 'Infos & Alarme', () => this._tabInfo()],
-      ['trash', 'Müll', () => this._tabTrash()],
-      ['nav', 'Navigation', () => this._tabNav()],
       ['rooms', 'Räume & Kacheln', () => this._tabRooms()],
-      ['extra', 'Zusatz-Kacheln', () => this._tabExtra()],
-      ['colors', 'Farben', () => this._tabColors()],
+      ['home', 'Startseite & Infos', () => this._tabHome()],
+      ['nav', 'Navigation & Design', () => this._tabNavAndDesign()],
+      ['devices', 'Geräte', () => this._tabDevices()],
     ];
     this._build();
   }
@@ -5660,11 +6627,19 @@ class Settings {
     return picker;
   }
 
+  _trackDnd(cleanupFn) {
+    if (typeof cleanupFn === 'function') this._dndCleanups.push(cleanupFn);
+  }
+
   _destroyPickers() {
     for (const p of (this._pickers || [])) {
       try { p?.destroy?.(); } catch {}
     }
     this._pickers = [];
+    for (const fn of (this._dndCleanups || [])) {
+      try { fn(); } catch {}
+    }
+    this._dndCleanups = [];
   }
 
   destroy() {
@@ -5685,14 +6660,14 @@ class Settings {
   _build() {
     this.body = h('div', { class: 'dialog-body' });
     this.tabBar = h('div', { class: 'tabs' });
-    this.saveBtn = h('button', { class: 'btn primary', onClick: () => this._save() }, icon('mdi:content-save'), 'Speichern');
+    this.saveBtn = h('button', { class: 'btn primary', type: 'button', onClick: () => this._save() }, icon('mdi:content-save'), 'Speichern');
     this.el = h('div', { class: 'overlay', onClick: (e) => { if (e.target === this.el) this._close(); } },
       h('div', { class: 'dialog', role: 'dialog', 'aria-label': 'Einstellungen' },
         h('div', { class: 'dialog-head' }, h('h2', {}, 'Einstellungen'),
-          h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: () => this._close() }, icon('mdi:close'))),
+          h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Schließen', onClick: () => this._close() }, icon('mdi:close'))),
         this.tabBar, this.body,
         h('div', { class: 'dialog-foot' },
-          h('button', { class: 'btn', onClick: () => this._close() }, 'Abbrechen'), this.saveBtn)));
+          h('button', { class: 'btn', type: 'button', onClick: () => this._close() }, 'Abbrechen'), this.saveBtn)));
     this._onKeyDown = (e) => {
       if (e.key === 'Escape') this._close();
     };
@@ -5703,7 +6678,7 @@ class Settings {
 
   _renderTabs() {
     this.tabBar.replaceChildren(...this.tabs.map(([id, label]) => h('button', {
-      class: 'tab', ...(id === this.tab ? { 'data-active': '' } : {}),
+      class: 'tab', type: 'button', ...(id === this.tab ? { 'data-active': '' } : {}),
       onClick: () => { this.tab = id; this._renderTabs(); this._renderBody(); },
     }, label)));
   }
@@ -5722,15 +6697,44 @@ class Settings {
     config.tile_order = {};
     config.tile_users = {};
     config.hidden_tiles = [];
+
+    const renamedRooms = [];
     for (const room of this.rooms) {
+      const rc = config.rooms[room.area_id];
+      if (rc) {
+        const nextName = (rc.name || room.name || '').trim();
+        if (room.area_id !== '__none__' && nextName && nextName !== room.origName) {
+          renamedRooms.push({ area_id: room.area_id, name: nextName });
+        }
+        // Keep area name out of saved dashboard config (stored in HA Area Registry)
+        delete rc.name;
+      }
       config.tile_order[room.area_id] = room.tiles.map((t) => t.key);
       for (const t of room.tiles) {
         if (t.hidden) config.hidden_tiles.push(t.key);
         if (t.users.length) config.tile_users[t.key] = t.users;
       }
     }
+
     this.saveBtn.disabled = true;
     try {
+      for (const rr of renamedRooms) {
+        try {
+          await this.hass.callWS({
+            type: 'smarthome_companion/dashboard/room_update',
+            area_id: rr.area_id,
+            name: rr.name,
+          });
+        } catch (renameErr) {
+          if (/unknown_command|not found|unknown command/i.test(String(renameErr?.code || renameErr?.message || renameErr))) {
+            try {
+              await this.hass.callWS({ type: 'config/area_registry/update', area_id: rr.area_id, name: rr.name });
+            } catch (_) { /* ignore in dev mock */ }
+          } else {
+            throw renameErr;
+          }
+        }
+      }
       const res = await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
       if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
       this.destroy();
@@ -5746,13 +6750,14 @@ class Settings {
     return h('div', { class: `field ${cls}`.trim() }, h('span', { class: 'field-label' }, label), input);
   }
 
-  _text(obj, key, label, { placeholder = '', list = '', type = 'text' } = {}) {
+  _text(obj, key, label, { placeholder = '', list = '', type = 'text', onChange } = {}) {
     const input = h('input', {
       type, value: obj[key] ?? '', placeholder, ...(list ? { list } : {}),
       onInput: (e) => {
         const v = e.target.value;
         if (type === 'number') obj[key] = v === '' ? undefined : Number(v);
         else if (v === '') delete obj[key]; else obj[key] = v;
+        onChange?.(obj[key]);
       },
     });
     return this._field(label, input);
@@ -5768,23 +6773,30 @@ class Settings {
       onChange: (val) => {
         if (val) obj[key] = val;
         else delete obj[key];
+        opts.onChange?.(val);
       },
     }));
     return this._field(label, picker.el);
   }
 
-  _select(obj, key, label, options, fallback = options[0][0]) {
+  _select(obj, key, label, options, fallback = options[0][0], onChange) {
     const val = obj[key] ?? fallback;
     const cdd = this._track(new CustomDropdown({
       options: options.map(([v, l, ic]) => ({ value: v, label: l, ...(ic ? { icon: ic } : {}) })),
       value: val,
-      onChange: (v) => { obj[key] = v; },
+      onChange: (v) => {
+        obj[key] = v;
+        onChange?.(v);
+      },
     }));
     return this._field(label, cdd.el);
   }
 
-  _check(obj, key, label) {
-    const input = h('input', { type: 'checkbox', checked: !!obj[key], onChange: (e) => { obj[key] = e.target.checked; } });
+  _check(obj, key, label, onChange) {
+    const input = h('input', {
+      type: 'checkbox', checked: !!obj[key],
+      onChange: (e) => { obj[key] = e.target.checked; onChange?.(e.target.checked); },
+    });
     return h('label', { class: 'field check' }, input, label);
   }
 
@@ -5836,74 +6848,332 @@ class Settings {
     return this._field(label, picker.el);
   }
 
-  /** Reorderable list of object rows. */
-  _list(arr, { rowTitle, fields, make, addLabel = 'Hinzufügen' }) {
-    const wrap = h('div', { style: { display: 'grid', gap: '10px' } });
+  /** Reorderable collapsible list of object rows with Drag Handle + Arrows. */
+  _list(arr, { rowTitle, rowSub, fields, make, addLabel = 'Hinzufügen', groupKey = 'list', startOpen = false }) {
+    const wrap = h('div', { class: 'reorder-list' });
+    const listWrap = h('div', { class: 'reorder-items' });
+    let dndStop = null;
+
+    const move = (from, to) => {
+      if (from < 0 || to < 0 || from >= arr.length || to >= arr.length || from === to) return;
+      const [item] = arr.splice(from, 1);
+      arr.splice(to, 0, item);
+      render();
+    };
+
     const render = () => {
-      wrap.replaceChildren(
-        ...arr.map((item, i) => h('div', { class: 'row-card' },
-          h('div', { class: 'row-head' },
-            h('div', { class: 'row-title' }, rowTitle(item, i)),
-            this._miniBtn('mdi:arrow-up', 'Nach oben', i === 0, () => { [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; render(); }),
-            this._miniBtn('mdi:arrow-down', 'Nach unten', i === arr.length - 1, () => { [arr[i + 1], arr[i]] = [arr[i], arr[i + 1]]; render(); }),
-            this._miniBtn('mdi:delete-outline', 'Entfernen', false, () => { arr.splice(i, 1); render(); })),
-          h('div', { class: 'fields' }, fields(item)))),
-        h('div', {}, h('button', { class: 'btn', type: 'button', onClick: () => { arr.push(make()); render(); } }, icon('mdi:plus'), addLabel)));
+      dndStop?.();
+      listWrap.replaceChildren(...arr.map((item, i) => {
+        const itemKey = `${groupKey}:${i}:${item.entity_id || item.path || item.pattern || item.name || ''}`;
+        const isOpen = startOpen || this._openRowKeys.has(itemKey);
+        const bodyEl = h('div', { class: 'fields', hidden: !isOpen }, ...(isOpen ? fields(item, render) : []));
+        const chevEl = icon('mdi:chevron-down');
+        return h('div', { class: `row-card accordion-row${isOpen ? ' open' : ''}`, 'data-reorder-item': '' },
+          h('div', {
+            class: 'row-head acc-toggle-head',
+            onClick: () => {
+              if (this._openRowKeys.has(itemKey)) this._openRowKeys.delete(itemKey);
+              else this._openRowKeys.add(itemKey);
+              render();
+            },
+          },
+            h('span', { class: 'drag-handle', title: 'Ziehen zum Sortieren', onClick: (e) => e.stopPropagation() }, icon('mdi:drag')),
+            h('div', { class: 'acc-title-wrap' },
+              h('div', { class: 'row-title' }, rowTitle(item, i)),
+              rowSub ? h('div', { class: 'acc-sub' }, rowSub(item, i)) : null),
+            this._miniBtn('mdi:arrow-up', 'Nach oben', i === 0, (e) => { e.stopPropagation(); move(i, i - 1); }),
+            this._miniBtn('mdi:arrow-down', 'Nach unten', i === arr.length - 1, (e) => { e.stopPropagation(); move(i, i + 1); }),
+            this._miniBtn('mdi:delete-outline', 'Entfernen', false, (e) => { e.stopPropagation(); arr.splice(i, 1); render(); }),
+            h('span', { class: 'acc-chevron' }, chevEl)),
+          isOpen ? bodyEl : null);
+      }));
+      dndStop = enablePointerReorder(listWrap, {
+        itemSelector: '.accordion-row',
+        handleSelector: '.drag-handle',
+        onMove: move,
+      });
+      this._trackDnd(dndStop);
     };
     render();
+    wrap.replaceChildren(
+      listWrap,
+      h('div', {}, h('button', {
+        class: 'btn', type: 'button',
+        onClick: () => {
+          const idx = arr.length;
+          arr.push(make());
+          this._openRowKeys.add(`${groupKey}:${idx}:`);
+          render();
+        },
+      }, icon('mdi:plus'), addLabel)),
+    );
     return wrap;
   }
 
   _miniBtn(ic, label, disabled, onClick) {
-    return h('button', { class: 'mini-btn', type: 'button', 'aria-label': label, disabled, onClick }, icon(ic));
+    return h('button', {
+      class: 'mini-btn', type: 'button', 'aria-label': label, title: label, disabled,
+      onClick: (e) => { onClick?.(e); },
+    }, icon(ic));
   }
 
   _title(text) { return h('div', { class: 'section-title' }, text); }
   _hint(text) { return h('div', { class: 'hint' }, text); }
 
-  // ═══════════ Tabs ═══════════
-  _tabHeader() {
-    this.draft.badges ||= [];
+  // ═══════════ TAB 1: Räume & Kacheln ═══════════
+  _tabRooms() {
+    const roomsListWrap = h('div', { class: 'reorder-items' });
+    const moveRoom = (from, to) => {
+      if (from < 0 || to < 0 || from >= this.rooms.length || to >= this.rooms.length || from === to) return;
+      const [moved] = this.rooms.splice(from, 1);
+      this.rooms.splice(to, 0, moved);
+      this._renderBody(true);
+    };
+
+    const expandLabel = (mode) => EXPAND_OPTIONS.find(([v]) => v === mode)?.[1] || 'Eingeklappt';
+
+    this.rooms.forEach((room, ri) => {
+      const rc = (this.draft.rooms[room.area_id] ||= {});
+      rc.name ??= room.name;
+      rc.icon ??= room.icon || 'mdi:home-outline';
+      rc.expanded ||= room.mode || 'collapsed';
+      rc.expanded_users ||= [...(room.expanded_users || [])];
+      rc.user_expanded ||= clone(room.user_expanded || {});
+      rc.visible_users ||= [...(room.visible_users || [])];
+      rc.sensor_prefs ||= clone(room.sensor_prefs || {});
+
+      const isOpen = this._openRoomIds.has(room.area_id);
+      const isUnassigned = room.area_id === '__none__';
+
+      const iconNode = icon(rc.icon || room.icon || 'mdi:home-outline');
+      const titleNode = h('div', { class: 'row-title' }, rc.name || room.name);
+      const userOverrideCount = Object.keys(rc.user_expanded || {}).length;
+      const summaryParts = [
+        expandLabel(rc.expanded),
+        `${room.tiles.length} Kacheln`,
+        ...(userOverrideCount ? [`${userOverrideCount} Benutzer-Regel${userOverrideCount > 1 ? 'n' : ''}`] : []),
+      ];
+      const summaryNode = h('div', { class: 'room-acc-summary' }, summaryParts.join(' · '));
+
+      const card = h('div', { class: `row-card room-acc-card${isOpen ? ' open' : ''}`, 'data-reorder-item': '' });
+      const head = h('div', {
+        class: 'row-head room-acc-head',
+        onClick: () => {
+          if (this._openRoomIds.has(room.area_id)) this._openRoomIds.delete(room.area_id);
+          else this._openRoomIds.add(room.area_id);
+          this._renderBody(true);
+        },
+      },
+        h('span', { class: 'drag-handle', title: 'Raum ziehen', onClick: (e) => e.stopPropagation() }, icon('mdi:drag')),
+        h('div', { class: 'room-acc-icon' }, iconNode),
+        h('div', { class: 'acc-title-wrap' }, titleNode, summaryNode),
+        this._miniBtn('mdi:arrow-up', 'Raum nach oben', ri === 0, (e) => { e.stopPropagation(); moveRoom(ri, ri - 1); }),
+        this._miniBtn('mdi:arrow-down', 'Raum nach unten', ri === this.rooms.length - 1, (e) => { e.stopPropagation(); moveRoom(ri, ri + 1); }),
+        h('span', { class: 'acc-chevron' }, icon('mdi:chevron-down')));
+
+      card.append(head);
+
+      if (isOpen) {
+        const form = this._track(new RoomSettingsForm({
+          hass: this.hass,
+          roomSpec: room,
+          roomConfig: rc,
+          users: this.users,
+          onNameChange: (val) => {
+            room.name = val || room.origName;
+            titleNode.textContent = room.name;
+          },
+          onIconChange: (ic) => {
+            room.icon = ic;
+            iconNode.setAttribute('icon', ic);
+          },
+          onChange: () => {
+            const ov = Object.keys(rc.user_expanded || {}).length;
+            summaryNode.textContent = [
+              expandLabel(rc.expanded),
+              `${room.tiles.length} Kacheln`,
+              ...(ov ? [`${ov} Benutzer-Regel${ov > 1 ? 'n' : ''}`] : []),
+            ].join(' · ');
+          },
+        }));
+
+        // Tile reorder + visibility
+        const tilesListWrap = h('div', { class: 'reorder-items sub-tiles-list' });
+        const moveTile = (from, to) => {
+          if (from < 0 || to < 0 || from >= room.tiles.length || to >= room.tiles.length || from === to) return;
+          const [t] = room.tiles.splice(from, 1);
+          room.tiles.splice(to, 0, t);
+          renderTiles();
+        };
+
+        const renderTiles = () => {
+          tilesListWrap.replaceChildren(...room.tiles.map((t, ti) => {
+            const tileKey = `tile:${room.area_id}:${t.key}`;
+            const usersOpen = this._openRowKeys.has(tileKey);
+            return h('div', {
+              class: `sub-tile-card${t.hidden ? ' is-hidden' : ''}`,
+              'data-reorder-item': '',
+            },
+              h('div', { class: 'sub-tile' },
+                h('span', { class: 'drag-handle small', title: 'Kachel ziehen' }, icon('mdi:drag')),
+                h('div', { class: 'st-name' },
+                  t.name || t.entity_id,
+                  h('div', { class: 'st-id' }, `${t.entity_id}${t.users.length ? ` · ${t.users.length} Benutzer` : ''}`)),
+                this._miniBtn('mdi:arrow-up', 'Hoch', ti === 0, () => moveTile(ti, ti - 1)),
+                this._miniBtn('mdi:arrow-down', 'Runter', ti === room.tiles.length - 1, () => moveTile(ti, ti + 1)),
+                this._miniBtn('mdi:account-multiple-outline', 'Benutzer-Sichtbarkeit', false, () => {
+                  if (this._openRowKeys.has(tileKey)) this._openRowKeys.delete(tileKey);
+                  else this._openRowKeys.add(tileKey);
+                  renderTiles();
+                }),
+                this._miniBtn(t.hidden ? 'mdi:eye-off' : 'mdi:eye', t.hidden ? 'Einblenden' : 'Ausblenden', false,
+                  () => { t.hidden = !t.hidden; renderTiles(); })),
+              usersOpen ? h('div', { class: 'sub-tile-users' }, this._usersField(t.users, 'Sichtbar für')) : null);
+          }));
+          this._trackDnd(enablePointerReorder(tilesListWrap, {
+            itemSelector: '.sub-tile-card',
+            handleSelector: '.drag-handle',
+            onMove: moveTile,
+          }));
+        };
+        if (room.tiles.length) renderTiles();
+
+        const deleteRoomBtn = !isUnassigned ? h('div', { class: 'room-acc-footer' },
+          h('button', {
+            type: 'button',
+            class: 'btn danger small',
+            onClick: async () => {
+              const conf = await showConfirmDialog(this.el, {
+                title: 'Raum löschen?',
+                message: `Raum „${room.name}“ löschen?\n• Zugewiesene Geräte bleiben erhalten\n• Verschiebung nach „Nicht zugeordnet“`,
+                confirmLabel: 'Löschen',
+                danger: true,
+              });
+              if (!conf) return;
+              try {
+                try {
+                  await this.hass.callWS({ type: 'smarthome_companion/dashboard/room_delete', area_id: room.area_id });
+                } catch (wsErr) {
+                  if (/unknown_command|not found|unknown command/i.test(String(wsErr?.code || wsErr?.message || wsErr))) {
+                    await this.hass.callWS({ type: 'config/area_registry/delete', area_id: room.area_id });
+                  } else throw wsErr;
+                }
+                this.rooms = this.rooms.filter((r) => r.area_id !== room.area_id);
+                delete this.draft.rooms[room.area_id];
+                this._openRoomIds.delete(room.area_id);
+                this._renderBody(true);
+                showToast(this.el, 'Raum gelöscht');
+              } catch (err) {
+                showToast(this.el, `Fehler: ${err?.message || err}`, { error: true });
+              }
+            },
+          }, icon('mdi:delete-outline'), 'Raum löschen')) : null;
+
+        card.append(h('div', { class: 'room-acc-body' },
+          form.el,
+          h('div', { class: 'section-title' }, `Kacheln in „${room.name}“ (${room.tiles.length})`),
+          room.tiles.length
+            ? h('div', { class: 'hint' }, '• Sortierung innerhalb Kategorie-Gruppe (Rollläden, Medien, Lichter)\n• Ziehen oder Pfeile nutzen')
+            : h('div', { class: 'hint' }, '• Keine Kacheln in diesem Raum'),
+          room.tiles.length ? tilesListWrap : null,
+          deleteRoomBtn));
+      }
+
+      roomsListWrap.append(card);
+    });
+
+    this._trackDnd(enablePointerReorder(roomsListWrap, {
+      itemSelector: '.room-acc-card',
+      handleSelector: '.room-acc-head > .drag-handle',
+      onMove: moveRoom,
+    }));
+
+    // Zusatz-Kacheln integrated directly below rooms
+    this.draft.extra_tiles ||= [];
+    const resolveAreaIcon = (area) => (
+      this.draft.rooms?.[area.area_id]?.icon
+      || this.rooms.find((r) => r.area_id === area.area_id)?.icon
+      || area.icon
+      || 'mdi:home-outline'
+    );
+    const areaOptions = [
+      ['', 'Automatisch', 'mdi:auto-fix'],
+      ...this.areas.map((a) => [a.area_id, a.name, resolveAreaIcon(a)]),
+    ];
+
     return [
-      this._title('Begrüßung'),
-      h('div', { class: 'fields' }, this._entity(this.draft, 'greeting_entity', 'Begrüßungs-Sensor (optional)')),
-      this._hint('• Leer = Standard-Begrüßung\n• Sensorwert ersetzt Begrüßung'),
-      this._title('Badges'),
-      this._hint('• Status-Badges unter Begrüßung\n• Sichtbarkeit nach Regel'),
-      this._list(this.draft.badges, {
-        rowTitle: (b) => b.name || b.entity_id || 'Neues Badge',
-        make: () => ({ entity_id: '', show_state: true, tap: 'more-info', visible_when: 'always' }),
-        fields: (b) => [
-          this._entity(b, 'entity_id', 'Entität'),
-          this._text(b, 'name', 'Anzeigename'),
-          this._icon(b, 'icon', 'Icon'),
-          this._color(b, 'color', 'Farbe'),
-          this._check(b, 'show_name', 'Name anzeigen'),
-          this._check(b, 'show_state', 'Status anzeigen'),
-          this._select(b, 'tap', 'Bei Tipp', TAP_OPTIONS),
-          this._text(b, 'path', 'Pfad („Seite“)', { placeholder: '/lovelace/solar' }),
-          this._text(b, 'service', 'Dienst („Dienst“)', { placeholder: 'input_boolean.turn_on' }),
-          this._select(b, 'visible_when', 'Sichtbar', VISIBLE_OPTIONS, 'always'),
-          this._text(b, 'visible_value', 'Vergleichswert', { placeholder: '0 / unavailable, off' }),
+      this._title('Räume & Kacheln'),
+      this._hint('• Reihenfolge per Ziehen oder Pfeilen\n• Raum antippen für Icon, Sensoren & Benutzer-Standard'),
+      roomsListWrap,
+      this._title('Zusatz-Kacheln (ohne Gerät)'),
+      this._hint('• Einzelne Helfer, Skripte oder Klima-Entitäten\n• Raumzuweisung per Auswahl'),
+      this._list(this.draft.extra_tiles, {
+        groupKey: 'extra',
+        rowTitle: (e) => e.name || e.entity_id || 'Neue Kachel',
+        rowSub: (e) => e.entity_id || 'Noch keine Entität gewählt',
+        make: () => ({ entity_id: '', area_id: '' }),
+        fields: (e) => [
+          this._entity(e, 'entity_id', 'Entität'),
+          this._select(e, 'area_id', 'Raum', areaOptions, ''),
+          this._text(e, 'name', 'Anzeigename (optional)'),
+          this._icon(e, 'icon', 'Icon (optional)'),
         ],
-        addLabel: 'Badge hinzufügen',
+        addLabel: 'Zusatz-Kachel hinzufügen',
       }),
     ];
   }
 
-  _tabInfo() {
+  // ═══════════ TAB 2: Startseite & Infos ═══════════
+  _tabHome() {
     const d = this.draft;
+    d.badges ||= [];
     d.warning ||= {};
     d.announce ||= {};
     d.announce.chips ||= [];
     d.persons ||= [];
+    d.trash ||= {};
+    d.trash.patterns ||= [];
+    d.trash.calendar_entities ||= [];
+
     return [
+      this._title('Begrüßung'),
+      h('div', { class: 'fields' }, this._entity(d, 'greeting_entity', 'Begrüßungs-Sensor (optional)')),
+      this._hint('• Leer = automatische Tageszeit-Begrüßung\n• Sensorwert ersetzt Text'),
+
+      this._title('Status-Badges'),
+      this._hint('• Kompakte Status-Chips unter Begrüßung\n• Tippen zum Aufklappen & Bearbeiten'),
+      this._list(d.badges, {
+        groupKey: 'badge',
+        rowTitle: (b) => b.name || b.entity_id || 'Neues Badge',
+        rowSub: (b) => `${b.entity_id || 'Entität fehlt'} · ${b.tap || 'more-info'}`,
+        make: () => ({ entity_id: '', show_state: true, tap: 'more-info', visible_when: 'always' }),
+        fields: (b, rerender) => {
+          const tapMode = b.tap || 'more-info';
+          const visMode = b.visible_when || 'always';
+          return [
+            this._entity(b, 'entity_id', 'Entität'),
+            this._text(b, 'name', 'Anzeigename'),
+            this._icon(b, 'icon', 'Icon'),
+            this._color(b, 'color', 'Farbe'),
+            this._check(b, 'show_name', 'Name anzeigen'),
+            this._check(b, 'show_state', 'Status anzeigen'),
+            this._select(b, 'tap', 'Bei Tipp', TAP_OPTIONS, 'more-info', () => rerender()),
+            ...(tapMode === 'navigate' ? [this._text(b, 'path', 'Pfad / Ansicht', { placeholder: '/lovelace/solar' })] : []),
+            ...(tapMode === 'service' ? [this._text(b, 'service', 'Dienst', { placeholder: 'input_boolean.turn_on' })] : []),
+            this._select(b, 'visible_when', 'Sichtbarkeit', VISIBLE_OPTIONS, 'always', () => rerender()),
+            ...(visMode !== 'always' ? [this._text(b, 'visible_value', 'Vergleichswert', { placeholder: '0 / unavailable, off' })] : []),
+          ];
+        },
+        addLabel: 'Badge hinzufügen',
+      }),
+
       this._title('Wetterwarnung'),
       h('div', { class: 'fields' },
         this._entity(d.warning, 'entity_id', 'Warnstufen-Sensor'),
         this._text(d.warning, 'headline_attribute', 'Attribut für Überschrift', { placeholder: 'warning_1_headline' }),
         this._text(d.warning, 'path', 'Pfad bei Tipp', { placeholder: '/dashboard-warnungen/dash-warnungen' })),
       this._hint('• Anzeige ab Warnstufe > 0\n• Rauchmelder immer aktiv'),
+
       this._title('Ankündigung'),
       h('div', { class: 'fields' },
         this._entity(d.announce, 'entity_id', 'Skript / Entität'),
@@ -5911,35 +7181,34 @@ class Settings {
         this._icon(d.announce, 'icon', 'Icon'),
         this._entity(d.announce, 'chips_visible_entity', 'Chip-Verfügbarkeit (Sensor)')),
       this._list(d.announce.chips, {
+        groupKey: 'achip',
         rowTitle: (c) => c.entity_id || 'Chip',
         make: () => ({ entity_id: '', icon: '' }),
         fields: (c) => [this._entity(c, 'entity_id', 'Entität'), this._icon(c, 'icon', 'Icon')],
         addLabel: 'Chip hinzufügen',
       }),
+
       this._title('Personen'),
       this._hint('• Anzeige nur „Zuhause“\n• Pro Benutzer filterbar'),
       this._list(d.persons, {
+        groupKey: 'person',
         rowTitle: (p) => p.entity_id || 'Person',
         make: () => ({ entity_id: '', users: [] }),
-        fields: (p) => { p.users ||= []; return [this._entity(p, 'entity_id', 'Person / Tracker'), this._usersField(p.users, 'Sichtbar für')]; },
+        fields: (p) => {
+          p.users ||= [];
+          return [this._entity(p, 'entity_id', 'Person / Tracker'), this._usersField(p.users, 'Sichtbar für')];
+        },
         addLabel: 'Person hinzufügen',
       }),
-    ];
-  }
 
-  _tabTrash() {
-    const d = this.draft;
-    d.trash ||= {};
-    d.trash.patterns ||= [];
-    d.trash.calendar_entities ||= [];
-    return [
       this._title('Müllkalender'),
       h('div', { class: 'fields' },
         this._csv(d.trash, 'calendar_entities', 'Kalender (kommagetrennt)', 'calendar.muellplan'),
         this._text(d.trash, 'next_days', 'Vorschau (Tage)', { type: 'number' })),
-      this._hint('• Muster im Terminnamen → Tonne\n• Standard: 3D-Vektortonne\n• Eigenes Bild optional'),
       this._list(d.trash.patterns, {
+        groupKey: 'trash',
         rowTitle: (p) => p.pattern || 'Tonne',
+        rowSub: (p) => `Farbe: ${p.color || 'grey'}`,
         make: () => ({ pattern: '', icon: 'mdi:trash-can-outline', color: 'grey', picture: '' }),
         fields: (p) => {
           const previewWrap = h('div', { class: 'trash-preview-box' }, renderTrashBin(p.color || 'grey', 42));
@@ -5965,110 +7234,98 @@ class Settings {
     ];
   }
 
-  _tabNav() {
+  // ═══════════ TAB 3: Navigation & Design ═══════════
+  _tabNavAndDesign() {
     this.draft.nav ||= [];
-    return [
-      this._title('Untere Leiste'),
-      this._hint('• Untere Schnellzugriff-Leiste\n• Beliebiger HA-Pfad'),
-      this._list(this.draft.nav, {
-        rowTitle: (n) => n.name || n.path || 'Button',
-        make: () => ({ name: '', icon: 'mdi:home', path: '' }),
-        fields: (n) => [
-          this._text(n, 'name', 'Beschriftung (optional)'), this._icon(n, 'icon', 'Icon'),
-          this._text(n, 'path', 'Pfad', { placeholder: '/lovelace/sicherheit' }),
-        ],
-        addLabel: 'Button hinzufügen',
-      }),
-    ];
-  }
-
-  _tabRooms() {
-    const move = (arr, i, dir) => { const j = i + dir; if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; this._renderBody(true); };
-    return [
-      this._hint('• Raum- & Kachel-Reihenfolge\n• Kacheln ein-/ausblenden\n• Benutzer-Sichtbarkeit'),
-      ...this.rooms.map((room, ri) => {
-        const rc = (this.draft.rooms[room.area_id] ||= {});
-        rc.expanded_users ||= [];
-        rc.visible_users ||= [];
-        return h('div', { class: 'row-card' },
-          h('div', { class: 'row-head' },
-            icon(rc.icon || room.icon || 'mdi:home-outline'),
-            h('div', { class: 'row-title' }, room.name),
-            this._miniBtn('mdi:arrow-up', 'Raum nach oben', ri === 0, () => move(this.rooms, ri, -1)),
-            this._miniBtn('mdi:arrow-down', 'Raum nach unten', ri === this.rooms.length - 1, () => move(this.rooms, ri, 1))),
-          h('div', { class: 'fields' },
-            this._select(rc, 'expanded', 'Standard', EXPAND_OPTIONS, 'collapsed'),
-            this._usersField(rc.expanded_users, 'Ausgeklappt für'),
-            this._usersField(rc.visible_users, 'Sichtbar für')),
-          h('details', { class: 'sub' },
-            h('summary', {}, `${room.tiles.length} Kacheln`),
-            ...room.tiles.map((t, ti) => h('div', { class: 'sub-tile', ...(t.hidden ? { 'data-hidden': '' } : {}) },
-              h('div', { class: 'st-name' }, t.name || t.entity_id, h('div', { class: 'st-id' }, t.entity_id)),
-              this._miniBtn('mdi:arrow-up', 'Hoch', ti === 0, () => move(room.tiles, ti, -1)),
-              this._miniBtn('mdi:arrow-down', 'Runter', ti === room.tiles.length - 1, () => move(room.tiles, ti, 1)),
-              this._miniBtn(t.hidden ? 'mdi:eye-off' : 'mdi:eye', t.hidden ? 'Einblenden' : 'Ausblenden', false,
-                () => { t.hidden = !t.hidden; this._renderBody(true); })),
-            ),
-            h('div', { class: 'hint', style: { marginTop: '8px' } }, 'Sichtbarkeit pro Kachel:'),
-            ...room.tiles.map((t) => h('details', { class: 'sub' },
-              h('summary', {}, `${t.name || t.entity_id}${t.users.length ? ` · ${t.users.length} Benutzer` : ''}`),
-              this._usersField(t.users, 'Sichtbar für')))));
-      }),
-    ];
-  }
-
-  _tabExtra() {
-    this.draft.extra_tiles ||= [];
-    const resolveAreaIcon = (area) => (
-      this.draft.rooms?.[area.area_id]?.icon
-      || this.rooms.find((r) => r.area_id === area.area_id)?.icon
-      || area.icon
-      || 'mdi:home-outline'
-    );
-    const areaOptions = [
-      ['', 'Automatisch', 'mdi:auto-fix'],
-      ...this.areas.map((a) => [a.area_id, a.name, resolveAreaIcon(a)]),
-    ];
-    return [
-      this._title('Zusatz-Kacheln'),
-      this._hint('• Entitäten ohne Gerät (Helfer, Skripte, Klima)\n• Raumzuweisung per ID'),
-      this._list(this.draft.extra_tiles, {
-        rowTitle: (e) => e.name || e.entity_id || 'Neue Kachel',
-        make: () => ({ entity_id: '', area_id: '' }),
-        fields: (e) => [
-          this._entity(e, 'entity_id', 'Entität'), this._select(e, 'area_id', 'Raum', areaOptions, ''),
-          this._text(e, 'name', 'Anzeigename (optional)'), this._icon(e, 'icon', 'Icon (optional)'),
-        ],
-        addLabel: 'Kachel hinzufügen',
-      }),
-    ];
-  }
-
-  _tabColors() {
+    this.draft.views ||= {};
+    const viewsCfg = this.draft.views;
     const presets = (this.draft.color_presets ||= []);
+
+    // Built-in theme views configuration cards
+    const viewCards = BUILTIN_VIEWS.filter((v) => v.id !== 'overview').map((v) => {
+      const vc = (viewsCfg[v.id] ||= {});
+      if (vc.enabled === undefined) vc.enabled = true;
+      vc.users ||= [];
+      const row = h('div', { class: 'row-card' },
+        h('div', { class: 'row-head' },
+          h('div', { class: 'room-acc-icon', style: { color: v.color } }, icon(v.icon)),
+          h('div', { class: 'acc-title-wrap' },
+            h('div', { class: 'row-title' }, v.label),
+            h('div', { class: 'acc-sub' }, v.desc)),
+          this._check(vc, 'enabled', 'Aktiviert')),
+        h('div', { class: 'fields' },
+          ...(v.id === 'auto' ? [this._text(vc, 'webview_url', 'Fahrzeug-Webansicht URL (optional)', { placeholder: 'http://192.168.178.188:6176/' })] : []),
+          ...(v.id === 'security' ? [this._entity(vc, 'alarm_entity', 'Alarmanlage (optional)', { domain: 'alarm_control_panel' })] : []),
+          this._usersField(vc.users, 'Sichtbar für')));
+      return row;
+    });
+
     const toHex = (rgb) => `#${rgb.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('')}`;
     const fromHex = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-    const wrap = h('div', { class: 'user-chips', style: { gap: '12px' } });
-    const render = () => wrap.replaceChildren(
+    const colorWrap = h('div', { class: 'user-chips', style: { gap: '12px' } });
+    const renderColors = () => colorWrap.replaceChildren(
       ...presets.map((rgb, i) => h('div', { style: { display: 'flex', gap: '4px', alignItems: 'center' } },
-        h('input', { type: 'color', value: toHex(rgb), style: { width: '48px', height: '40px', border: 0, background: 'none' }, onInput: (e) => { presets[i] = fromHex(e.target.value); } }),
-        this._miniBtn('mdi:close', 'Entfernen', false, () => { presets.splice(i, 1); render(); }))),
-      h('button', { class: 'btn', type: 'button', onClick: () => { presets.push([255, 160, 60]); render(); } }, icon('mdi:plus'), 'Farbe'));
-    render();
+        h('input', {
+          type: 'color', value: toHex(rgb),
+          style: { width: '48px', height: '40px', border: 0, background: 'none' },
+          onInput: (e) => { presets[i] = fromHex(e.target.value); },
+        }),
+        this._miniBtn('mdi:close', 'Entfernen', false, () => { presets.splice(i, 1); renderColors(); }))),
+      h('button', { class: 'btn', type: 'button', onClick: () => { presets.push([255, 160, 60]); renderColors(); } }, icon('mdi:plus'), 'Farbe'));
+    renderColors();
+
     return [
+      this._title('Untere Navigationsleiste'),
+      this._hint('• Direktsprung zu eingebauten Ansichten oder HA-Pfaden\n• Übersicht & Mehr automatisch erreichbar'),
+      this._list(this.draft.nav, {
+        groupKey: 'nav',
+        rowTitle: (n) => n.name || n.view || n.path || 'Button',
+        rowSub: (n) => n.view ? `Ansicht: ${n.view}` : (n.path || 'Kein Ziel'),
+        make: () => ({ name: '', icon: 'mdi:shield-home', path: '' }),
+        fields: (n, rerender) => {
+          const targetObj = { sel: n.view ? `companion:${n.view}` : (n.path?.startsWith('companion:') ? n.path : '') };
+          const viewSel = this._track(new CustomDropdown({
+            options: VIEW_NAV_CHOICES.map(([v, l]) => ({ value: v, label: l })),
+            value: targetObj.sel,
+            onChange: (val) => {
+              if (val.startsWith('companion:')) {
+                n.view = val.slice('companion:'.length);
+                n.path = val;
+              } else {
+                delete n.view;
+              }
+              rerender();
+            },
+          }));
+          return [
+            this._text(n, 'name', 'Beschriftung (leer = Nur Icon)'),
+            this._icon(n, 'icon', 'Icon'),
+            this._field('Ziel-Ansicht', viewSel.el),
+            ...(!targetObj.sel ? [this._text(n, 'path', 'Benutzerdefinierter Pfad', { placeholder: '/lovelace/solar oder /todo?...' })] : []),
+          ];
+        },
+        addLabel: 'Navigations-Button hinzufügen',
+      }),
+
+      this._title('Integrierte Themen-Ansichten'),
+      this._hint('• Sichtbarkeit & Zusatzoptionen pro Bereich\n• Im „Mehr“-Hub & Navigation verfügbar'),
+      ...viewCards,
+
       this._title('Licht-Farbpresets'),
-      this._hint('• Auswahl bei Farblampen\n• Tipp = Farbe setzen'),
-      wrap,
+      this._hint('• Schnellauswahl bei Farblampen\n• Tipp = Farbe setzen'),
+      colorWrap,
     ];
   }
 
-  // ═══════════ Geräteverwaltung Tab ═══════════
+  // ═══════════ TAB 4: Geräte ═══════════
   _tabDevices() {
     const wrap = h('div', { class: 'settings-devices-tab' });
     this._renderDevicesTab(wrap);
     return [
       this._title('Geräte'),
-      this._hint('• Eingerichtete Geräte & Gruppen\n• Name, Raum, Kategorie editierbar'),
+      h('div', { class: 'inline-notice' },
+        icon('mdi:information-outline'),
+        h('span', {}, 'Geräte- & Gruppenänderungen werden sofort gespeichert.')),
       wrap,
     ];
   }
@@ -6095,10 +7352,9 @@ class Settings {
             h('div', { class: 'hint' }, 'Erstes Gerät über Assistent einrichten'),
             h('div', { style: { marginTop: '14px' } },
               h('button', {
-                class: 'btn primary',
-                type: 'button',
+                class: 'btn primary', type: 'button',
                 onClick: () => this.onOpenDevice?.(null),
-              }, icon('mdi:plus-circle-outline'), 'Gerät einrichten')))
+              }, icon('mdi:plus-circle-outline'), 'Gerät einrichten'))),
         );
         return;
       }
@@ -6136,8 +7392,6 @@ class Settings {
           if (!groups.has(areaName)) groups.set(areaName, []);
           groups.get(areaName).push(id);
         }
-
-        // Include rooms from matching groups
         for (const g of filteredGroups) {
           const areaName = areaMap.get(g.area_id) || 'Ohne Raum';
           if (!groups.has(areaName)) groups.set(areaName, []);
@@ -6158,7 +7412,6 @@ class Settings {
           });
 
           const roomGroups = filteredGroups.filter((g) => (areaMap.get(g.area_id) || 'Ohne Raum') === areaName);
-
           const groupCards = roomGroups.map((g) => createGroupCard({
             group: g,
             onEdit: () => this.onOpenGroup?.(g.id),
@@ -6174,11 +7427,8 @@ class Settings {
                 await this.hass.callWS({ type: 'smarthome_companion/groups/delete', group_id: g.id });
                 delete groupsMap[g.id];
                 showToast(this.el, 'Gruppe aufgelöst');
-                if (!configuredIds.length && !Object.keys(groupsMap).length) {
-                  this._renderDevicesTab(wrap);
-                } else {
-                  preserveScroll(this.body, updateList);
-                }
+                if (!configuredIds.length && !Object.keys(groupsMap).length) this._renderDevicesTab(wrap);
+                else preserveScroll(this.body, updateList);
               } catch (err) {
                 showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
               }
@@ -6190,37 +7440,25 @@ class Settings {
             const dev = devList.find((d) => d.id === id);
             const name = cfg.custom_name || dev?.name_by_user || dev?.name || 'Unbenanntes Gerät';
             const mfg = [dev?.manufacturer, dev?.model].filter(Boolean).join(' · ');
-
             const cat = DEVICE_CATEGORIES.find((c) => c.id === cfg.category);
             const catName = cat?.name || cfg.category;
             const catIcon = cat?.icon || 'mdi:devices';
             const catColor = cat?.color || 'var(--cd-accent)';
 
-            const badges = [
-              h('span', {
-                class: 'badge-tag category',
-                style: { '--badge-cat-color': catColor },
-              }, icon(catIcon), catName),
-            ];
-
             return h('div', { class: 'device-card' },
               h('div', { class: 'd-icon', style: { color: catColor } }, icon(catIcon)),
               h('div', { class: 'd-info' },
                 h('div', { class: 'd-name' }, name),
-                h('div', { class: 'd-meta' }, mfg ? h('span', { class: 'd-mfg' }, mfg) : null, ...badges)),
+                h('div', { class: 'd-meta' },
+                  mfg ? h('span', { class: 'd-mfg' }, mfg) : null,
+                  h('span', { class: 'badge-tag category', style: { '--badge-cat-color': catColor } }, icon(catIcon), catName))),
               h('div', { class: 'device-card-actions' },
                 h('button', {
-                  class: 'btn secondary small',
-                  type: 'button',
-                  title: 'Gerät bearbeiten',
-                  'aria-label': 'Bearbeiten',
+                  class: 'btn secondary small', type: 'button', title: 'Gerät bearbeiten', 'aria-label': 'Bearbeiten',
                   onClick: () => this.onOpenDevice?.(id),
                 }, icon('mdi:pencil'), h('span', {}, 'Bearbeiten')),
                 h('button', {
-                  class: 'icon-btn danger',
-                  type: 'button',
-                  title: 'Einrichtung aufheben',
-                  'aria-label': 'Einrichtung aufheben',
+                  class: 'icon-btn danger', type: 'button', title: 'Einrichtung aufheben', 'aria-label': 'Einrichtung aufheben',
                   onClick: async () => {
                     const conf = await showConfirmDialog(this.el, {
                       title: 'Einrichtung aufheben?',
@@ -6235,11 +7473,8 @@ class Settings {
                       const idx = configuredIds.indexOf(id);
                       if (idx >= 0) configuredIds.splice(idx, 1);
                       showToast(this.el, 'Einrichtung aufgehoben');
-                      if (!configuredIds.length && !Object.keys(groupsMap).length) {
-                        this._renderDevicesTab(wrap);
-                      } else {
-                        preserveScroll(this.body, updateList);
-                      }
+                      if (!configuredIds.length && !Object.keys(groupsMap).length) this._renderDevicesTab(wrap);
+                      else preserveScroll(this.body, updateList);
                     } catch (err) {
                       showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
                     }
@@ -6247,8 +7482,7 @@ class Settings {
                 }, icon('mdi:delete-outline'))));
           });
 
-          const totalCount = groupCards.length + cards.length;
-          return createDeviceRoomSection(areaName, [...groupCards, ...cards], totalCount);
+          return createDeviceRoomSection(areaName, [...groupCards, ...cards], groupCards.length + cards.length);
         });
 
         listEl.replaceChildren(...sections);
@@ -6261,8 +7495,7 @@ class Settings {
       const topRow = h('div', { class: 'devices-toolbar' },
         h('div', { class: 'search-bar' }, icon('mdi:magnify'), searchInput),
         h('button', {
-          class: 'btn primary',
-          type: 'button',
+          class: 'btn primary', type: 'button',
           onClick: () => this.onOpenDevice?.(null),
         }, icon('mdi:plus-circle-outline'), 'Gerät einrichten'));
 
@@ -6273,129 +7506,11 @@ class Settings {
     }
   }
 }
-
-// Re-exported so the main panel can reuse the named-colour palette.
 // ─── END: components/settings.js ───
 
 
 // ─── START: components/room_modals.js ───
 // Shared modals for Room Editing (Edit Mode) and Dynamic Sensor Conflict Resolution.
-function _sensorMeta(type) {
-  return ROOM_SENSOR_TYPES.find((t) => t.value === type) || {
-    value: type,
-    label: type,
-    icon: 'mdi:gauge',
-    color: 'var(--cd-accent)',
-  };
-}
-
-function _formatLiveValue(hass, entityId) {
-  const st = hass?.states?.[entityId];
-  if (!st) return 'unbekannt';
-  const unit = st.attributes?.unit_of_measurement;
-  return unit ? `${st.state} ${unit}` : st.state;
-}
-
-function _entityLabel(hass, entityId) {
-  return hass?.states?.[entityId]?.attributes?.friendly_name || entityId;
-}
-
-/**
- * Renders an interactive selector for a sensor type with 2+ sensors in a room:
- * Mode A: Exclusive single sensor
- * Mode B: Average (or combined) of selected sensors via checkboxes
- */
-function buildSensorPrefBlock({ hass, type, entityIds, currentPref, onChange }) {
-  const meta = _sensorMeta(type);
-  const isBinary = type === 'motion' || type === 'moisture';
-
-  let mode = currentPref?.mode === 'single' ? 'single' : 'average';
-  let selected = Array.isArray(currentPref?.entities)
-    ? currentPref.entities.filter((e) => entityIds.includes(e))
-    : [];
-  if (!selected.length) {
-    selected = mode === 'single' ? [entityIds[0]] : [...entityIds];
-  }
-
-  const container = h('div', { class: 'sensor-pref-card' });
-
-  const render = () => preserveScroll(container.closest?.('.dialog-body'), () => {
-    const modeRow = h('div', { class: 'sensor-mode-tabs' },
-      h('button', {
-        type: 'button',
-        class: `sensor-mode-tab${mode === 'single' ? ' active' : ''}`,
-        onClick: () => {
-          mode = 'single';
-          selected = [selected[0] || entityIds[0]];
-          onChange({ mode, entities: [...selected] });
-          render();
-        },
-      }, icon('mdi:radiobox-marked'), 'Einzelner Sensor'),
-      h('button', {
-        type: 'button',
-        class: `sensor-mode-tab${mode === 'average' ? ' active' : ''}`,
-        onClick: () => {
-          mode = 'average';
-          if (selected.length < 2) selected = [...entityIds];
-          onChange({ mode, entities: [...selected] });
-          render();
-        },
-      }, icon(isBinary ? 'mdi:checkbox-multiple-marked' : 'mdi:chart-line'), isBinary ? 'Kombiniert' : 'Durchschnitt'));
-
-    const rows = entityIds.map((eid) => {
-      const isChecked = mode === 'single' ? selected[0] === eid : selected.includes(eid);
-      const name = _entityLabel(hass, eid);
-      const liveVal = _formatLiveValue(hass, eid);
-
-      return h('div', {
-        class: `sensor-choice-row${isChecked ? ' selected' : ''}`,
-        onClick: () => {
-          if (mode === 'single') {
-            selected = [eid];
-          } else {
-            if (selected.includes(eid)) {
-              if (selected.length <= 1) return; // keep at least 1 selected
-              selected = selected.filter((id) => id !== eid);
-            } else {
-              selected = [...selected, eid];
-            }
-          }
-          onChange({ mode, entities: [...selected] });
-          render();
-        },
-      },
-      h('div', { class: 'sensor-choice-check' },
-        icon(mode === 'single'
-          ? (isChecked ? 'mdi:radiobox-marked' : 'mdi:radiobox-blank')
-          : (isChecked ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'))),
-      h('div', { class: 'sensor-choice-info' },
-        h('div', { class: 'sensor-choice-name' }, name),
-        h('div', { class: 'sensor-choice-id' }, eid)),
-      h('span', { class: 'badge-tag' }, liveVal));
-    });
-
-    const hintText = mode === 'single'
-      ? '• Nur ausgewählter Sensor aktiv'
-      : (isBinary
-        ? '• Auswahl kombiniert gemeldet'
-        : `• Durchschnitt aus ${selected.length} von ${entityIds.length} Sensoren`);
-
-    container.replaceChildren(
-      h('div', { class: 'sensor-pref-head' },
-        h('div', { class: 'sensor-pref-title', style: { color: meta.color } },
-          icon(meta.icon),
-          h('span', {}, meta.label)),
-        h('span', { class: 'badge-tag' }, `${entityIds.length} Sensoren`)),
-      modeRow,
-      h('div', { class: 'hint', style: { marginBottom: '8px' } }, hintText),
-      h('div', { class: 'sensor-choice-list' }, ...rows),
-    );
-  });
-
-  render();
-  return container;
-}
-
 /**
  * Dynamic conflict resolution modal when adding a sensor of a type that already exists in the room.
  */
@@ -6420,6 +7535,7 @@ class SensorConflictModal {
 
   destroy() {
     this.el?.remove();
+    this.el = null;
   }
 
   _build() {
@@ -6428,128 +7544,105 @@ class SensorConflictModal {
       type: c.type,
       entityIds: c.entityIds,
       currentPref: this.prefs[c.type],
-      onChange: (pref) => { this.prefs[c.type] = pref; },
+      onChange: (next) => { this.prefs[c.type] = next; },
     }));
 
-    this.saveBtn = h('button', {
+    const saveBtn = h('button', {
       type: 'button',
       class: 'btn primary',
-      onClick: () => this._submit(),
+      onClick: () => {
+        if (this._saving) return;
+        this._saving = true;
+        saveBtn.disabled = true;
+        this.destroy();
+        this.onSave?.(this.prefs);
+      },
     }, icon('mdi:check'), 'Übernehmen');
 
-    this.el = h('div', { class: 'overlay', style: { zIndex: '1010' } },
-      h('div', { class: 'dialog room-modal-dialog' },
-        h('div', { class: 'dialog-head' },
-          icon('mdi:tune-variant'),
-          h('h2', {}, `Sensoren: ${this.areaName}`)),
-        h('div', { class: 'dialog-body' },
-          h('div', { class: 'hint', style: { marginBottom: '10px' } },
-            '• Mehrere Sensoren gleichen Typs\n• Einzelsensor oder Durchschnitt wählen'),
-          ...blocks),
-        h('div', { class: 'dialog-foot', style: { justifyContent: 'flex-end' } },
-          h('div', { class: 'dialog-foot-actions' },
-            h('button', {
-              type: 'button',
-              class: 'btn',
-              onClick: () => { this.destroy(); this.onCancel?.(); },
-            }, 'Standard (Alle)'),
-            this.saveBtn))));
-  }
-
-  async _submit() {
-    if (this._saving) return;
-    this._saving = true;
-    this.saveBtn.disabled = true;
-    try {
-      await this.onSave?.(this.prefs);
-      this.destroy();
-    } catch (err) {
-      this._saving = false;
-      this.saveBtn.disabled = false;
-      showToast(this.el, `Fehler: ${err?.message || err}`, { error: true });
-    }
+    this.el = h('div', {
+      class: 'overlay',
+      onClick: (e) => {
+        if (e.target === this.el) {
+          this.destroy();
+          this.onCancel?.();
+        }
+      },
+    },
+    h('div', { class: 'dialog room-modal-dialog', role: 'dialog', 'aria-label': 'Mehrere Raumsensoren erkannt' },
+      h('div', { class: 'dialog-head' },
+        icon('mdi:thermometer-lines'),
+        h('h2', {}, `Sensoren in „${this.areaName}“`),
+        h('button', {
+          type: 'button',
+          class: 'icon-btn',
+          'aria-label': 'Schließen',
+          onClick: () => {
+            this.destroy();
+            this.onCancel?.();
+          },
+        }, icon('mdi:close'))),
+      h('div', { class: 'dialog-body' },
+        h('div', { class: 'hint', style: { marginBottom: '12px' } },
+          '• Mehrere Sensoren gleichen Typs erkannt\n• Einzelauswahl oder Durchschnitt festlegen'),
+        ...blocks),
+      h('div', { class: 'dialog-foot' },
+        h('button', {
+          type: 'button',
+          class: 'btn',
+          onClick: () => {
+            this.destroy();
+            this.onCancel?.();
+          },
+        }, 'Abbrechen'),
+        saveBtn)));
   }
 }
 
 /**
- * Room Edit Modal opened when clicking a room header in Dashboard Edit Mode.
- * Allows changing the room icon and sensor conflict/average preferences.
+ * Full Room Edit Modal triggered by clicking a room header in Edit Mode.
+ * Shares RoomSettingsForm identically with Settings -> "Räume & Kacheln".
  */
 class RoomEditModal {
-  constructor({ hass, roomSpec, onSaved, onClose }) {
+  constructor({ hass, roomSpec, users = [], onClose, onSaved }) {
     this.hass = hass;
     this.roomSpec = roomSpec;
-    this.onSaved = onSaved;
+    this.users = users;
     this.onClose = onClose;
-    this.roomName = roomSpec.name || '';
-    this.selectedIcon = roomSpec.icon || 'mdi:home-outline';
-    this.sensorPrefs = JSON.parse(JSON.stringify(roomSpec.sensor_prefs || {}));
+    this.onSaved = onSaved;
     this._saving = false;
+
+    this.roomConfig = {
+      name: roomSpec.name || '',
+      icon: roomSpec.icon || 'mdi:home-outline',
+      expanded: roomSpec.mode || 'collapsed',
+      visible_users: Array.isArray(roomSpec.visible_users) ? [...roomSpec.visible_users] : [],
+      expanded_users: Array.isArray(roomSpec.expanded_users) ? [...roomSpec.expanded_users] : [],
+      user_expanded: (roomSpec.user_expanded && typeof roomSpec.user_expanded === 'object') ? { ...roomSpec.user_expanded } : {},
+      sensor_prefs: (roomSpec.sensor_prefs && typeof roomSpec.sensor_prefs === 'object') ? { ...roomSpec.sensor_prefs } : {},
+    };
     this._build();
   }
 
   destroy() {
-    this.iconPicker?.destroy();
+    this.form?.destroy?.();
+    this.form = null;
+    if (this._onKeyDown) {
+      document.removeEventListener('keydown', this._onKeyDown);
+      this._onKeyDown = null;
+    }
     this.el?.remove();
+    this.el = null;
   }
 
   _build() {
     const isUnassigned = this.roomSpec.area_id === '__none__';
-    this.nameInput = h('input', {
-      type: 'text',
-      value: this.roomName,
-      disabled: isUnassigned,
-      placeholder: 'Raumname',
-      onInput: (e) => { this.roomName = e.target.value; },
-    });
 
-    this.headIcon = icon(this.selectedIcon);
-    this.iconPicker = new IconPicker({
+    this.form = new RoomSettingsForm({
       hass: this.hass,
-      value: this.selectedIcon,
-      priorityIcons: ROOM_ICON_OPTIONS,
-      placeholder: 'Raum-Icon suchen',
-      onChange: (val) => {
-        const nextIcon = (val && val.includes(':')) ? val : 'mdi:home-outline';
-        this.selectedIcon = nextIcon;
-        this.headIcon?.setAttribute('icon', nextIcon);
-      },
+      roomSpec: this.roomSpec,
+      roomConfig: this.roomConfig,
+      users: this.users,
     });
-
-    const allSensors = this.roomSpec.all_sensors || {};
-    const sensorEntries = Object.entries(allSensors).filter(([, eids]) => Array.isArray(eids) && eids.length > 0);
-
-    const sensorBlocks = sensorEntries.length
-      ? sensorEntries.map(([type, eids]) => {
-          if (eids.length > 1) {
-            return buildSensorPrefBlock({
-              hass: this.hass,
-              type,
-              entityIds: eids,
-              currentPref: this.sensorPrefs[type],
-              onChange: (pref) => { this.sensorPrefs[type] = pref; },
-            });
-          }
-          const meta = _sensorMeta(type);
-          const eid = eids[0];
-          return h('div', { class: 'sensor-pref-card' },
-            h('div', { class: 'sensor-pref-head' },
-              h('div', { class: 'sensor-pref-title', style: { color: meta.color } },
-                icon(meta.icon),
-                h('span', {}, meta.label)),
-              h('span', { class: 'badge-tag' }, _formatLiveValue(this.hass, eid))),
-            h('div', { class: 'sensor-choice-row selected', style: { cursor: 'default' } },
-              h('div', { class: 'sensor-choice-info' },
-                h('div', { class: 'sensor-choice-name' }, _entityLabel(this.hass, eid)),
-                h('div', { class: 'sensor-choice-id' }, eid))));
-        })
-      : [h('div', { class: 'hint' }, 'Keine Raumsensoren zugewiesen')];
-
-    this.saveBtn = h('button', {
-      type: 'button',
-      class: 'btn primary',
-      onClick: () => this._save(),
-    }, icon('mdi:content-save'), 'Speichern');
 
     const deleteBtn = !isUnassigned ? h('button', {
       type: 'button',
@@ -6557,31 +7650,38 @@ class RoomEditModal {
       onClick: () => this._confirmDelete(),
     }, icon('mdi:delete-outline'), 'Raum löschen') : null;
 
+    this.saveBtn = h('button', {
+      type: 'button',
+      class: 'btn primary',
+      onClick: () => this._save(),
+    }, icon('mdi:content-save'), 'Speichern');
+
     this.el = h('div', {
       class: 'overlay',
-      style: { zIndex: '1010' },
       onClick: (e) => { if (e.target === this.el) this._close(); },
     },
-    h('div', { class: 'dialog room-modal-dialog' },
+    h('div', { class: 'dialog room-modal-dialog', role: 'dialog', 'aria-label': `Raum bearbeiten: ${this.roomSpec.name}` },
       h('div', { class: 'dialog-head' },
-        this.headIcon,
-        h('h2', {}, `Raum: ${this.roomSpec.name}`),
+        icon(this.roomConfig.icon || 'mdi:home-outline'),
+        h('h2', {}, `Raum „${this.roomSpec.name}“`),
         h('button', {
-          type: 'button', class: 'icon-btn', 'aria-label': 'Schließen',
+          type: 'button',
+          class: 'icon-btn',
+          'aria-label': 'Schließen',
           onClick: () => this._close(),
         }, icon('mdi:close'))),
       h('div', { class: 'dialog-body' },
-        isUnassigned ? null : h('div', { class: 'section-title' }, 'Raumname'),
-        isUnassigned ? null : h('div', { class: 'field', style: { marginBottom: '10px' } }, this.nameInput),
-        h('div', { class: 'section-title' }, 'Raum-Icon'),
-        h('div', { class: 'field', style: { marginBottom: '10px' } }, this.iconPicker.el),
-        h('div', { class: 'section-title' }, 'Raumsensoren'),
-        ...sensorBlocks),
+        this.form.el),
       h('div', { class: 'dialog-foot' },
         h('div', { class: 'dialog-foot-actions' }, deleteBtn),
         h('div', { class: 'dialog-foot-actions' },
           h('button', { type: 'button', class: 'btn', onClick: () => this._close() }, 'Abbrechen'),
           this.saveBtn))));
+
+    this._onKeyDown = (e) => {
+      if (e.key === 'Escape') this._close();
+    };
+    document.addEventListener('keydown', this._onKeyDown);
   }
 
   _close() {
@@ -6615,12 +7715,8 @@ class RoomEditModal {
         if (!/unknown_command|not found|unknown command/i.test(String(wsErr?.code || wsErr?.message || wsErr))) {
           throw wsErr;
         }
-        // Fallback for mock/dev mode
         if (areaId && areaId !== '__none__') {
-          await this.hass.callWS({
-            type: 'config/area_registry/delete',
-            area_id: areaId,
-          });
+          await this.hass.callWS({ type: 'config/area_registry/delete', area_id: areaId });
         }
         const data = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
         const config = data?.config || {};
@@ -6644,15 +7740,21 @@ class RoomEditModal {
     this._saving = true;
     this.saveBtn.disabled = true;
     const areaId = this.roomSpec.area_id;
-    const trimmedName = (this.roomName || '').trim();
+    const trimmedName = (this.roomConfig.name || '').trim();
     const isUnassigned = areaId === '__none__';
+    syncExpandedUsers(this.roomConfig);
+
     try {
       try {
         const payload = {
           type: 'smarthome_companion/dashboard/room_update',
           area_id: areaId,
-          icon: this.selectedIcon,
-          sensor_prefs: this.sensorPrefs,
+          icon: this.roomConfig.icon,
+          sensor_prefs: this.roomConfig.sensor_prefs,
+          expanded: this.roomConfig.expanded,
+          expanded_users: this.roomConfig.expanded_users,
+          user_expanded: this.roomConfig.user_expanded,
+          visible_users: this.roomConfig.visible_users,
         };
         if (!isUnassigned && trimmedName) {
           payload.name = trimmedName;
@@ -6663,28 +7765,31 @@ class RoomEditModal {
         if (!/unknown_command|not found|unknown command/i.test(String(wsErr?.code || wsErr?.message || wsErr))) {
           throw wsErr;
         }
-        // Fallback for mock/dev mode
         if (areaId && !isUnassigned) {
           try {
             const areaUpdate = {
               type: 'config/area_registry/update',
               area_id: areaId,
-              icon: this.selectedIcon,
+              icon: this.roomConfig.icon,
             };
             if (trimmedName && trimmedName !== this.roomSpec.name) {
               areaUpdate.name = trimmedName;
             }
             await this.hass.callWS(areaUpdate);
-          } catch (_) {
-            // Non-fatal in mock/dev mode
-          }
+          } catch (_) { /* non-fatal in dev mode */ }
         }
         const data = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
         const config = data?.config || {};
         config.rooms ||= {};
-        config.rooms[areaId] ||= {};
-        config.rooms[areaId].icon = this.selectedIcon;
-        config.rooms[areaId].sensor_prefs = this.sensorPrefs;
+        config.rooms[areaId] = {
+          ...(config.rooms[areaId] || {}),
+          icon: this.roomConfig.icon,
+          sensor_prefs: this.roomConfig.sensor_prefs,
+          expanded: this.roomConfig.expanded,
+          expanded_users: this.roomConfig.expanded_users,
+          user_expanded: this.roomConfig.user_expanded,
+          visible_users: this.roomConfig.visible_users,
+        };
         const res = await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
         if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
       }
@@ -9068,6 +10173,2269 @@ class DeviceWizard {
 // ─── END: components/device_wizard.js ───
 
 
+// ─── START: components/view_security.js ───
+// Security View: Alarmo + In-Memory PIN Modal, Smoke/Countdown, Cameras, Windows/Batteries & Diagnostics.
+const ALARM_STATE_META = {
+  disarmed: { label: 'Unscharf', color: '#4caf50', icon: 'mdi:shield-off-outline' },
+  arming: { label: 'Wird scharfgeschaltet...', color: '#ff9800', icon: 'mdi:shield-sync' },
+  pending: { label: 'Auslöseverzögerung!', color: '#f59e0b', icon: 'mdi:shield-alert-outline' },
+  armed_home: { label: 'Zuhause scharf', color: '#03a9f4', icon: 'mdi:shield-home' },
+  armed_away: { label: 'Abwesend scharf', color: '#ef4444', icon: 'mdi:shield-lock' },
+  armed_night: { label: 'Nacht scharf', color: '#8b5cf6', icon: 'mdi:shield-moon' },
+  armed_vacation: { label: 'Urlaub scharf', color: '#ec4899', icon: 'mdi:shield-airplane' },
+  armed_custom_bypass: { label: 'Teilweise scharf', color: '#06b6d4', icon: 'mdi:shield-half-full' },
+  triggered: { label: 'ALARM AUSGELÖST!', color: '#ef4444', icon: 'mdi:alarm-light' },
+  unavailable: { label: 'Nicht verfügbar', color: '#64748b', icon: 'mdi:shield-alert-outline' },
+};
+
+const ALARM_MODES = [
+  { flag: 1, service: 'alarm_arm_home', state: 'armed_home', label: 'Zuhause', icon: 'mdi:shield-home' },
+  { flag: 2, service: 'alarm_arm_away', state: 'armed_away', label: 'Abwesend', icon: 'mdi:shield-lock' },
+  { flag: 4, service: 'alarm_arm_night', state: 'armed_night', label: 'Nacht', icon: 'mdi:shield-moon' },
+  { flag: 32, service: 'alarm_arm_vacation', state: 'armed_vacation', label: 'Urlaub', icon: 'mdi:shield-airplane' },
+  { flag: 16, service: 'alarm_arm_custom_bypass', state: 'armed_custom_bypass', label: 'Teilweise', icon: 'mdi:shield-half-full' },
+];
+
+function getSupportedAlarmModes(st) {
+  const features = Number(st?.attributes?.supported_features || 0);
+  const matched = ALARM_MODES.filter((m) => (features & m.flag) !== 0);
+  return matched.length ? matched : ALARM_MODES.slice(0, 4);
+}
+
+function extractSensorNames(raw, hass) {
+  const ids = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.keys(raw) : []);
+  return ids.filter(Boolean).map((id) => hass?.states?.[id]?.attributes?.friendly_name || id);
+}
+
+/**
+ * In-Memory Alarm Keypad Modal:
+ * Holds code exclusively in closure state (never DOM values, attributes, or storage).
+ * Allows switching arming modes directly inside the modal while entering the PIN.
+ * Auto-clears on error, submit, close, or 30s inactivity.
+ */
+class AlarmPinModal {
+  constructor({ hass, entityId, service, actionLabel, modes = [], currentState = '', openSensors = [], onDone }) {
+    this.hass = hass;
+    this.entityId = entityId;
+    this.service = service;
+    this.actionLabel = actionLabel;
+    this.modes = Array.isArray(modes) ? modes : [];
+    this.currentState = currentState || '';
+    this.openSensors = openSensors;
+    this.onDone = onDone;
+
+    this._code = '';
+    this._busy = false;
+    this._inactivityTimer = null;
+    this._build();
+    this._resetInactivity();
+  }
+
+  _resetInactivity() {
+    clearTimeout(this._inactivityTimer);
+    this._inactivityTimer = setTimeout(() => {
+      this._code = '';
+      this.destroy();
+      this.onDone?.(false);
+    }, 30000);
+  }
+
+  destroy() {
+    this._code = '';
+    clearTimeout(this._inactivityTimer);
+    if (this._onKeyDown) {
+      document.removeEventListener('keydown', this._onKeyDown, true);
+      this._onKeyDown = null;
+    }
+    this.el?.remove();
+    this.el = null;
+  }
+
+  _selectMode(mode) {
+    if (this._busy || !mode || mode.state === this.currentState) return;
+    this._resetInactivity();
+    this.service = mode.service;
+    this.actionLabel = `${mode.label} aktivieren`;
+    this._errEl.textContent = '';
+    if (this._titleEl) this._titleEl.textContent = this.actionLabel;
+    if (this._submitText) this._submitText.textContent = this.actionLabel;
+    this._dialog?.setAttribute('aria-label', `PIN für ${this.actionLabel}`);
+    this._modeBar?.querySelectorAll('.pin-mode-chip').forEach((btn) => {
+      btn.toggleAttribute('data-selected', btn.getAttribute('data-service') === this.service);
+    });
+  }
+
+  _build() {
+    this._dotsWrap = h('div', { class: 'pin-dots' });
+    this._errEl = h('div', { class: 'pin-error' });
+    this._titleEl = h('h2', {}, this.actionLabel);
+    this._submitText = document.createTextNode(this.actionLabel);
+    this._submitBtn = h('button', {
+      type: 'button', class: 'btn primary', disabled: true,
+      onClick: () => this._submit(),
+    }, icon('mdi:check'), this._submitText);
+
+    const showModeBar = this.service !== 'alarm_disarm' && this.modes.length > 1;
+    this._modeBar = showModeBar
+      ? h('div', { class: 'pin-mode-bar', role: 'group', 'aria-label': 'Alarm-Modus wählen' },
+          ...this.modes.map((m) => h('button', {
+            type: 'button',
+            class: 'pin-mode-chip',
+            'data-service': m.service,
+            ...(m.service === this.service ? { 'data-selected': '' } : {}),
+            disabled: m.state === this.currentState,
+            onClick: () => this._selectMode(m),
+          }, icon(m.icon), m.label)))
+      : null;
+
+    const openHint = this.openSensors.length
+      ? h('div', { class: 'inline-notice', style: { marginBottom: '2px' } },
+          icon('mdi:window-open-variant'),
+          h('span', {}, `Offen: ${this.openSensors.join(', ')}`))
+      : null;
+
+    const mkKey = (lbl, onClick, ic = null, aria = lbl) => h('button', {
+      type: 'button', class: 'pin-key', 'aria-label': aria,
+      onClick: () => { this._resetInactivity(); onClick(); },
+    }, ic ? icon(ic) : lbl);
+
+    const keys = [
+      '1', '2', '3',
+      '4', '5', '6',
+      '7', '8', '9',
+    ].map((d) => mkKey(d, () => this._pushDigit(d)));
+
+    keys.push(
+      mkKey('Löschen', () => { this._code = ''; this._errEl.textContent = ''; this._syncDots(); }, 'mdi:backspace-outline', 'Alles löschen'),
+      mkKey('0', () => this._pushDigit('0')),
+      mkKey('Zurück', () => {
+        if (this._code.length) this._code = this._code.slice(0, -1);
+        this._errEl.textContent = '';
+        this._syncDots();
+      }, 'mdi:keyboard-backspace', 'Letzte Ziffer löschen'),
+    );
+
+    this._dialog = h('div', { class: 'dialog pin-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': `PIN für ${this.actionLabel}` },
+      h('div', { class: 'dialog-head' },
+        icon('mdi:shield-key-outline'),
+        this._titleEl,
+        h('button', {
+          type: 'button', class: 'icon-btn', 'aria-label': 'Abbrechen',
+          onClick: () => { this.destroy(); this.onDone?.(false); },
+        }, icon('mdi:close'))),
+      h('div', { class: 'dialog-body', style: { paddingTop: '12px', gap: '8px' } },
+        this._modeBar,
+        openHint,
+        this._dotsWrap,
+        this._errEl,
+        h('div', { class: 'pin-pad' }, ...keys)),
+      h('div', { class: 'dialog-foot' },
+        h('button', {
+          type: 'button', class: 'btn',
+          onClick: () => { this.destroy(); this.onDone?.(false); },
+        }, 'Abbrechen'),
+        this._submitBtn));
+
+    this.el = h('div', {
+      class: 'overlay',
+      onClick: (e) => { if (e.target === this.el) { this.destroy(); this.onDone?.(false); } },
+    }, this._dialog);
+
+    this._onKeyDown = (e) => {
+      if (this._busy) return;
+      this._resetInactivity();
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        this.destroy();
+        this.onDone?.(false);
+      } else if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        this._pushDigit(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        this._code = this._code.slice(0, -1);
+        this._syncDots();
+      } else if (e.key === 'Enter' && this._code.length > 0) {
+        e.preventDefault();
+        this._submit();
+      }
+    };
+    document.addEventListener('keydown', this._onKeyDown, true);
+    this._syncDots();
+  }
+
+  _pushDigit(d) {
+    if (this._busy || this._code.length >= 10) return;
+    this._errEl.textContent = '';
+    this._code += d;
+    this._syncDots();
+  }
+
+  _syncDots() {
+    const slots = Math.max(4, Math.min(8, this._code.length));
+    const dots = [];
+    for (let i = 0; i < slots; i++) {
+      dots.push(h('span', { class: 'pin-dot', ...(i < this._code.length ? { 'data-filled': '' } : {}) }));
+    }
+    this._dotsWrap.replaceChildren(...dots);
+    this._submitBtn.disabled = this._busy || this._code.length === 0;
+  }
+
+  async _submit() {
+    if (this._busy || !this._code) return;
+    this._busy = true;
+    const attempt = this._code;
+    this._code = '';
+    this._syncDots();
+    this._errEl.textContent = 'Prüfe PIN...';
+    try {
+      await this.hass.callService('alarm_control_panel', this.service, {
+        entity_id: this.entityId,
+        code: attempt,
+      });
+      this.destroy();
+      this.onDone?.(true);
+    } catch (err) {
+      this._busy = false;
+      this._syncDots();
+      this._dotsWrap.removeAttribute('data-shake');
+      void this._dotsWrap.offsetWidth;
+      this._dotsWrap.setAttribute('data-shake', '');
+      const msg = String(err?.message || err || '');
+      this._errEl.textContent = /code|pin|invalid|wrong|unauth/i.test(msg)
+        ? 'Falscher PIN-Code'
+        : (msg || 'Aktion fehlgeschlagen');
+    }
+  }
+}
+class SecurityView {
+  constructor({ hass, config, onBack }) {
+    this.hass = hass;
+    this.config = config || {};
+    this.onBack = onBack;
+    this._destroyed = false;
+    this._pinModal = null;
+    this._countdownInterval = null;
+    this._camInterval = null;
+    this._camTick = 0;
+    this._camObserver = null;
+    this._visibleCams = new Set();
+    this._lastSig = '';
+
+    this.el = h('div', { class: 'subview-page', style: { '--view-color': '#ef4444' } });
+    this._onVisibility = () => {
+      if (!this._destroyed && document.visibilityState === 'visible') this._refreshCameras();
+    };
+    document.addEventListener('visibilitychange', this._onVisibility);
+    this._camInterval = setInterval(() => this._refreshCameras(), 8000);
+    if (hass) this.update(hass);
+  }
+
+  destroy() {
+    this._destroyed = true;
+    clearInterval(this._countdownInterval);
+    clearInterval(this._camInterval);
+    document.removeEventListener('visibilitychange', this._onVisibility);
+    this._camObserver?.disconnect?.();
+    this._pinModal?.destroy?.();
+    this._pinModal = null;
+    // Drop open image requests on destroy
+    this.el?.querySelectorAll('img[data-cam-img]').forEach((img) => {
+      img.removeAttribute('src');
+    });
+  }
+
+  _findAlarmEntity(hass) {
+    const cfgId = this.config?.views?.security?.alarm_entity;
+    if (cfgId && hass.states[cfgId]) return cfgId;
+    if (hass.states['alarm_control_panel.alarmo']) return 'alarm_control_panel.alarmo';
+    return Object.keys(hass.states).find((id) => id.startsWith('alarm_control_panel.')) || null;
+  }
+
+  _refreshCameras() {
+    if (this._destroyed || document.visibilityState !== 'visible') return;
+    this._camTick = Date.now();
+    this.el?.querySelectorAll('img[data-cam-base]').forEach((img) => {
+      const id = img.getAttribute('data-cam-id');
+      if (this._visibleCams.size && id && !this._visibleCams.has(id)) return;
+      const base = img.getAttribute('data-cam-base');
+      if (!base) return;
+      const sep = base.includes('?') ? '&' : '?';
+      img.src = `${base}${sep}_t=${this._camTick}`;
+    });
+  }
+
+  _triggerAlarmAction(alarmId, service, label, modes = null) {
+    const st = this.hass?.states?.[alarmId];
+    if (!st) return;
+    const needsCode = !!st.attributes?.code_format
+      && (service === 'alarm_disarm' || st.attributes?.code_arm_required !== false);
+    const openSensors = extractSensorNames(st.attributes?.open_sensors, this.hass);
+    const availModes = Array.isArray(modes) && modes.length ? modes : getSupportedAlarmModes(st);
+
+    if (!needsCode) {
+      this.hass.callService('alarm_control_panel', service, { entity_id: alarmId });
+      return;
+    }
+
+    const root = this.el.getRootNode?.();
+    this._pinModal?.destroy?.();
+    this._pinModal = new AlarmPinModal({
+      hass: this.hass,
+      entityId: alarmId,
+      service,
+      actionLabel: label,
+      modes: availModes,
+      currentState: st.state,
+      openSensors,
+      onDone: () => { this._pinModal = null; },
+    });
+    (root?.append ? root : this.el).append(this._pinModal.el);
+  }
+
+  update(hass) {
+    if (this._destroyed || !hass) return;
+    this.hass = hass;
+    const states = hass.states || {};
+
+    const alarmId = this._findAlarmEntity(hass);
+    const timerSt = states['timer.rauchalarm_countdown'];
+    const smokeSensors = Object.keys(states).filter((id) => id.startsWith('binary_sensor.') && states[id]?.attributes?.device_class === 'smoke');
+    const sirens = Object.keys(states).filter((id) => (id.startsWith('switch.') || id.startsWith('siren.')) && /sirene|siren/i.test(id));
+    const camIds = Object.keys(states).filter((id) => id.startsWith('camera.'));
+    const windowDoors = Object.keys(states).filter((id) => id.startsWith('binary_sensor.') && ['window', 'door', 'garage_door', 'opening'].includes(states[id]?.attributes?.device_class));
+    const coverAutos = Object.keys(states).filter((id) => id.startsWith('automation.') && /rollladen|jalousie/i.test(id));
+    const batteries = Object.keys(states).filter((id) => id.startsWith('binary_sensor.') === false && id.startsWith('sensor.') && states[id]?.attributes?.device_class === 'battery' && !/iphone/i.test(id));
+    const fritz = states['binary_sensor.fritz_box_7590_ax_verbindung'] || Object.values(states).find((s) => /fritz.*verbindung/i.test(s.entity_id));
+
+    const trackedIds = [
+      alarmId,
+      'timer.rauchalarm_countdown',
+      'switch.anwesenheitssimulation',
+      'switch.garten_wasserpumpe_fenster',
+      fritz?.entity_id,
+      ...smokeSensors,
+      ...sirens,
+      ...camIds,
+      ...windowDoors,
+      ...coverAutos,
+      ...batteries,
+    ].filter(Boolean);
+
+    const aSig = alarmId && states[alarmId]
+      ? (() => {
+          const a = states[alarmId].attributes || {};
+          const openKey = a.open_sensors ? Object.keys(a.open_sensors).length : 0;
+          const bypKey = Array.isArray(a.bypassed_sensors) ? a.bypassed_sensors.length : 0;
+          return `|af=${a.supported_features ?? ''}:${a.arm_mode ?? ''}:${a.next_state ?? ''}:${a.code_arm_required ?? ''}:${openKey}:${bypKey}:${a.changed_by ?? ''}`;
+        })()
+      : '';
+    const sig = trackedIds.map((id) => `${id}=${states[id]?.state}:${states[id]?.attributes?.finishes_at || ''}`).join('|') + aSig;
+    if (sig === this._lastSig) return;
+    this._lastSig = sig;
+
+    const children = [];
+
+    // 1. Header
+    const fritzOffline = fritz && (fritz.state === 'off' || isUnavailable(fritz));
+    children.push(h('div', { class: 'subview-head' },
+      h('div', { class: 'subview-head-left' },
+        h('button', { type: 'button', class: 'room-detail-back', onClick: () => this.onBack?.() }, icon('mdi:arrow-left'), 'Zurück'),
+        h('div', { class: 'subview-hero-icon' }, icon('mdi:shield-home')),
+        h('div', { style: { minWidth: '0' } },
+          h('h2', { class: 'subview-title' }, 'Sicherheit'),
+          h('div', { class: 'subview-sub' }, 'Alarmanlage, Rauchmelder, Kameras & Sensoren'))),
+      fritz ? h('span', {
+        class: 'badge-tag',
+        style: fritzOffline ? { background: 'rgba(239,68,68,.2)', color: '#ef4444' } : { background: 'rgba(76,175,80,.18)', color: '#4caf50' },
+        onClick: () => moreInfo(this.el, fritz.entity_id),
+      }, icon(fritzOffline ? 'mdi:cloud-off-outline' : 'mdi:router-wireless'), fritzOffline ? 'Internet Offline' : 'Router Online') : null));
+
+    // 2. Active Smoke Alarm or Timer Banner
+    const activeSmokes = smokeSensors.filter((id) => ['on', 'detected', 'smoke'].includes(states[id]?.state));
+    const timerActive = timerSt && (timerSt.state === 'active' || timerSt.state === 'paused');
+    clearInterval(this._countdownInterval);
+    this._countdownInterval = null;
+
+    if (activeSmokes.length || timerActive) {
+      const timerDigits = h('div', { class: 'timer-digits' }, '00:00');
+      const tickTimer = () => {
+        if (!timerSt) return;
+        if (timerSt.state === 'active' && timerSt.attributes?.finishes_at) {
+          const rem = Date.parse(timerSt.attributes.finishes_at) - Date.now();
+          timerDigits.textContent = formatCountdownMs(rem);
+        } else if (timerSt.attributes?.remaining) {
+          timerDigits.textContent = String(timerSt.attributes.remaining);
+        }
+      };
+      if (timerActive) {
+        tickTimer();
+        if (timerSt.state === 'active') {
+          this._countdownInterval = setInterval(tickTimer, 1000);
+        }
+      }
+
+      const abortEntity = states['input_boolean.rauchalarm_abbrechen'] ? 'input_boolean.rauchalarm_abbrechen' : null;
+      children.push(h('div', { class: 'smoke-alert-banner' },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+          icon('mdi:fire-alert'),
+          h('div', {},
+            h('div', { style: { fontWeight: '800', fontSize: '15px', color: '#fecaca' } },
+              activeSmokes.length ? `RAUCH ERKANNT (${activeSmokes.map((id) => states[id]?.attributes?.friendly_name || id).join(', ')})` : 'Rauchalarm-Countdown aktiv'),
+            h('div', { class: 'hint', style: { color: '#fee2e2' } }, '• Sirenen-Auslösung prüfen\n• Abbruch über Button'))),
+        timerActive ? timerDigits : null,
+        h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+          abortEntity ? h('button', {
+            type: 'button', class: 'btn danger',
+            onClick: () => hass.callService('input_boolean', 'turn_on', { entity_id: abortEntity }),
+          }, icon('mdi:smoke-detector-variant-off'), 'Rauchalarm abbrechen') : null,
+          timerActive ? h('button', {
+            type: 'button', class: 'btn secondary',
+            onClick: () => hass.callService('timer', 'cancel', { entity_id: 'timer.rauchalarm_countdown' }),
+          }, 'Timer stoppen') : null)));
+    }
+
+    // 3. Alarmo / Alarm Control Panel
+    if (alarmId && states[alarmId]) {
+      const aSt = states[alarmId];
+      const meta = ALARM_STATE_META[aSt.state] || ALARM_STATE_META.unavailable;
+      const modes = getSupportedAlarmModes(aSt);
+      const isDisarmed = aSt.state === 'disarmed';
+      const isArmed = aSt.state.startsWith('armed_');
+      const isUnavail = isUnavailable(aSt);
+      const nextMode = aSt.attributes?.next_state || aSt.attributes?.arm_mode;
+      const nextMeta = nextMode ? ALARM_STATE_META[nextMode] : null;
+      const statusText = aSt.state === 'arming' && nextMeta
+        ? `Alarmanlage: Aktiviert (${nextMeta.label})...`
+        : `Alarmanlage: ${meta.label}`;
+      const openSensors = extractSensorNames(aSt.attributes?.open_sensors, hass);
+      const bypassedSensors = extractSensorNames(aSt.attributes?.bypassed_sensors, hass);
+
+      const actionButtons = [];
+      if (!isUnavail) {
+        if (isDisarmed) {
+          modes.forEach((m) => actionButtons.push(h('button', {
+            type: 'button', class: 'btn primary small',
+            onClick: () => this._triggerAlarmAction(alarmId, m.service, `${m.label} aktivieren`, modes),
+          }, icon(m.icon), m.label)));
+        } else {
+          actionButtons.push(h('button', {
+            type: 'button', class: `btn danger${isArmed ? ' small' : ''}`,
+            onClick: () => this._triggerAlarmAction(alarmId, 'alarm_disarm', 'Alarmanlage entschärfen', modes),
+          }, icon('mdi:shield-off'), 'Entschärfen'));
+          if (isArmed && modes.length > 1) {
+            modes.forEach((m) => {
+              const isCurrent = m.state === aSt.state;
+              actionButtons.push(h('button', {
+                type: 'button',
+                class: `btn small${isCurrent ? ' alarm-mode-active' : ' secondary'}`,
+                disabled: isCurrent,
+                onClick: () => this._triggerAlarmAction(alarmId, m.service, `${m.label} aktivieren`, modes),
+              }, icon(isCurrent ? 'mdi:check-circle' : m.icon), m.label));
+            });
+          }
+        }
+      }
+
+      children.push(h('div', { class: 'alarm-hero', style: { '--alarm-color': meta.color } },
+        h('div', { style: { display: 'grid', gap: '6px' } },
+          h('div', { class: 'alarm-status-pill', onClick: () => moreInfo(this.el, alarmId) },
+            icon(meta.icon),
+            h('span', {}, statusText)),
+          aSt.attributes?.changed_by ? h('div', { class: 'hint' }, `Zuletzt: ${aSt.attributes.changed_by}`) : null,
+          openSensors.length ? h('div', { class: 'hint', style: { color: '#f59e0b' } }, `Offene Sensoren: ${openSensors.join(', ')}`) : null,
+          bypassedSensors.length ? h('div', { class: 'hint' }, `Umgehung aktiv: ${bypassedSensors.join(', ')}`) : null),
+        h('div', { class: 'alarm-modes' }, ...actionButtons)));
+    }
+
+    // 4. Quick Security Toggles (Presence Sim, Water Pump, Sirens)
+    const quickEntities = [
+      { id: 'switch.anwesenheitssimulation', name: 'Anwesenheitssimulation', icon: 'mdi:home-clock', color: '#8b5cf6' },
+      { id: 'switch.garten_wasserpumpe_fenster', name: 'Garten Wasserpumpe', icon: 'mdi:water-pump', color: '#0ea5e9' },
+      ...sirens.map((id) => ({
+        id,
+        name: states[id]?.attributes?.friendly_name || id,
+        icon: 'mdi:bullhorn-variant',
+        color: '#ef4444',
+      })),
+    ].filter((q) => states[q.id]);
+
+    if (quickEntities.length) {
+      children.push(h('div', { class: 'subview-section' },
+        h('div', { class: 'subview-section-head' },
+          h('div', { class: 'subview-section-title' }, icon('mdi:shield-check'), 'Schutz & Aktoren')),
+        h('div', { class: 'tile-grid', style: { padding: '0' } },
+          ...quickEntities.map((q) => {
+            const st = states[q.id];
+            const active = st.state === 'on';
+            const unav = isUnavailable(st);
+            return h('div', {
+              class: 'tile',
+              'data-active': active ? 'true' : 'false',
+              ...(unav ? { 'data-unavailable': '' } : {}),
+              style: { '--tile-color': active ? q.color : 'var(--cd-secondary)' },
+            },
+            h('div', { class: 'tile-main' },
+              h('button', {
+                type: 'button', class: 'tile-icon',
+                onClick: () => hass.callService(q.id.split('.')[0], 'toggle', { entity_id: q.id }),
+              }, icon(q.icon)),
+              h('div', { class: 'tile-info', onClick: () => moreInfo(this.el, q.id) },
+                h('div', { class: 'tile-name' }, q.name),
+                h('div', { class: 'tile-state' }, unav ? 'Nicht verfügbar' : (active ? 'Ein' : 'Aus')))));
+          }))));
+    }
+
+    // 5. Cameras (each camera reads its own entity_picture — never hardcoded cross-camera ID)
+    if (camIds.length) {
+      this._camObserver?.disconnect?.();
+      this._visibleCams.clear();
+      if (typeof IntersectionObserver !== 'undefined') {
+        this._camObserver = new IntersectionObserver((entries) => {
+          for (const ent of entries) {
+            const cid = ent.target.getAttribute('data-cam-id');
+            if (!cid) continue;
+            if (ent.isIntersecting) this._visibleCams.add(cid);
+            else this._visibleCams.delete(cid);
+          }
+        }, { threshold: 0.05 });
+      }
+      const tick = Date.now();
+      children.push(h('div', { class: 'subview-section' },
+        h('div', { class: 'subview-section-head' },
+          h('div', { class: 'subview-section-title' }, icon('mdi:cctv'), `Kameras (${camIds.length})`)),
+        h('div', { class: 'camera-grid' },
+          ...camIds.map((cid) => {
+            const st = states[cid];
+            const name = st?.attributes?.friendly_name || cid;
+            const pic = st?.attributes?.entity_picture || '';
+            const unav = isUnavailable(st);
+            const img = pic ? h('img', {
+              alt: name,
+              'data-cam-img': '',
+              'data-cam-id': cid,
+              'data-cam-base': pic,
+              src: `${pic}${pic.includes('?') ? '&' : '?'}_t=${tick}`,
+              loading: 'lazy',
+            }) : h('div', { class: 'empty', style: { padding: '24px' } }, icon('mdi:video-off'));
+            const card = h('div', {
+              class: 'camera-card',
+              'data-cam-id': cid,
+              onClick: () => moreInfo(this.el, cid),
+            },
+            h('div', { class: 'camera-frame' }, unav ? h('div', { class: 'hint' }, 'Kamera offline') : img),
+            h('div', { class: 'camera-foot' },
+              h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, name),
+              h('span', { class: 'badge-tag' }, unav ? 'Offline' : 'Live')));
+            this._camObserver?.observe?.(card);
+            return card;
+          }))));
+    }
+
+    // 6. Smoke Detectors + Windows/Doors + Rolladen Automations
+    if (smokeSensors.length) {
+      children.push(h('div', { class: 'subview-section' },
+        h('div', { class: 'subview-section-head' },
+          h('div', { class: 'subview-section-title' }, icon('mdi:smoke-detector-variant'), `Rauchmelder (${smokeSensors.length})`)),
+        h('div', { class: 'kpi-grid' },
+          ...smokeSensors.map((id) => {
+            const st = states[id];
+            const alarm = ['on', 'detected', 'smoke'].includes(st?.state);
+            const unav = isUnavailable(st);
+            return h('div', {
+              class: 'kpi-card',
+              style: alarm ? { borderColor: '#ef4444', background: 'rgba(239,68,68,.16)' } : {},
+              onClick: () => moreInfo(this.el, id),
+            },
+            h('div', { class: 'kpi-top' },
+              icon(alarm ? 'mdi:fire-alert' : 'mdi:smoke-detector'),
+              st?.attributes?.friendly_name || id),
+            h('div', { class: 'kpi-val', style: { fontSize: '15px', color: alarm ? '#ef4444' : (unav ? 'var(--cd-secondary)' : '#4caf50') } },
+              unav ? 'Nicht verfügbar' : (alarm ? 'RAUCH!' : 'OK · Kein Rauch')));
+          }))));
+    }
+
+    if (windowDoors.length) {
+      const openCount = windowDoors.filter((id) => states[id]?.state === 'on').length;
+      children.push(h('div', { class: 'subview-section' },
+        h('div', { class: 'subview-section-head' },
+          h('div', { class: 'subview-section-title' }, icon('mdi:window-open-variant'), `Fenster & Türen`),
+          h('span', { class: 'badge-tag', style: openCount ? { color: '#ff9800' } : { color: '#4caf50' } },
+            openCount ? `${openCount} geöffnet` : 'Alle geschlossen')),
+        h('div', { class: 'log-list' },
+          ...windowDoors.slice(0, 12).map((id) => {
+            const st = states[id];
+            const open = st?.state === 'on';
+            return h('div', { class: 'log-row', style: { cursor: 'pointer' }, onClick: () => moreInfo(this.el, id) },
+              h('div', { class: 'log-row-main' }, st?.attributes?.friendly_name || id),
+              h('span', { class: 'badge-tag', style: open ? { color: '#ff9800' } : { color: '#4caf50' } }, open ? 'Offen' : 'Geschlossen'));
+          }))));
+    }
+
+    if (coverAutos.length) {
+      children.push(h('div', { class: 'subview-section' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:window-shutter-auto'), 'Rollladen-Automationen'),
+        h('div', { class: 'tile-grid', style: { padding: '0' } },
+          ...coverAutos.map((id) => {
+            const st = states[id];
+            const on = st?.state === 'on';
+            return h('div', { class: 'tile', 'data-active': on ? 'true' : 'false' },
+              h('div', { class: 'tile-main' },
+                h('button', {
+                  type: 'button', class: 'tile-icon',
+                  onClick: () => hass.callService('automation', 'toggle', { entity_id: id }),
+                }, icon('mdi:robot')),
+                h('div', { class: 'tile-info', onClick: () => moreInfo(this.el, id) },
+                  h('div', { class: 'tile-name' }, st?.attributes?.friendly_name || id),
+                  h('div', { class: 'tile-state' }, on ? 'Aktiv' : 'Deaktiviert'))));
+          }))));
+    }
+
+    if (batteries.length) {
+      const sortedBat = [...batteries].sort((a, b) => Number(states[a]?.state ?? 999) - Number(states[b]?.state ?? 999)).slice(0, 16);
+      children.push(h('div', { class: 'subview-section' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:battery-check-outline'), 'Geräte-Batterien (ohne iPhones)'),
+        h('div', { class: 'kpi-grid' },
+          ...sortedBat.map((id) => {
+            const st = states[id];
+            const val = Number(st?.state);
+            const low = Number.isFinite(val) && val <= 25;
+            return h('div', { class: 'kpi-card', onClick: () => moreInfo(this.el, id) },
+              h('div', { class: 'kpi-top' }, icon(low ? 'mdi:battery-alert' : 'mdi:battery'), st?.attributes?.friendly_name || id),
+              h('div', { class: 'kpi-val', style: { fontSize: '16px', color: low ? '#ef4444' : 'inherit' } }, formatState(st)));
+          }))));
+    }
+
+    if (!alarmId && !smokeSensors.length && !camIds.length && !quickEntities.length) {
+      children.push(h('div', { class: 'card empty' },
+        icon('mdi:shield-outline'),
+        h('div', { style: { fontWeight: '600', margin: '8px 0 4px' } }, 'Keine Sicherheits-Entitäten gefunden'),
+        h('div', { class: 'hint' }, '• Alarmanlage, Rauchmelder oder Kameras in HA einrichten')));
+    }
+
+    this.el.replaceChildren(...children);
+  }
+}
+// ─── END: components/view_security.js ───
+
+
+// ─── START: components/view_solar.js ───
+// Solar View: In-Place Live SVG Energy Flow, Statistics Trend Chart, Forecast & Consumption KPIs.
+const SOLAR_SENSORS = {
+  pv: ['sensor.power_inverter_input_total', 'sensor.inverter_input_power'],
+  charge: ['sensor.power_battery_charge'],
+  discharge: ['sensor.power_battery_discharge'],
+  soc: ['sensor.batteries_batterieladung'],
+  imp: ['sensor.power_import'],
+  exp: ['sensor.power_export'],
+  house: ['sensor.power_house_load'],
+  dailyYield: ['sensor.daily_yield_total_energy'],
+  dailyHouse: ['sensor.daily_house_load_energy'],
+  dailyIncome: ['sensor.fsp_ne_148436238_today_income'],
+  schimmeldry: ['sensor.stromverbrauch_schimmeldry'],
+  westNow: ['sensor.solarproduktionsvorhersage_westen_geschaetzte_erzeugungsleistung_jetzt'],
+  westToday: ['sensor.solarproduktionsvorhersage_westen_geschaetzte_energieerezeugung_heute'],
+  westPeak: ['sensor.solarproduktionsvorhersage_westen_spitzenleistungszeitpunkt_heute'],
+  eastNow: ['sensor.solarproduktionsvorhersage_osten_geschaetzte_erzeugungsleistung_jetzt'],
+  eastToday: ['sensor.solarproduktionsvorhersage_osten_geschaetzte_energieerezeugung_heute'],
+  eastPeak: ['sensor.solarproduktionsvorhersage_osten_spitzenleistungszeitpunkt_heute'],
+};
+
+function _pickState(states, list) {
+  for (const id of list) {
+    if (states[id]) return states[id];
+  }
+  return null;
+}
+
+function _num(st) {
+  const n = numeric(st);
+  return n !== null ? n : 0;
+}
+
+function _fmtWatts(w) {
+  const abs = Math.abs(w);
+  return abs >= 1000 ? `${(w / 1000).toFixed(2)} kW` : `${Math.round(w)} W`;
+}
+class SolarView {
+  constructor({ hass, onBack }) {
+    this.hass = hass;
+    this.onBack = onBack;
+    this._destroyed = false;
+    this._lastSig = '';
+    this._statsCache = null;
+    this._statsFetchedAt = 0;
+    this._fetchSeq = 0;
+
+    this.el = h('div', { class: 'subview-page', style: { '--view-color': '#f59e0b' } });
+    this._buildShell();
+    if (hass) this.update(hass);
+  }
+
+  destroy() {
+    this._destroyed = true;
+  }
+
+  _buildShell() {
+    this._svgNodes = {};
+    const mkSvgEl = (tag, attrs = {}, text = '') => {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+      if (text) el.textContent = text;
+      return el;
+    };
+
+    // Static Energiefluss SVG created once — patched in-place on updates (Zero-Flicker)
+    const flowSvg = mkSvgEl('svg', { viewBox: '0 0 420 226', role: 'img', 'aria-label': 'Energiefluss' });
+    this._flowPvHouse = mkSvgEl('path', { d: 'M 210 74 L 210 144', class: 'flow-line', stroke: '#f59e0b' });
+    this._flowPvBat = mkSvgEl('path', { d: 'M 176 46 C 110 46 68 68 68 100', class: 'flow-line', stroke: '#10b981' });
+    this._flowPvGrid = mkSvgEl('path', { d: 'M 244 46 C 310 46 352 68 352 100', class: 'flow-line', stroke: '#03a9f4' });
+    this._flowBatHouse = mkSvgEl('path', { d: 'M 102 142 C 138 148 158 164 178 176', class: 'flow-line', stroke: '#22c55e' });
+    this._flowGridHouse = mkSvgEl('path', { d: 'M 318 142 C 282 148 262 164 242 176', class: 'flow-line', stroke: '#ef4444' });
+
+    flowSvg.append(this._flowPvHouse, this._flowPvBat, this._flowPvGrid, this._flowBatHouse, this._flowGridHouse);
+
+    const mkNode = (cx, cy, color, title, withSub = false) => {
+      const g = mkSvgEl('g');
+      const circle = mkSvgEl('circle', { cx, cy, r: 34, fill: 'rgba(128,128,128,0.14)', stroke: color, 'stroke-width': 2.2 });
+      const lbl = mkSvgEl('text', { x: cx, y: cy - (withSub ? 11 : 6), 'text-anchor': 'middle', fill: 'currentColor', 'font-size': '9.5', 'font-weight': '600', opacity: '0.78' }, title);
+      const val = mkSvgEl('text', { x: cx, y: cy + (withSub ? 4 : 9), 'text-anchor': 'middle', fill: color, 'font-size': '11', 'font-weight': '800' }, '0 W');
+      g.append(circle, lbl, val);
+      let sub = null;
+      if (withSub) {
+        sub = mkSvgEl('text', { x: cx, y: cy + 17, 'text-anchor': 'middle', fill: color, 'font-size': '8.5', 'font-weight': '600', opacity: '0.88' }, '');
+        g.append(sub);
+      }
+      flowSvg.append(g);
+      return withSub ? { val, sub } : val;
+    };
+
+    this._flowValPv = mkNode(210, 40, '#f59e0b', 'PV');
+    const batNodes = mkNode(68, 134, '#10b981', 'Batterie', true);
+    this._flowValBat = batNodes.val;
+    this._flowSubBat = batNodes.sub;
+    this._flowValGrid = mkNode(352, 134, '#03a9f4', 'Netz');
+    this._flowValHouse = mkNode(210, 180, '#e5e7eb', 'Haus');
+
+    this._kpiWrap = h('div', { class: 'kpi-grid' });
+    this._chartWrap = h('div', { class: 'solar-svg-wrap' },
+      h('div', { class: 'hint' }, 'Lade 24h Solar-Verlauf...'));
+    this._forecastWrap = h('div', { class: 'kpi-grid' });
+
+    this.el.replaceChildren(
+      h('div', { class: 'subview-head' },
+        h('div', { class: 'subview-head-left' },
+          h('button', { type: 'button', class: 'room-detail-back', onClick: () => this.onBack?.() }, icon('mdi:arrow-left'), 'Zurück'),
+          h('div', { class: 'subview-hero-icon' }, icon('mdi:solar-power-variant')),
+          h('div', { style: { minWidth: '0' } },
+            h('h2', { class: 'subview-title' }, 'Solar & Energie'),
+            h('div', { class: 'subview-sub' }, 'Live-Energiefluss, Verlauf & Prognose')))),
+      h('div', { class: 'subview-section' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:transmission-tower'), 'Energiefluss'),
+        h('div', { class: 'solar-svg-wrap' }, flowSvg),
+        this._kpiWrap),
+      h('div', { class: 'subview-section' },
+        h('div', { class: 'subview-section-head' },
+          h('div', { class: 'subview-section-title' }, icon('mdi:chart-areaspline'), '24h Verlauf (PV & Haus)'),
+          h('button', { type: 'button', class: 'btn secondary small', onClick: () => this._loadHistory(true) }, icon('mdi:refresh'), 'Aktualisieren')),
+        this._chartWrap),
+      h('div', { class: 'subview-section' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:weather-sunny'), 'Produktions-Prognose (Ost / West)'),
+        this._forecastWrap));
+  }
+
+  async _loadHistory(force = false) {
+    if (!this.hass?.callWS || this._destroyed) return;
+    const now = Date.now();
+    if (!force && this._statsCache && (now - this._statsFetchedAt) < 300000) {
+      this._renderChart(this._statsCache);
+      return;
+    }
+
+    const seq = ++this._fetchSeq;
+    if (this._statsCache) this._chartWrap.style.opacity = '0.6';
+
+    const pvId = _pickState(this.hass.states, SOLAR_SENSORS.pv)?.entity_id;
+    const houseId = _pickState(this.hass.states, SOLAR_SENSORS.house)?.entity_id;
+    const entityIds = [pvId, houseId].filter(Boolean);
+    if (!entityIds.length) {
+      this._chartWrap.style.opacity = '1';
+      this._chartWrap.replaceChildren(h('div', { class: 'hint' }, '• Keine PV-/Haus-Verbrauchssensoren gefunden'));
+      return;
+    }
+
+    const end = new Date();
+    const start = new Date(end.getTime() - 24 * 3600 * 1000);
+    let series = null;
+    try {
+      const res = await this.hass.callWS({
+        type: 'recorder/statistics_during_period',
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+        statistic_ids: entityIds,
+        period: 'hour',
+        types: ['mean'],
+      });
+      if (res && Object.values(res).some((arr) => Array.isArray(arr) && arr.length > 0)) {
+        series = { mode: 'stats', data: res, pvId, houseId };
+      }
+    } catch { /* fallback to history */ }
+
+    if (!series) {
+      try {
+        const res = await this.hass.callWS({
+          type: 'history/history_during_period',
+          start_time: start.toISOString(),
+          end_time: end.toISOString(),
+          entity_ids: entityIds,
+          minimal_response: true,
+          no_attributes: true,
+          significant_changes_only: true,
+        });
+        series = { mode: 'history', data: res || {}, pvId, houseId };
+      } catch {
+        series = { mode: 'empty', data: {}, pvId, houseId };
+      }
+    }
+
+    if (this._destroyed || seq !== this._fetchSeq) return;
+    this._statsCache = series;
+    this._statsFetchedAt = Date.now();
+    this._chartWrap.style.opacity = '1';
+    this._renderChart(series);
+  }
+
+  _renderChart(series) {
+    const extract = (id) => {
+      const arr = id ? (series?.data?.[id] || []) : [];
+      if (series.mode === 'stats') {
+        return arr.filter((p) => Number.isFinite(Number(p.mean))).map((p) => ({
+          t: typeof p.start === 'number' ? p.start : Date.parse(p.start),
+          v: Math.max(0, Number(p.mean)),
+        }));
+      }
+      return arr.filter((p) => Number.isFinite(Number(p.s))).map((p) => ({
+        t: typeof p.lu === 'number' ? p.lu * 1000 : Date.parse(p.lu || p.last_updated),
+        v: Math.max(0, Number(p.s)),
+      }));
+    };
+
+    const pvPts = extract(series?.pvId);
+    const housePts = extract(series?.houseId);
+    const allPts = [...pvPts, ...housePts];
+    if (!allPts.length) {
+      this._chartWrap.replaceChildren(h('div', { class: 'hint' }, '• Noch keine 24h-Verlaufsdaten vorhanden'));
+      return;
+    }
+
+    const minT = Math.min(...allPts.map((p) => p.t));
+    const maxT = Math.max(...allPts.map((p) => p.t), minT + 1);
+    const maxV = Math.max(...allPts.map((p) => p.v), 500);
+    const W = 400; const H = 130; const padL = 6; const padR = 6; const padT = 10; const padB = 20;
+    const toX = (t) => padL + ((t - minT) / (maxT - minT)) * (W - padL - padR);
+    const toY = (v) => padT + (1 - v / maxV) * (H - padT - padB);
+
+    const mkSvg = (tag, attrs = {}, text = '') => {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+      if (text) el.textContent = text;
+      return el;
+    };
+
+    const svg = mkSvg('svg', { viewBox: `0 0 ${W} ${H}` });
+    svg.append(mkSvg('line', { x1: padL, y1: H - padB, x2: W - padR, y2: H - padB, stroke: 'rgba(128,128,128,0.28)' }));
+    svg.append(mkSvg('text', { x: padL, y: H - 5, fill: 'rgba(155,155,155,0.9)', 'font-size': '9.5' }, 'vor 24h'));
+    svg.append(mkSvg('text', { x: W - padR, y: H - 5, 'text-anchor': 'end', fill: 'rgba(155,155,155,0.9)', 'font-size': '9.5' }, `Max ${_fmtWatts(maxV)} · Jetzt`));
+
+    const drawLine = (pts, color) => {
+      if (pts.length < 2) return;
+      const d = pts.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${toX(p.t).toFixed(1)} ${toY(p.v).toFixed(1)}`).join(' ');
+      svg.append(mkSvg('path', { d, fill: 'none', stroke: color, 'stroke-width': '2.4', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
+    };
+    drawLine(housePts, '#ef4444');
+    drawLine(pvPts, '#f59e0b');
+
+    this._chartWrap.replaceChildren(
+      h('div', { style: { display: 'flex', gap: '12px', fontSize: '12px', marginBottom: '6px' } },
+        h('span', { style: { color: '#f59e0b', fontWeight: '600' } }, '● PV-Erzeugung'),
+        h('span', { style: { color: '#ef4444', fontWeight: '600' } }, '● Hausverbrauch')),
+      svg);
+  }
+
+  update(hass) {
+    if (this._destroyed || !hass) return;
+    this.hass = hass;
+    const states = hass.states || {};
+
+    const pv = _pickState(states, SOLAR_SENSORS.pv);
+    const chg = _pickState(states, SOLAR_SENSORS.charge);
+    const dis = _pickState(states, SOLAR_SENSORS.discharge);
+    const soc = _pickState(states, SOLAR_SENSORS.soc);
+    const imp = _pickState(states, SOLAR_SENSORS.imp);
+    const exp = _pickState(states, SOLAR_SENSORS.exp);
+    const house = _pickState(states, SOLAR_SENSORS.house);
+    const dy = _pickState(states, SOLAR_SENSORS.dailyYield);
+    const dh = _pickState(states, SOLAR_SENSORS.dailyHouse);
+    const inc = _pickState(states, SOLAR_SENSORS.dailyIncome);
+    const sch = _pickState(states, SOLAR_SENSORS.schimmeldry);
+
+    const wNow = _pickState(states, SOLAR_SENSORS.westNow);
+    const wToday = _pickState(states, SOLAR_SENSORS.westToday);
+    const wPeak = _pickState(states, SOLAR_SENSORS.westPeak);
+    const eNow = _pickState(states, SOLAR_SENSORS.eastNow);
+    const eToday = _pickState(states, SOLAR_SENSORS.eastToday);
+    const ePeak = _pickState(states, SOLAR_SENSORS.eastPeak);
+
+    const pvW = _num(pv);
+    const chgW = _num(chg);
+    const disW = _num(dis);
+    const impW = _num(imp);
+    const expW = _num(exp);
+    const houseW = _num(house);
+    const socVal = soc ? `${Math.round(_num(soc))}%` : '—';
+
+    // Patch flow SVG nodes in-place without rebuilding DOM
+    this._flowValPv.textContent = _fmtWatts(pvW);
+    this._flowValBat.textContent = socVal;
+    if (this._flowSubBat) {
+      this._flowSubBat.textContent = chgW > 10 ? `+${_fmtWatts(chgW)}` : (disW > 10 ? `-${_fmtWatts(disW)}` : 'Standby');
+    }
+    this._flowValGrid.textContent = expW > 10 ? `-${_fmtWatts(expW)}` : `+${_fmtWatts(impW)}`;
+    this._flowValHouse.textContent = _fmtWatts(houseW);
+
+    this._flowPvHouse.toggleAttribute('data-active', pvW > 15 && houseW > 15);
+    this._flowPvBat.toggleAttribute('data-active', chgW > 15);
+    this._flowPvGrid.toggleAttribute('data-active', expW > 15);
+    this._flowBatHouse.toggleAttribute('data-active', disW > 15);
+    this._flowGridHouse.toggleAttribute('data-active', impW > 15);
+
+    const sig = [pv, chg, dis, soc, imp, exp, house, dy, dh, inc, sch, wNow, wToday, eNow, eToday]
+      .map((s) => `${s?.entity_id || ''}:${s?.state || ''}`).join('|');
+    if (sig === this._lastSig) return;
+    this._lastSig = sig;
+
+    const kpis = [
+      { label: 'PV-Leistung', val: _fmtWatts(pvW), icon: 'mdi:solar-power', color: '#f59e0b', id: pv?.entity_id },
+      { label: 'Hausverbrauch', val: _fmtWatts(houseW), icon: 'mdi:home-lightning-bolt', color: '#ef4444', id: house?.entity_id },
+      { label: 'Batterie', val: socVal, sub: chgW > 5 ? `Lädt ${_fmtWatts(chgW)}` : (disW > 5 ? `Entlädt ${_fmtWatts(disW)}` : 'Standby'), icon: 'mdi:battery-charging', color: '#10b981', id: soc?.entity_id },
+      { label: expW > 10 ? 'Einspeisung' : 'Netzbezug', val: _fmtWatts(expW > 10 ? expW : impW), icon: 'mdi:transmission-tower', color: '#03a9f4', id: (expW > 10 ? exp : imp)?.entity_id },
+      ...(dy ? [{ label: 'Tagesertrag', val: `${_num(dy).toFixed(1)} kWh`, icon: 'mdi:counter', color: '#f59e0b', id: dy.entity_id }] : []),
+      ...(dh ? [{ label: 'Tagesverbrauch', val: `${_num(dh).toFixed(1)} kWh`, icon: 'mdi:home-analytics', color: '#fb7185', id: dh.entity_id }] : []),
+      ...(inc ? [{ label: 'Tagesersparnis', val: `${_num(inc).toFixed(2)} €`, icon: 'mdi:cash-multiple', color: '#22c55e', id: inc.entity_id }] : []),
+      ...(sch ? [{ label: 'Schimmeldry', val: `${_num(sch).toFixed(2)} ${sch.attributes?.unit_of_measurement || 'kWh'}`, icon: 'mdi:fan', color: '#38bdf8', id: sch.entity_id }] : []),
+    ];
+
+    this._kpiWrap.replaceChildren(...kpis.map((k) => h('div', {
+      class: 'kpi-card',
+      style: { '--kpi-color': k.color },
+      onClick: () => { if (k.id) moreInfo(this.el, k.id); },
+    },
+    h('div', { class: 'kpi-top' }, icon(k.icon), k.label),
+    h('div', { class: 'kpi-val' }, k.val),
+    k.sub ? h('div', { class: 'kpi-sub' }, k.sub) : null)));
+
+    const totalNow = _num(wNow) + _num(eNow);
+    const totalToday = _num(wToday) + _num(eToday);
+    const fCards = [];
+    if (wNow || eNow) {
+      fCards.push(
+        h('div', { class: 'kpi-card', style: { '--kpi-color': '#f59e0b' } },
+          h('div', { class: 'kpi-top' }, icon('mdi:solar-power'), 'Gesamt Prognose'),
+          h('div', { class: 'kpi-val' }, _fmtWatts(totalNow)),
+          h('div', { class: 'kpi-sub' }, `Heute ca. ${totalToday.toFixed(1)} kWh`)),
+        h('div', { class: 'kpi-card', style: { '--kpi-color': '#fb923c' }, onClick: () => wNow && moreInfo(this.el, wNow.entity_id) },
+          h('div', { class: 'kpi-top' }, icon('mdi:weather-sunset-down'), 'Westen'),
+          h('div', { class: 'kpi-val' }, _fmtWatts(_num(wNow))),
+          h('div', { class: 'kpi-sub' }, `Heute ${_num(wToday).toFixed(1)} kWh${wPeak ? ` · Peak ${wPeak.state}` : ''}`)),
+        h('div', { class: 'kpi-card', style: { '--kpi-color': '#38bdf8' }, onClick: () => eNow && moreInfo(this.el, eNow.entity_id) },
+          h('div', { class: 'kpi-top' }, icon('mdi:weather-sunset-up'), 'Osten'),
+          h('div', { class: 'kpi-val' }, _fmtWatts(_num(eNow))),
+          h('div', { class: 'kpi-sub' }, `Heute ${_num(eToday).toFixed(1)} kWh${ePeak ? ` · Peak ${ePeak.state}` : ''}`)),
+      );
+    } else {
+      fCards.push(h('div', { class: 'hint' }, '• Keine Solarprognose-Sensoren konfiguriert'));
+    }
+    this._forecastWrap.replaceChildren(...fCards);
+
+    if (!this._statsCache) this._loadHistory(false);
+  }
+}
+// ─── END: components/view_solar.js ───
+
+
+// ─── START: components/view_blinds.js ───
+// Blinds View: Sun & Facade Solar Intensity, Configured/Unconfigured Stats, Grouped Cover Controls & 24h Logbook.
+const _BL_FACADES = [
+  { key: 'ost', label: 'Osten', intensity: 'sensor.geschatzte_sonnenintensitat_hauswand_osten', peak: 'sensor.sonneneinstrahlung_hoehepunkt_hauswand_osten' },
+  { key: 'sued', label: 'Süden', intensity: 'sensor.geschatzte_sonnenintensitat_hauswand_suden', peak: 'sensor.power_highest_peak_time_today_3' },
+  { key: 'west', label: 'Westen', intensity: 'sensor.geschatzte_sonnenintensitat_hauswand_westen', peak: 'sensor.power_highest_peak_time_today_2' },
+];
+
+function _blCoverSignature(states, rooms) {
+  const covers = Object.keys(states)
+    .filter((id) => id.startsWith('cover.'))
+    .sort();
+  const avail = covers.map((id) => `${id}:${isUnavailable(states[id]) ? '0' : '1'}`).join(',');
+  const roomSig = (rooms || []).map((r) => `${r.id}:${r.name}`).join('|');
+  return `${avail}##${roomSig}`;
+}
+
+function _blFmtTime(raw) {
+  if (raw == null) return '';
+  let d;
+  if (typeof raw === 'number') {
+    d = new Date(raw < 1e12 ? raw * 1000 : raw);
+  } else {
+    d = new Date(raw);
+  }
+  if (Number.isNaN(d.getTime())) return String(raw);
+  return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+}
+class BlindsView {
+  constructor({ hass, layout, onBack }) {
+    this.hass = hass;
+    this.layout = layout;
+    this.onBack = onBack;
+    this._destroyed = false;
+    this._structSig = '';
+    this._rowCtrls = new Map();
+    this._logCache = null;
+    this._logFetchedAt = 0;
+    this._logSeq = 0;
+
+    this.el = h('div', { class: 'subview-page', style: { '--view-color': '#9c27b0' } });
+    this._buildShell();
+    if (hass) this.update(hass, layout);
+  }
+
+  destroy() {
+    this._destroyed = true;
+    this._rowCtrls.clear();
+  }
+
+  _buildShell() {
+    this._subEl = h('div', { class: 'subview-sub' }, 'Alle Rollläden nach Räumen');
+
+    const openIntegrationBtn = h('button', {
+      type: 'button', class: 'btn',
+      onClick: () => {
+        const target = '/config/integrations/integration/smarthome_companion_hacs';
+        window.history.pushState(null, '', target);
+        window.dispatchEvent(new CustomEvent('location-changed', { bubbles: true, composed: true }));
+      },
+    }, icon('mdi:clock-outline'), 'Planung');
+
+    const allOpenBtn = h('button', {
+      type: 'button', class: 'btn',
+      onClick: () => this._allAction('open_cover'),
+    }, icon('mdi:arrow-up'), 'Alle auf');
+
+    const allCloseBtn = h('button', {
+      type: 'button', class: 'btn',
+      onClick: () => this._allAction('close_cover'),
+    }, icon('mdi:arrow-down'), 'Alle zu');
+
+    const head = h('div', { class: 'subview-head' },
+      h('div', { class: 'subview-head-left' },
+        h('div', { class: 'subview-hero-icon' }, icon('mdi:window-shutter-cog')),
+        h('div', { style: { minWidth: '0' } },
+          h('h2', { class: 'subview-title' }, 'Rollläden'),
+          this._subEl)),
+      h('div', { class: 'subview-actions' },
+        allOpenBtn,
+        allCloseBtn,
+        openIntegrationBtn,
+        this.onBack ? h('button', { type: 'button', class: 'btn', onClick: this.onBack }, icon('mdi:arrow-left'), 'Zurück') : null));
+
+    // Sun & Facades
+    this._sunSummaryEl = h('span', { class: 'badge-chip' });
+    this._facadeGrid = h('div', { class: 'kpi-grid' });
+    const facadeSec = h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:weather-sunny'), 'Sonnenstand & Fassaden'),
+        this._sunSummaryEl),
+      this._facadeGrid);
+
+    // Offline warning section
+    this._offlineWrap = h('div', { class: 'log-list' });
+    this._offlineSec = h('section', { class: 'subview-section', hidden: true },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:cloud-off-outline'), 'Offline Rollläden')),
+      this._offlineWrap);
+
+    // Grouped Covers container
+    this._groupsWrap = h('div', { style: { display: 'grid', gap: '12px', minWidth: '0' } });
+
+    // Setup status (configured / unconfigured sensors)
+    this._setupGrid = h('div', { class: 'kpi-grid' });
+    this._setupLists = h('div', { style: { display: 'grid', gap: '8px' } });
+    this._setupSec = h('section', { class: 'subview-section', hidden: true },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:clipboard-check-outline'), 'Rollladen-Automatik Einrichtung')),
+      this._setupGrid,
+      this._setupLists);
+
+    // 24h Logbook
+    this._logWrap = h('div', { class: 'log-list' },
+      h('div', { class: 'log-row' }, h('span', { class: 'log-row-main' }, 'Lade Aktivitäten...')));
+    const logSec = h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:history'), 'Aktivitäten (24h)'),
+        h('button', {
+          type: 'button', class: 'btn sm',
+          onClick: () => { this._logFetchedAt = 0; this._fetchLogbook(); },
+        }, icon('mdi:refresh'), 'Aktualisieren')),
+      this._logWrap);
+
+    this.el.append(head, facadeSec, this._offlineSec, this._groupsWrap, this._setupSec, logSec);
+  }
+
+  _allAction(svc) {
+    if (!this.hass) return;
+    const ids = Object.keys(this.hass.states || {})
+      .filter((id) => id.startsWith('cover.') && !isUnavailable(this.hass.states[id]));
+    if (!ids.length) return;
+    this.hass.callService('cover', svc, { entity_id: ids });
+  }
+
+  update(hass, layout) {
+    if (this._destroyed || !hass) return;
+    this.hass = hass;
+    if (layout) this.layout = layout;
+    const states = hass.states || {};
+    const rooms = this.layout?.rooms || [];
+
+    this._updateSunAndFacades(states);
+    this._updateSetupStatus(states);
+    this._syncCoverGroups(states, rooms);
+
+    // Refresh existing persistent cover rows without DOM rebuild
+    for (const ctrl of this._rowCtrls.values()) {
+      updateCoverRow(ctrl, hass);
+    }
+
+    const activeCovers = Object.keys(states).filter((id) => id.startsWith('cover.') && !isUnavailable(states[id]));
+    const openCount = activeCovers.filter((id) => states[id].state === 'open').length;
+    this._subEl.textContent = `${openCount} von ${activeCovers.length} geöffnet`;
+
+    if (Date.now() - this._logFetchedAt > 60000) {
+      this._fetchLogbook();
+    }
+  }
+
+  _updateSunAndFacades(states) {
+    const sun = states['sun.sun'];
+    if (sun) {
+      const above = sun.state === 'above_horizon';
+      const elev = sun.attributes?.elevation != null ? ` (${Math.round(sun.attributes.elevation)}°)` : '';
+      this._sunSummaryEl.textContent = `${above ? 'Über Horizont' : 'Unter Horizont'}${elev}`;
+      this._sunSummaryEl.hidden = false;
+    } else {
+      this._sunSummaryEl.hidden = true;
+    }
+
+    const cards = [];
+    for (const fac of _BL_FACADES) {
+      const stInt = states[fac.intensity];
+      const stPeak = states[fac.peak];
+      if (!stInt && !stPeak) continue;
+      const valText = stInt ? formatState(stInt) : '—';
+      let peakText = 'Höhepunkt: —';
+      if (stPeak && !isUnavailable(stPeak)) {
+        const d = new Date(stPeak.state);
+        peakText = `Höhepunkt: ${Number.isNaN(d.getTime()) ? stPeak.state : d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`;
+      }
+      cards.push(h('div', {
+        class: 'kpi-card', style: { '--kpi-color': '#f59e0b' },
+        onClick: () => moreInfo(this.el, (stInt || stPeak).entity_id),
+      },
+        h('div', { class: 'kpi-top' }, icon('mdi:white-balance-sunny'), fac.label),
+        h('div', { class: 'kpi-val' }, valText),
+        h('div', { class: 'kpi-sub' }, peakText)));
+    }
+    if (!cards.length) {
+      cards.push(h('div', { class: 'kpi-card' },
+        h('div', { class: 'kpi-top' }, icon('mdi:weather-sunny'), 'Sonneneinstrahlung'),
+        h('div', { class: 'kpi-val' }, '—'),
+        h('div', { class: 'kpi-sub' }, 'Keine Fassaden-Sensoren')));
+    }
+    this._facadeGrid.replaceChildren(...cards);
+  }
+
+  _updateSetupStatus(states) {
+    const cfg = states['sensor.smarthome_companion_eingerichtete_rollladen'];
+    const uncfg = states['sensor.smarthome_companion_nicht_eingerichtete_rollladen'];
+    if (!cfg && !uncfg) {
+      this._setupSec.hidden = true;
+      return;
+    }
+    this._setupSec.hidden = false;
+    const cfgList = Array.isArray(cfg?.attributes?.configured_blinds) ? cfg.attributes.configured_blinds : [];
+    const uncfgList = Array.isArray(uncfg?.attributes?.unconfigured_blinds) ? uncfg.attributes.unconfigured_blinds : [];
+
+    this._setupGrid.replaceChildren(
+      h('div', {
+        class: 'kpi-card', style: { '--kpi-color': '#10b981' },
+        onClick: () => cfg && moreInfo(this.el, cfg.entity_id),
+      },
+        h('div', { class: 'kpi-top' }, icon('mdi:check-circle-outline'), 'Eingerichtet'),
+        h('div', { class: 'kpi-val' }, cfg ? String(cfg.state) : String(cfgList.length)),
+        h('div', { class: 'kpi-sub' }, 'Aktive Zeitpläne')),
+      h('div', {
+        class: 'kpi-card', style: { '--kpi-color': '#f59e0b' },
+        onClick: () => uncfg && moreInfo(this.el, uncfg.entity_id),
+      },
+        h('div', { class: 'kpi-top' }, icon('mdi:alert-circle-outline'), 'Offene Einrichtung'),
+        h('div', { class: 'kpi-val' }, uncfg ? String(uncfg.state) : String(uncfgList.length)),
+        h('div', { class: 'kpi-sub' }, 'Ohne Zeitplan')),
+    );
+
+    const blocks = [];
+    if (uncfgList.length) {
+      blocks.push(h('div', { class: 'log-list' },
+        h('div', { class: 'section-label' }, 'Noch nicht eingerichtet'),
+        ...uncfgList.slice(0, 12).map((b) => h('div', { class: 'log-row' },
+          h('span', { class: 'log-row-main' }, b.name || b.entity_id || String(b)),
+          h('span', { class: 'log-row-time' }, 'Offen')))));
+    }
+    this._setupLists.replaceChildren(...blocks);
+  }
+
+  _syncCoverGroups(states, rooms) {
+    const sig = _blCoverSignature(states, rooms);
+    if (sig === this._structSig) return;
+    this._structSig = sig;
+    this._rowCtrls.clear();
+
+    const allCovers = Object.keys(states).filter((id) => id.startsWith('cover.')).sort();
+    const offline = allCovers.filter((id) => isUnavailable(states[id]));
+    const active = allCovers.filter((id) => !isUnavailable(states[id]));
+
+    if (offline.length) {
+      this._offlineSec.hidden = false;
+      this._offlineWrap.replaceChildren(...offline.map((id) => h('div', {
+        class: 'log-row', style: { cursor: 'pointer' },
+        onClick: () => moreInfo(this.el, id),
+      },
+        h('span', { class: 'log-row-main' }, states[id]?.attributes?.friendly_name || id),
+        h('span', { class: 'log-row-time' }, states[id]?.state || 'unavailable'))));
+    } else {
+      this._offlineSec.hidden = true;
+    }
+
+    // Build entity -> room map (first from layout.rooms tiles, then HA area_id)
+    const entityToRoom = new Map();
+    const roomById = new Map();
+    for (const r of rooms) {
+      roomById.set(r.id, r);
+      for (const t of r.tiles || []) {
+        if (t.entity_id?.startsWith('cover.')) entityToRoom.set(t.entity_id, r.id);
+      }
+    }
+
+    const grouped = new Map();
+    for (const id of active) {
+      const rId = entityToRoom.get(id) || areaIdForEntity(this.hass, id) || '__other__';
+      if (!grouped.has(rId)) grouped.set(rId, []);
+      grouped.get(rId).push(id);
+    }
+
+    // Order rooms matching dashboard order, followed by extra areas and __other__
+    const orderedIds = [];
+    for (const r of rooms) {
+      if (grouped.has(r.id)) orderedIds.push(r.id);
+    }
+    for (const k of grouped.keys()) {
+      if (k !== '__other__' && !orderedIds.includes(k)) orderedIds.push(k);
+    }
+    if (grouped.has('__other__')) orderedIds.push('__other__');
+
+    const sections = [];
+    for (const rId of orderedIds) {
+      const ids = grouped.get(rId) || [];
+      ids.sort((a, b) => {
+        const na = states[a]?.attributes?.friendly_name || a;
+        const nb = states[b]?.attributes?.friendly_name || b;
+        return na.localeCompare(nb, 'de');
+      });
+
+      const roomMeta = roomById.get(rId);
+      const areaMeta = this.hass?.areas?.[rId];
+      const title = roomMeta?.name || areaMeta?.name || (rId === '__other__' ? 'Weitere Rollläden' : rId);
+      const rIcon = roomMeta?.icon || areaMeta?.icon || 'mdi:window-shutter';
+
+      const rows = ids.map((id) => {
+        const st = states[id];
+        const spec = {
+          entity_id: id,
+          name: st?.attributes?.friendly_name || id,
+        };
+        const ctrl = createCoverRow(spec, { getHass: () => this.hass });
+        this._rowCtrls.set(id, ctrl);
+        return ctrl.row;
+      });
+
+      sections.push(h('section', { class: 'subview-section' },
+        h('div', { class: 'subview-section-head' },
+          h('div', { class: 'subview-section-title' }, icon(rIcon), title),
+          h('div', { class: 'tile-btns' },
+            h('button', {
+              type: 'button', class: 'mini-btn', 'aria-label': `${title} öffnen`,
+              onClick: () => this.hass?.callService('cover', 'open_cover', { entity_id: ids }),
+            }, icon('mdi:arrow-up')),
+            h('button', {
+              type: 'button', class: 'mini-btn', 'aria-label': `${title} schließen`,
+              onClick: () => this.hass?.callService('cover', 'close_cover', { entity_id: ids }),
+            }, icon('mdi:arrow-down')))),
+        h('div', { class: 'cover-detail-list' }, ...rows)));
+    }
+
+    if (!sections.length) {
+      sections.push(h('section', { class: 'subview-section' },
+        h('div', { class: 'empty-hint' }, 'Keine Rollläden gefunden.')));
+    }
+
+    this._groupsWrap.replaceChildren(...sections);
+  }
+
+  async _fetchLogbook() {
+    if (!this.hass || this._destroyed) return;
+    const seq = ++this._logSeq;
+    this._logFetchedAt = Date.now();
+    const coverIds = Object.keys(this.hass.states || {}).filter((id) => id.startsWith('cover.'));
+    if (!coverIds.length) {
+      this._logWrap.replaceChildren(h('div', { class: 'empty-hint' }, 'Keine Rollläden vorhanden.'));
+      return;
+    }
+
+    try {
+      const start = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+      const end = new Date().toISOString();
+      const res = await this.hass.callWS({
+        type: 'logbook/get_events',
+        start_time: start,
+        end_time: end,
+        entity_ids: coverIds.slice(0, 60),
+      });
+      if (this._destroyed || seq !== this._logSeq) return;
+
+      const entries = (Array.isArray(res) ? res : [])
+        .slice(-25)
+        .reverse();
+      if (!entries.length) {
+        this._logWrap.replaceChildren(h('div', { class: 'empty-hint' }, 'Keine Aktivitäten in den letzten 24 Stunden.'));
+        return;
+      }
+
+      this._logWrap.replaceChildren(...entries.map((ev) => {
+        const label = ev.name || this.hass?.states?.[ev.entity_id]?.attributes?.friendly_name || ev.entity_id || 'Rollladen';
+        const desc = ev.message || (ev.state ? `${label}: ${ev.state}` : label);
+        const text = ev.message ? `${label} ${desc}` : desc;
+        return h('div', {
+          class: 'log-row', style: ev.entity_id ? { cursor: 'pointer' } : {},
+          onClick: () => ev.entity_id && moreInfo(this.el, ev.entity_id),
+        },
+          h('span', { class: 'log-row-main' }, text),
+          h('span', { class: 'log-row-time' }, _blFmtTime(ev.when)));
+      }));
+    } catch (_) {
+      if (this._destroyed || seq !== this._logSeq) return;
+      this._logWrap.replaceChildren(h('div', { class: 'empty-hint' }, 'Logbook aktuell nicht abrufbar.'));
+    }
+  }
+}
+// ─── END: components/view_blinds.js ───
+
+
+// ─── START: components/view_auto.js ───
+// Auto View: Dynamic BMW CarData Entity/Device Discovery & Configurable Volvo Webview (with HTTPS Mixed-Content Guard).
+const _AUTO_BMW_DEVICE_ID = '7ae00fdd4f8a117f65bb4f5275b021fc';
+const _AUTO_DEFAULT_VOLVO_URL = 'http://192.168.178.188:6176/';
+
+function _autoMatchId(id) {
+  return /(?:^|\.)(?:.*(?:bmw|gv_jm_13|cardata).*)$/i.test(id);
+}
+
+function _autoClassify(states, ids) {
+  const kpis = [];
+  const controls = [];
+  const trackers = [];
+  const other = [];
+
+  for (const id of ids) {
+    const st = states[id];
+    if (!st) continue;
+    const dom = id.split('.')[0];
+    const dc = st.attributes?.device_class || '';
+    const unit = st.attributes?.unit_of_measurement || '';
+    const name = st.attributes?.friendly_name || id;
+
+    if (dom === 'device_tracker') {
+      trackers.push(st);
+    } else if (['button', 'switch', 'lock'].includes(dom)) {
+      controls.push(st);
+    } else if (
+      dc === 'battery' || dc === 'distance' || dc === 'energy' ||
+      /soc|reichweite|range|batterie|kilometer|odometer|ladestatus|charging|stecker|plug|verriegel|lock/i.test(`${id} ${name} ${unit}`)
+    ) {
+      kpis.push(st);
+    } else {
+      other.push(st);
+    }
+  }
+  return { kpis, controls, trackers, other };
+}
+class AutoView {
+  constructor({ hass, config, onBack }) {
+    this.hass = hass;
+    this.config = config;
+    this.onBack = onBack;
+    this._destroyed = false;
+    this._deviceEntityIds = null;
+    this._loadingRegistry = false;
+    this._bmwSig = '';
+    this._volvoUrlRendered = null;
+
+    this.el = h('div', { class: 'subview-page', style: { '--view-color': '#3b82f6' } });
+    this._buildShell();
+    this._loadDeviceEntities();
+    if (hass) this.update(hass, config);
+  }
+
+  destroy() {
+    this._destroyed = true;
+  }
+
+  _buildShell() {
+    this._subEl = h('div', { class: 'subview-sub' }, 'Fahrzeugstatus & Lade-Übersicht');
+
+    const head = h('div', { class: 'subview-head' },
+      h('div', { class: 'subview-head-left' },
+        h('div', { class: 'subview-hero-icon' }, icon('mdi:car')),
+        h('div', { style: { minWidth: '0' } },
+          h('h2', { class: 'subview-title' }, 'Auto'),
+          this._subEl)),
+      h('div', { class: 'subview-actions' },
+        this.onBack ? h('button', { type: 'button', class: 'btn', onClick: this.onBack }, icon('mdi:arrow-left'), 'Zurück') : null));
+
+    // BMW CarData Section
+    this._bmwPlateChip = h('span', { class: 'badge-chip' }, 'GV-JM-13');
+    this._bmwKpiGrid = h('div', { class: 'kpi-grid' });
+    this._bmwControls = h('div', { class: 'alarm-modes' });
+    this._bmwOther = h('div', { class: 'log-list' });
+    this._bmwDetails = h('details', {},
+      h('summary', { style: { cursor: 'pointer', fontSize: '12px', fontWeight: '600', color: 'var(--cd-secondary)', padding: '4px 0' } }, 'Alle Fahrzeugsensoren'),
+      this._bmwOther);
+
+    const bmwSec = h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:car-electric'), 'BMW CarData'),
+        this._bmwPlateChip),
+      this._bmwKpiGrid,
+      this._bmwControls,
+      this._bmwDetails);
+
+    // Volvo / External Iframe Section
+    this._volvoActions = h('div', { class: 'subview-actions' });
+    this._volvoBody = h('div', { style: { display: 'grid', gap: '10px', minWidth: '0' } });
+    this._volvoSec = h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:car-estate'), 'Volvo'),
+        this._volvoActions),
+      this._volvoBody);
+
+    this.el.append(head, bmwSec, this._volvoSec);
+  }
+
+  async _loadDeviceEntities() {
+    if (!this.hass || this._loadingRegistry || this._deviceEntityIds) return;
+    this._loadingRegistry = true;
+    try {
+      const reg = await this.hass.callWS({ type: 'config/entity_registry/list' });
+      if (this._destroyed) return;
+      if (Array.isArray(reg)) {
+        const matched = reg
+          .filter((e) => !e.disabled_by && (
+            e.device_id === _AUTO_BMW_DEVICE_ID ||
+            e.platform === 'bmw_cardata' ||
+            _autoMatchId(e.entity_id)
+          ))
+          .map((e) => e.entity_id);
+        this._deviceEntityIds = new Set(matched);
+        if (this.hass) this._renderBmw(this.hass.states || {});
+      }
+    } catch (_) {
+      // Fallback to state prefix scan only (non-admins or mocks)
+    } finally {
+      this._loadingRegistry = false;
+    }
+  }
+
+  update(hass, config) {
+    if (this._destroyed || !hass) return;
+    this.hass = hass;
+    if (config) this.config = config;
+    this._renderBmw(hass.states || {});
+    this._renderVolvo();
+  }
+
+  _collectBmwIds(states) {
+    const ids = new Set();
+    if (this._deviceEntityIds) {
+      for (const id of this._deviceEntityIds) {
+        if (states[id]) ids.add(id);
+      }
+    }
+    for (const id of Object.keys(states)) {
+      if (_autoMatchId(id)) ids.add(id);
+    }
+    return [...ids].sort();
+  }
+
+  _renderBmw(states) {
+    const ids = this._collectBmwIds(states);
+    const sig = ids.map((id) => `${id}:${states[id]?.state}`).join('|');
+    if (sig === this._bmwSig) return;
+    this._bmwSig = sig;
+
+    if (!ids.length) {
+      this._bmwKpiGrid.replaceChildren(h('div', { class: 'empty-hint' }, 'Keine BMW CarData Entitäten gefunden.'));
+      this._bmwControls.replaceChildren();
+      this._bmwDetails.hidden = true;
+      return;
+    }
+
+    const { kpis, controls, trackers, other } = _autoClassify(states, ids);
+    const primary = [...kpis, ...trackers].slice(0, 8);
+    if (!primary.length) primary.push(...other.slice(0, 4).map((s) => s));
+
+    this._bmwKpiGrid.replaceChildren(...primary.map((st) => h('div', {
+      class: 'kpi-card',
+      style: { '--kpi-color': isUnavailable(st) ? '#64748b' : '#3b82f6' },
+      onClick: () => moreInfo(this.el, st.entity_id),
+    },
+      h('div', { class: 'kpi-top' },
+        icon(st.attributes?.icon || 'mdi:car-info'),
+        st.attributes?.friendly_name || st.entity_id),
+      h('div', { class: 'kpi-val' }, formatState(st)),
+      h('div', { class: 'kpi-sub' }, st.entity_id))));
+
+    this._bmwControls.replaceChildren(...controls.map((st) => {
+      const dom = st.entity_id.split('.')[0];
+      const lbl = st.attributes?.friendly_name || st.entity_id;
+      const active = dom === 'switch' ? st.state === 'on' : st.state === 'locked';
+      return h('button', {
+        type: 'button',
+        class: `btn${active ? ' primary' : ''}`,
+        disabled: isUnavailable(st),
+        onClick: () => {
+          if (!this.hass) return;
+          if (dom === 'button') this.hass.callService('button', 'press', { entity_id: st.entity_id });
+          else if (dom === 'switch') this.hass.callService('switch', 'toggle', { entity_id: st.entity_id });
+          else if (dom === 'lock') {
+            this.hass.callService('lock', st.state === 'locked' ? 'unlock' : 'lock', { entity_id: st.entity_id });
+          }
+        },
+      }, icon(st.attributes?.icon || 'mdi:gesture-tap-button'), lbl);
+    }));
+
+    const rest = ids
+      .filter((id) => !primary.some((p) => p.entity_id === id) && !controls.some((c) => c.entity_id === id))
+      .map((id) => states[id]);
+    if (rest.length) {
+      this._bmwDetails.hidden = false;
+      this._bmwOther.replaceChildren(...rest.map((st) => h('div', {
+        class: 'log-row', style: { cursor: 'pointer' },
+        onClick: () => moreInfo(this.el, st.entity_id),
+      },
+        h('span', { class: 'log-row-main' }, st.attributes?.friendly_name || st.entity_id),
+        h('span', { class: 'log-row-time' }, formatState(st)))));
+    } else {
+      this._bmwDetails.hidden = true;
+    }
+
+    const firstTracker = trackers[0];
+    this._subEl.textContent = firstTracker
+      ? `BMW GV-JM-13 · ${formatState(firstTracker)}`
+      : `${ids.length} BMW Sensoren aktiv`;
+  }
+
+  _renderVolvo() {
+    const rawUrl = this.config?.views?.auto?.webview_url ?? _AUTO_DEFAULT_VOLVO_URL;
+    const url = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+    const isHttps = typeof window !== 'undefined' && window.location?.protocol === 'https:';
+    const isMixedContent = Boolean(url && isHttps && /^http:/i.test(url));
+    const renderKey = `${url}|${isMixedContent}`;
+    if (renderKey === this._volvoUrlRendered) return;
+    this._volvoUrlRendered = renderKey;
+
+    if (!url) {
+      this._volvoSec.hidden = true;
+      return;
+    }
+    this._volvoSec.hidden = false;
+
+    const extBtn = h('a', {
+      href: url, target: '_blank', rel: 'noopener noreferrer', class: 'btn sm',
+    }, icon('mdi:open-in-new'), 'Im neuen Tab öffnen');
+    this._volvoActions.replaceChildren(extBtn);
+
+    if (isMixedContent) {
+      this._volvoBody.replaceChildren(
+        h('div', { class: 'inline-notice' },
+          icon('mdi:shield-lock-outline'),
+          h('span', {}, 'Lokale HTTP-Quelle unter HTTPS blockiert. Öffne Volvo direkt im neuen Tab.')),
+        h('div', { style: { fontSize: '12px', color: 'var(--cd-secondary)', wordBreak: 'break-all' } }, url));
+      return;
+    }
+
+    const frame = h('iframe', {
+      class: 'iframe-card',
+      src: url,
+      title: 'Volvo Ansicht',
+      loading: 'lazy',
+      referrerpolicy: 'no-referrer',
+    });
+    this._volvoBody.replaceChildren(frame);
+  }
+}
+// ─── END: components/view_auto.js ───
+
+
+// ─── START: components/view_printer3d.js ───
+// 3D Printer View: Bambu Lab A1 Mini Auto-Discovery, Print Progress, Temperatures & Hue Work Light.
+const _P3D_DEVICE_ID = '3896a2c7ff7d1946d671305a9359c828';
+const _P3D_LIGHT_ID = 'light.phillips_hue_vintage_8_temp';
+
+const _P3D_KNOWN = {
+  step: 'sensor.3dprinter_a1mini_aktueller_arbeitsschritt',
+  task: 'sensor.3dprinter_a1mini_name_der_aufgabe',
+  remaining: 'sensor.3dprinter_a1mini_verbleibende_zeit',
+  eta: 'sensor.3dprinter_a1mini_vrs_fertigstellung',
+  progress: 'sensor.3dprinter_a1mini_druckfortschritt',
+  layerCur: 'sensor.3dprinter_a1mini_aktuelle_schicht',
+  layerTotal: 'sensor.3dprinter_a1mini_gesamtzahl_der_schichten',
+  nozzleSize: 'sensor.3dprinter_a1mini_dusengrosse',
+  nozzleType: 'sensor.3dprinter_a1mini_dusentyp',
+  fan: 'fan.3dprinter_a1mini_druckkopflufter',
+  nozzleTempTarget: 'number.3dprinter_a1mini_zieltemperatur_der_duse',
+  bedTempTarget: 'number.3dprinter_a1mini_zieltemperatur_des_druckbett',
+  speedSelect: 'select.3dprinter_a1mini_druckgeschwindigkeit',
+};
+class Printer3DView {
+  constructor({ hass, onBack }) {
+    this.hass = hass;
+    this.onBack = onBack;
+    this._destroyed = false;
+    this._deviceEntityIds = null;
+    this._loadingRegistry = false;
+    this._lastSig = '';
+
+    this.el = h('div', { class: 'subview-page', style: { '--view-color': '#10b981' } });
+    this._buildShell();
+    this._loadDeviceEntities();
+    if (hass) this.update(hass);
+  }
+
+  destroy() {
+    this._destroyed = true;
+  }
+
+  _buildShell() {
+    this._subEl = h('div', { class: 'subview-sub' }, 'Bambu Lab A1 Mini');
+    this._lightBtn = h('button', {
+      type: 'button', class: 'btn', hidden: true,
+      onClick: () => this.hass?.callService('light', 'toggle', { entity_id: _P3D_LIGHT_ID }),
+    }, icon('mdi:lightbulb-outline'), 'Drucker-Licht');
+
+    const head = h('div', { class: 'subview-head' },
+      h('div', { class: 'subview-head-left' },
+        h('div', { class: 'subview-hero-icon' }, icon('mdi:printer-3d-nozzle')),
+        h('div', { style: { minWidth: '0' } },
+          h('h2', { class: 'subview-title' }, '3D-Drucker'),
+          this._subEl)),
+      h('div', { class: 'subview-actions' },
+        this._lightBtn,
+        this.onBack ? h('button', { type: 'button', class: 'btn', onClick: this.onBack }, icon('mdi:arrow-left'), 'Zurück') : null));
+
+    // Print Status Hero
+    this._jobTitleEl = h('div', { style: { fontSize: '16px', fontWeight: '700' } }, 'Standby');
+    this._stepBadgeEl = h('span', { class: 'badge-chip' }, 'Bereit');
+    this._progressValEl = h('span', { style: { fontSize: '20px', fontWeight: '800', fontVariantNumeric: 'tabular-nums' } }, '0 %');
+    this._progressFillEl = h('div', { class: 'progress-bar-fill', style: { width: '0%', background: '#10b981' } });
+    this._heroKpiGrid = h('div', { class: 'kpi-grid' });
+
+    const statusSec = h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:cube-scan'), 'Druckstatus'),
+        this._stepBadgeEl),
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' } },
+        this._jobTitleEl,
+        this._progressValEl),
+      h('div', { class: 'progress-bar-track' }, this._progressFillEl),
+      this._heroKpiGrid);
+
+    // Controls Section (Fan, Speed, Nozzle & Bed Target Temps, Action buttons)
+    this._controlsWrap = h('div', { style: { display: 'grid', gap: '10px', minWidth: '0' } });
+    const ctrlSec = h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:tune-variant'), 'Steuerung')),
+      this._controlsWrap);
+
+    // Details & Specs
+    this._detailsWrap = h('div', { class: 'log-list' });
+    const detailsSec = h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:information-outline'), 'Drucker-Details')),
+      this._detailsWrap);
+
+    this.el.append(head, statusSec, ctrlSec, detailsSec);
+  }
+
+  async _loadDeviceEntities() {
+    if (!this.hass || this._loadingRegistry || this._deviceEntityIds) return;
+    this._loadingRegistry = true;
+    try {
+      const reg = await this.hass.callWS({ type: 'config/entity_registry/list' });
+      if (this._destroyed) return;
+      if (Array.isArray(reg)) {
+        const matched = reg
+          .filter((e) => !e.disabled_by && (e.device_id === _P3D_DEVICE_ID || /3dprinter_a1mini/i.test(e.entity_id)))
+          .map((e) => e.entity_id);
+        this._deviceEntityIds = new Set(matched);
+        if (this.hass) this.update(this.hass);
+      }
+    } catch (_) {
+      // Fallback to state scan
+    } finally {
+      this._loadingRegistry = false;
+    }
+  }
+
+  _collectEntityIds(states) {
+    const ids = new Set();
+    if (this._deviceEntityIds) {
+      for (const id of this._deviceEntityIds) if (states[id]) ids.add(id);
+    }
+    for (const id of Object.values(_P3D_KNOWN)) {
+      if (states[id]) ids.add(id);
+    }
+    for (const id of Object.keys(states)) {
+      if (/3dprinter_a1mini/i.test(id)) ids.add(id);
+    }
+    return [...ids].sort();
+  }
+
+  update(hass) {
+    if (this._destroyed || !hass) return;
+    this.hass = hass;
+    const states = hass.states || {};
+    const ids = this._collectEntityIds(states);
+
+    const lightSt = states[_P3D_LIGHT_ID];
+    if (lightSt) {
+      this._lightBtn.hidden = false;
+      this._lightBtn.classList.toggle('primary', lightSt.state === 'on');
+    } else {
+      this._lightBtn.hidden = true;
+    }
+
+    const sig = ids.map((id) => `${id}:${states[id]?.state}:${states[id]?.attributes?.percentage ?? ''}`).join('|');
+    if (sig === this._lastSig) return;
+    this._lastSig = sig;
+
+    const stepSt = states[_P3D_KNOWN.step];
+    const taskSt = states[_P3D_KNOWN.task];
+    const remSt = states[_P3D_KNOWN.remaining];
+    const etaSt = states[_P3D_KNOWN.eta];
+    const progSt = states[_P3D_KNOWN.progress];
+    const curL = states[_P3D_KNOWN.layerCur];
+    const totL = states[_P3D_KNOWN.layerTotal];
+    const nozzleSize = states[_P3D_KNOWN.nozzleSize];
+    const nozzleType = states[_P3D_KNOWN.nozzleType];
+
+    const stepRaw = stepSt ? String(stepSt.state) : 'offline';
+    const isOffline = !stepSt || isUnavailable(stepSt) || stepRaw === 'offline';
+    const pct = Math.max(0, Math.min(100, numeric(progSt) ?? 0));
+
+    this._subEl.textContent = isOffline ? 'Offline / Nicht verbunden' : `${formatState(stepSt)} · A1 Mini`;
+    this._stepBadgeEl.textContent = isOffline ? 'Offline' : formatState(stepSt);
+    this._stepBadgeEl.style.color = isOffline ? '#ef4444' : '#10b981';
+    this._jobTitleEl.textContent = (taskSt && !isUnavailable(taskSt) && taskSt.state) ? taskSt.state : 'Kein aktiver Druckauftrag';
+    this._progressValEl.textContent = `${Math.round(pct)} %`;
+    this._progressFillEl.style.width = `${pct}%`;
+
+    const etaText = etaSt && !isUnavailable(etaSt)
+      ? (() => {
+          const d = new Date(etaSt.state);
+          return Number.isNaN(d.getTime()) ? etaSt.state : d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        })()
+      : '—';
+
+    const layerText = (curL && totL && !isUnavailable(curL) && !isUnavailable(totL))
+      ? `${curL.state} / ${totL.state}`
+      : '—';
+
+    this._heroKpiGrid.replaceChildren(
+      h('div', { class: 'kpi-card', onClick: () => remSt && moreInfo(this.el, remSt.entity_id) },
+        h('div', { class: 'kpi-top' }, icon('mdi:timer-sand'), 'Verbleibend'),
+        h('div', { class: 'kpi-val' }, remSt && !isUnavailable(remSt) ? formatState(remSt) : '—'),
+        h('div', { class: 'kpi-sub' }, `Fertig ca. ${etaText}`)),
+      h('div', { class: 'kpi-card', onClick: () => curL && moreInfo(this.el, curL.entity_id) },
+        h('div', { class: 'kpi-top' }, icon('mdi:layers-outline'), 'Schicht'),
+        h('div', { class: 'kpi-val' }, layerText),
+        h('div', { class: 'kpi-sub' }, 'Aktuell / Gesamt')),
+      h('div', { class: 'kpi-card', onClick: () => nozzleSize && moreInfo(this.el, nozzleSize.entity_id) },
+        h('div', { class: 'kpi-top' }, icon('mdi:printer-3d-nozzle-outline'), 'Düse'),
+        h('div', { class: 'kpi-val' }, nozzleSize && !isUnavailable(nozzleSize) ? formatState(nozzleSize) : '—'),
+        h('div', { class: 'kpi-sub' }, nozzleType && !isUnavailable(nozzleType) ? nozzleType.state : 'Standard')),
+    );
+
+    this._renderControls(states, ids);
+    this._renderDetails(states, ids);
+  }
+
+  _renderControls(states, ids) {
+    const rows = [];
+
+    const fan = states[_P3D_KNOWN.fan];
+    if (fan) {
+      const isOn = fan.state === 'on';
+      rows.push(h('div', { class: 'log-row', style: { padding: '10px 12px' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1' } },
+          icon('mdi:fan'),
+          h('span', { class: 'log-row-main' }, 'Druckkopflüfter')),
+        h('button', {
+          type: 'button', class: `btn sm${isOn ? ' primary' : ''}`,
+          disabled: isUnavailable(fan),
+          onClick: () => this.hass?.callService('fan', 'toggle', { entity_id: fan.entity_id }),
+        }, isOn ? `Ein (${fan.attributes?.percentage ?? 100}%)` : 'Aus')));
+    }
+
+    const speed = states[_P3D_KNOWN.speedSelect];
+    if (speed && Array.isArray(speed.attributes?.options)) {
+      const sel = h('select', {
+        class: 'text-input',
+        style: { width: 'auto', minWidth: '130px' },
+        disabled: isUnavailable(speed),
+        onChange: (e) => {
+          this.hass?.callService('select', 'select_option', {
+            entity_id: speed.entity_id,
+            option: e.target.value,
+          });
+        },
+      }, ...speed.attributes.options.map((opt) => {
+        const o = h('option', { value: opt }, opt);
+        if (opt === speed.state) o.selected = true;
+        return o;
+      }));
+      rows.push(h('div', { class: 'log-row', style: { padding: '8px 12px' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1' } },
+          icon('mdi:speedometer'),
+          h('span', { class: 'log-row-main' }, 'Druckgeschwindigkeit')),
+        sel));
+    }
+
+    for (const [id, label, ic] of [
+      [_P3D_KNOWN.nozzleTempTarget, 'Zieltemperatur Düse', 'mdi:thermometer'],
+      [_P3D_KNOWN.bedTempTarget, 'Zieltemperatur Druckbett', 'mdi:radiator'],
+    ]) {
+      const st = states[id];
+      if (!st) continue;
+      const cur = numeric(st) ?? 0;
+      const step = Number(st.attributes?.step || 5);
+      const min = Number(st.attributes?.min ?? 0);
+      const max = Number(st.attributes?.max ?? 300);
+      const unit = st.attributes?.unit_of_measurement || '°C';
+      const setVal = (v) => {
+        const clamped = Math.max(min, Math.min(max, v));
+        this.hass?.callService('number', 'set_value', { entity_id: id, value: clamped });
+      };
+      rows.push(h('div', { class: 'log-row', style: { padding: '8px 12px' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1' } },
+          icon(ic),
+          h('span', { class: 'log-row-main' }, label)),
+        h('div', { class: 'tile-btns' },
+          h('button', { type: 'button', class: 'mini-btn', disabled: isUnavailable(st), onClick: () => setVal(cur - step) }, icon('mdi:minus')),
+          h('span', { style: { minWidth: '52px', textAlign: 'center', fontWeight: '700', fontSize: '12px' } }, `${cur} ${unit}`),
+          h('button', { type: 'button', class: 'mini-btn', disabled: isUnavailable(st), onClick: () => setVal(cur + step) }, icon('mdi:plus')))));
+    }
+
+    // Discovered printer button controls (Pause/Resume/Stop)
+    const btns = ids.filter((id) => id.startsWith('button.'));
+    if (btns.length) {
+      rows.push(h('div', { class: 'alarm-modes', style: { marginTop: '4px' } },
+        ...btns.map((id) => {
+          const st = states[id];
+          const isStop = /stop|abbruch|cancel/i.test(id);
+          return h('button', {
+            type: 'button',
+            class: `btn sm${isStop ? ' danger' : ''}`,
+            disabled: isUnavailable(st),
+            onClick: () => {
+              if (isStop && !window.confirm('Druckauftrag wirklich abbrechen?')) return;
+              this.hass?.callService('button', 'press', { entity_id: id });
+            },
+          }, icon(st?.attributes?.icon || 'mdi:gesture-tap-button'), st?.attributes?.friendly_name || id);
+        })));
+    }
+
+    if (!rows.length) {
+      rows.push(h('div', { class: 'empty-hint' }, 'Keine Drucker-Steuerungen verfügbar.'));
+    }
+    this._controlsWrap.replaceChildren(...rows);
+  }
+
+  _renderDetails(states, ids) {
+    const rows = ids
+      .filter((id) => id.startsWith('sensor.') || id.startsWith('binary_sensor.'))
+      .map((id) => {
+        const st = states[id];
+        return h('div', {
+          class: 'log-row', style: { cursor: 'pointer' },
+          onClick: () => moreInfo(this.el, id),
+        },
+          h('span', { class: 'log-row-main' }, st?.attributes?.friendly_name || id),
+          h('span', { class: 'log-row-time' }, formatState(st)));
+      });
+    this._detailsWrap.replaceChildren(...(rows.length ? rows : [
+      h('div', { class: 'empty-hint' }, 'Keine Sensordaten gefunden.'),
+    ]));
+  }
+}
+// ─── END: components/view_printer3d.js ───
+
+
+// ─── START: components/view_more.js ───
+// More View: Unified Navigation Hub (Topics & Settings), Persons & iPhone Batteries, Exterior Temp, Trash Preview & Helpers.
+const _MORE_PEOPLE_TRACKERS = [
+  { tracker: 'device_tracker.iphonevonbrigitte', name: 'Gitte', battery: 'sensor.gitte_battery_level' },
+  { tracker: 'device_tracker.iphonevonjulian', name: 'Julian', battery: 'sensor.ahmalo_battery_level' },
+  { tracker: 'device_tracker.iphonevonmatilda', name: 'Matilda', battery: 'sensor.matilda_battery_level' },
+  { tracker: 'device_tracker.iphonevonsven', name: 'Sven', battery: 'sensor.ios_mphcv50qjl_battery_level' },
+];
+
+const _MORE_SCHIMMELDRY = [
+  { id: 'switch.schimmeldry', name: 'Schimmeldry', icon: 'mdi:fan', toggle: true },
+  { id: 'sensor.schimmeldry_tageslaufzeit', name: 'Tageslaufzeit', icon: 'mdi:timer-outline', toggle: false },
+  { id: 'automation.schimmeldry_um_9_an', name: 'Schimmeldry um 9 Uhr an', icon: 'mdi:clock-start', toggle: true },
+  { id: 'automation.batterie_leer_schimmeldry_aus', name: 'Batterie leer → Aus', icon: 'mdi:battery-alert', toggle: true },
+  { id: 'automation.kein_ertrag_solar_aus', name: 'Kein Solar-Ertrag → Aus', icon: 'mdi:solar-power', toggle: true },
+];
+
+function _moreBatColor(pct) {
+  if (pct == null) return '#64748b';
+  if (pct <= 20) return '#ef4444';
+  if (pct <= 40) return '#f59e0b';
+  return '#10b981';
+}
+
+function _moreFmtTrashDate(ev) {
+  const raw = ev.start?.date || ev.start?.dateTime || ev.start || '';
+  if (!raw) return '';
+  const d = new Date(raw.length === 10 ? `${raw}T00:00:00` : raw);
+  if (Number.isNaN(d.getTime())) return String(raw);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((d.getTime() - today.getTime()) / 86400000);
+  if (diffDays === 0) return 'Heute';
+  if (diffDays === 1) return 'Morgen';
+  if (diffDays > 1 && diffDays < 7) return `In ${diffDays} Tagen`;
+  return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+}
+class MoreView {
+  constructor({ hass, config, user, isAdmin, onNavigate, onOpenSettings, onBack }) {
+    this.hass = hass;
+    this.config = config;
+    this.user = user;
+    this.isAdmin = Boolean(isAdmin);
+    this.onNavigate = onNavigate;
+    this.onOpenSettings = onOpenSettings;
+    this.onBack = onBack;
+    this._destroyed = false;
+    this._lastSig = '';
+    this._trashEvents = null;
+    this._trashFetchedAt = 0;
+
+    this.el = h('div', { class: 'subview-page', style: { '--view-color': '#03a9f4' } });
+    this._buildShell();
+    if (hass) this.update(hass, config, user, isAdmin);
+  }
+
+  destroy() {
+    this._destroyed = true;
+  }
+
+  _buildShell() {
+    this._fritzChip = h('span', { class: 'badge-chip', hidden: true });
+    const head = h('div', { class: 'subview-head' },
+      h('div', { class: 'subview-head-left' },
+        h('div', { class: 'subview-hero-icon' }, icon('mdi:view-grid-plus-outline')),
+        h('div', { style: { minWidth: '0' } },
+          h('h2', { class: 'subview-title' }, 'Mehr & Bereiche'),
+          h('div', { class: 'subview-sub' }, 'Themen, Familie, Müllplan & Helfer'))),
+      h('div', { class: 'subview-actions' },
+        this._fritzChip,
+        this.onBack ? h('button', { type: 'button', class: 'btn', onClick: this.onBack }, icon('mdi:arrow-left'), 'Zurück') : null));
+
+    // Topic Hub Grid
+    this._hubGrid = h('div', { class: 'more-grid' });
+    const hubSec = h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:compass-outline'), 'Bereiche')),
+      this._hubGrid);
+
+    // Persons + iPhone Battery Grid
+    this._peopleGrid = h('div', { class: 'kpi-grid' });
+    this._peopleSec = h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:account-group-outline'), 'Personen & iPhones')),
+      this._peopleGrid);
+
+    // Climate & Trash Preview
+    this._tempCard = h('div', { class: 'kpi-grid' });
+    this._trashList = h('div', { class: 'log-list' });
+    const infoSec = h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:calendar-month-outline'), 'Wetter & Müllplan')),
+      this._tempCard,
+      this._trashList);
+
+    // Schimmeldry & Helpers
+    this._helpersWrap = h('div', { class: 'log-list' });
+    this._helpersSec = h('section', { class: 'subview-section', hidden: true },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:fan'), 'Schimmeldry & Automationen')),
+      this._helpersWrap);
+
+    this.el.append(head, hubSec, this._peopleSec, infoSec, this._helpersSec);
+  }
+
+  _viewVisible(viewId) {
+    const vCfg = this.config?.views?.[viewId];
+    if (!vCfg) return true;
+    if (vCfg.enabled === false) return false;
+    const allowedUsers = vCfg.users || vCfg.visible_users;
+    if (Array.isArray(allowedUsers) && allowedUsers.length && this.user?.id) {
+      return allowedUsers.includes(this.user.id);
+    }
+    return true;
+  }
+
+  _renderHub() {
+    const hubOrder = ['auto', 'printer3d', 'blinds', 'solar', 'security'];
+    const tiles = [];
+
+    for (const vId of hubOrder) {
+      if (!this._viewVisible(vId)) continue;
+      const def = BUILTIN_VIEWS.find((v) => v.id === vId);
+      if (!def) continue;
+      const vCfg = this.config?.views?.[vId] || {};
+      const title = vCfg.title || def.label || def.title;
+      const ic = vCfg.icon || def.icon;
+      const color = vCfg.color || def.color || 'var(--cd-accent)';
+
+      tiles.push(h('button', {
+        type: 'button', class: 'more-tile', style: { '--tile-color': color },
+        onClick: () => this.onNavigate?.(vId),
+      },
+        h('div', { class: 'more-tile-icon' }, icon(ic)),
+        h('div', { style: { minWidth: '0', flex: '1' } },
+          h('div', { style: { fontSize: '14px', fontWeight: '700' } }, title),
+          h('div', { style: { fontSize: '11.5px', color: 'var(--cd-secondary)' } }, def.desc || def.subtitle || 'Bereich öffnen')),
+        icon('mdi:chevron-right')));
+    }
+
+    if (this.isAdmin && this.onOpenSettings) {
+      tiles.push(h('button', {
+        type: 'button', class: 'more-tile', style: { '--tile-color': '#64748b' },
+        onClick: () => this.onOpenSettings(),
+      },
+        h('div', { class: 'more-tile-icon' }, icon('mdi:cog-outline')),
+        h('div', { style: { minWidth: '0', flex: '1' } },
+          h('div', { style: { fontSize: '14px', fontWeight: '700' } }, 'Einstellungen'),
+          h('div', { style: { fontSize: '11.5px', color: 'var(--cd-secondary)' } }, 'Räume, Kacheln & Menü')),
+        icon('mdi:chevron-right')));
+    }
+
+    this._hubGrid.replaceChildren(...tiles);
+  }
+
+  update(hass, config, user, isAdmin) {
+    if (this._destroyed || !hass) return;
+    this.hass = hass;
+    if (config !== undefined) this.config = config;
+    if (user !== undefined) this.user = user;
+    if (isAdmin !== undefined) this.isAdmin = Boolean(isAdmin);
+
+    this._renderHub();
+
+    const states = hass.states || {};
+    const fritz = states['binary_sensor.fritz_box_7590_ax_verbindung'];
+    if (fritz) {
+      this._fritzChip.hidden = false;
+      const online = fritz.state === 'on';
+      this._fritzChip.textContent = online ? 'Fritz!Box Online' : 'Fritz!Box Offline';
+      this._fritzChip.style.color = online ? '#10b981' : '#ef4444';
+    } else {
+      this._fritzChip.hidden = true;
+    }
+
+    const trackedIds = [
+      ..._MORE_PEOPLE_TRACKERS.flatMap((p) => [p.tracker, p.battery]),
+      'sensor.aussentemperatur_fallback',
+      'calendar.muellplan',
+      ..._MORE_SCHIMMELDRY.map((s) => s.id),
+    ];
+    const sig = trackedIds.map((id) => `${id}:${states[id]?.state}`).join('|');
+    if (sig !== this._lastSig) {
+      this._lastSig = sig;
+      this._renderPeople(states);
+      this._renderTempAndTrash(states);
+      this._renderHelpers(states);
+    }
+
+    if (Date.now() - this._trashFetchedAt > 300000) {
+      this._fetchTrash();
+    }
+  }
+
+  _renderPeople(states) {
+    const cards = [];
+    for (const p of _MORE_PEOPLE_TRACKERS) {
+      const tr = states[p.tracker];
+      const bat = states[p.battery];
+      if (!tr && !bat) continue;
+      const isHome = tr?.state === 'home';
+      const batPct = numeric(bat);
+      const batColor = _moreBatColor(batPct);
+
+      cards.push(h('div', {
+        class: 'kpi-card',
+        style: { '--kpi-color': isHome ? '#10b981' : '#64748b' },
+        onClick: () => moreInfo(this.el, (tr || bat).entity_id),
+      },
+        h('div', { class: 'kpi-top' }, icon(isHome ? 'mdi:home-account' : 'mdi:account-arrow-right'), p.name),
+        h('div', { class: 'kpi-val', style: { fontSize: '16px' } },
+          tr ? (isHome ? 'Zuhause' : tr.state === 'not_home' ? 'Abwesend' : tr.state) : '—'),
+        h('div', {
+          class: 'kpi-sub',
+          style: { color: batPct != null ? batColor : 'var(--cd-secondary)', fontWeight: '600' },
+          onClick: (e) => { if (bat) { e.stopPropagation(); moreInfo(this.el, bat.entity_id); } },
+        }, bat ? `iPhone Batterie: ${formatState(bat)}` : 'Kein Akku-Sensor')));
+    }
+
+    if (!cards.length) {
+      const fallbackPersons = Object.values(states).filter((s) => s.entity_id.startsWith('person.')).slice(0, 6);
+      for (const s of fallbackPersons) {
+        const isHome = s.state === 'home';
+        cards.push(h('div', {
+          class: 'kpi-card', style: { '--kpi-color': isHome ? '#10b981' : '#64748b' },
+          onClick: () => moreInfo(this.el, s.entity_id),
+        },
+          h('div', { class: 'kpi-top' }, icon('mdi:account'), s.attributes?.friendly_name || s.entity_id),
+          h('div', { class: 'kpi-val', style: { fontSize: '16px' } }, isHome ? 'Zuhause' : s.state)));
+      }
+    }
+
+    this._peopleSec.hidden = cards.length === 0;
+    this._peopleGrid.replaceChildren(...cards);
+  }
+
+  _renderTempAndTrash(states) {
+    const ext = states['sensor.aussentemperatur_fallback'];
+    this._tempCard.replaceChildren(ext
+      ? h('div', {
+          class: 'kpi-card', style: { '--kpi-color': '#4dd0e1' },
+          onClick: () => moreInfo(this.el, ext.entity_id),
+        },
+          h('div', { class: 'kpi-top' }, icon('mdi:thermometer'), 'Außentemperatur'),
+          h('div', { class: 'kpi-val' }, formatState(ext)),
+          h('div', { class: 'kpi-sub' }, 'Tippen für 24h Verlauf'))
+      : h('div', { class: 'kpi-card' },
+          h('div', { class: 'kpi-top' }, icon('mdi:thermometer'), 'Außentemperatur'),
+          h('div', { class: 'kpi-val' }, '—'),
+          h('div', { class: 'kpi-sub' }, 'Kein Sensor')));
+    this._renderTrashList();
+  }
+
+  _renderTrashList() {
+    if (!this._trashEvents) {
+      const cal = this.hass?.states?.['calendar.muellplan'];
+      if (!cal) {
+        this._trashList.replaceChildren();
+        return;
+      }
+      this._trashList.replaceChildren(h('div', { class: 'log-row' },
+        h('span', { class: 'log-row-main' }, 'Lade Müllplan...')));
+      return;
+    }
+    if (!this._trashEvents.length) {
+      this._trashList.replaceChildren(h('div', { class: 'empty-hint' }, 'Keine Abholungen in den nächsten 14 Tagen.'));
+      return;
+    }
+    this._trashList.replaceChildren(...this._trashEvents.slice(0, 6).map((ev) => h('div', {
+      class: 'log-row', style: { cursor: 'pointer' },
+      onClick: () => moreInfo(this.el, 'calendar.muellplan'),
+    },
+      h('span', { class: 'log-row-main' }, ev.summary || ev.title || 'Abholung'),
+      h('span', { class: 'log-row-time' }, _moreFmtTrashDate(ev)))));
+  }
+
+  async _fetchTrash() {
+    if (!this.hass || this._destroyed || !this.hass.states?.['calendar.muellplan']) return;
+    this._trashFetchedAt = Date.now();
+    try {
+      const start = new Date().toISOString();
+      const end = new Date(Date.now() + 14 * 86400 * 1000).toISOString();
+      const res = await this.hass.callWS({
+        type: 'calendars/get_events',
+        entity_id: 'calendar.muellplan',
+        start_date_time: start,
+        end_date_time: end,
+      });
+      if (this._destroyed) return;
+      this._trashEvents = Array.isArray(res?.events) ? res.events : (Array.isArray(res) ? res : []);
+      this._renderTrashList();
+    } catch (_) {
+      if (this._destroyed) return;
+      this._trashEvents = [];
+      this._renderTrashList();
+    }
+  }
+
+  _renderHelpers(states) {
+    const rows = [];
+    for (const item of _MORE_SCHIMMELDRY) {
+      const st = states[item.id];
+      if (!st) continue;
+      if (item.toggle) {
+        const isOn = st.state === 'on';
+        const dom = item.id.split('.')[0];
+        rows.push(h('div', { class: 'log-row', style: { padding: '8px 12px' } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1', cursor: 'pointer' }, onClick: () => moreInfo(this.el, item.id) },
+            icon(item.icon),
+            h('span', { class: 'log-row-main' }, st.attributes?.friendly_name || item.name)),
+          h('button', {
+            type: 'button', class: `btn sm${isOn ? ' primary' : ''}`,
+            disabled: isUnavailable(st),
+            onClick: () => this.hass?.callService(dom, 'toggle', { entity_id: item.id }),
+          }, isOn ? 'Ein' : 'Aus')));
+      } else {
+        rows.push(h('div', { class: 'log-row', style: { cursor: 'pointer' }, onClick: () => moreInfo(this.el, item.id) },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1' } },
+            icon(item.icon),
+            h('span', { class: 'log-row-main' }, st.attributes?.friendly_name || item.name)),
+          h('span', { class: 'log-row-time' }, formatState(st))));
+      }
+    }
+    this._helpersSec.hidden = rows.length === 0;
+    this._helpersWrap.replaceChildren(...rows);
+  }
+}
+// ─── END: components/view_more.js ───
+
+
 // ─── START: companion-dashboard.js ───
 // SmartHome Companion dashboard panel (sidebar entry "Übersicht").
 // Self-contained: no HACS cards required. The layout is resolved by the backend on every load,
@@ -9080,10 +12448,15 @@ class CompanionDashboardPanel extends HTMLElement {
     this._components = [];
     this._data = null;
     this._raf = 0;
+    this._activeView = 'overview';
+    this._prevView = 'overview';
     this._activeRoomId = null;
     this._activeWarningView = false;
     this._editMode = false;
+    this._isLovelaceCard = false;
+    this._usersCache = null;
     this._reload = debounce(() => this._load(), 800);
+    this._onPopState = () => this._syncRouteFromHash(true);
   }
 
   // ── HA panel contract ──
@@ -9099,13 +12472,25 @@ class CompanionDashboardPanel extends HTMLElement {
   set narrow(value) {
     this._narrow = value;
     this._menuBtn?.toggleAttribute('hidden', !value);
+    this._syncToolbar();
   }
 
-  set panel(_value) { /* unused */ }
+  set panel(value) {
+    const isCard = Boolean(value?.config?.is_lovelace_card);
+    this._isLovelaceCard = isCard;
+    if (isCard) this.setAttribute('data-lovelace', '');
+    else this.removeAttribute('data-lovelace');
+  }
+
   set route(_value) { /* unused */ }
 
   connectedCallback() {
     if (this._hass && !this._initialised) this._init();
+  }
+
+  _destroyComponents() {
+    for (const c of this._components) c?.destroy?.();
+    this._components = [];
   }
 
   disconnectedCallback() {
@@ -9113,6 +12498,10 @@ class CompanionDashboardPanel extends HTMLElement {
     this._unsub = null;
     this._ro?.disconnect();
     this._ro = null;
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('popstate', this._onPopState);
+    }
+    this._destroyComponents();
     this._roomModal?.destroy?.();
     this._roomModal = null;
     this._whatsNew?.destroy?.();
@@ -9144,6 +12533,9 @@ class CompanionDashboardPanel extends HTMLElement {
       onClick: () => {
         if (this._activeWarningView) this._closeWarningDetail();
         else if (this._activeRoomId) this._closeRoom();
+        else if (this._activeView && this._activeView !== 'overview') {
+          this._navigate(this._prevView === 'more' && ['auto', 'printer3d'].includes(this._activeView) ? 'more' : 'overview');
+        }
       },
     }, icon('mdi:arrow-left'));
     this._wizardBtn = h('button', {
@@ -9159,13 +12551,92 @@ class CompanionDashboardPanel extends HTMLElement {
       onClick: () => this._openSettings(),
     }, icon('mdi:cog-outline'));
     this._content = h('div');
-    this._page = h('div', { class: 'page' },
-      h('div', { class: 'toolbar' }, this._menuBtn, this._backBtn, h('div', { class: 'spacer' }), this._wizardBtn, this._editBtn, this._settingsBtn),
-      this._content);
+    this._toolbar = h('div', { class: 'toolbar' },
+      this._menuBtn, this._backBtn, h('div', { class: 'spacer' }), this._wizardBtn, this._editBtn, this._settingsBtn);
+    this._page = h('div', { class: 'page' }, this._toolbar, this._content);
     this.shadowRoot.replaceChildren(style, this._page);
 
+    if (typeof window !== 'undefined') {
+      window.addEventListener('popstate', this._onPopState);
+      this._syncRouteFromHash(false);
+    }
+    this._syncToolbar();
     this._load();
     this._subscribe();
+  }
+
+  _syncToolbar() {
+    if (!this._toolbar) return;
+    const anyVisible = [this._menuBtn, this._backBtn, this._wizardBtn, this._editBtn, this._settingsBtn]
+      .some((b) => b && !b.hidden);
+    this._toolbar.hidden = !anyVisible;
+  }
+
+  _syncRouteFromHash(shouldRender = true) {
+    if (typeof window === 'undefined') return;
+    const raw = (window.location.hash || '').replace(/^#/, '');
+    const params = new URLSearchParams(raw);
+    const v = params.get('view');
+    const r = params.get('room');
+    if (r) {
+      this._activeRoomId = r;
+      this._activeWarningView = false;
+      this._activeView = 'overview';
+    } else if (v === 'warning') {
+      this._activeWarningView = true;
+      this._activeRoomId = null;
+      this._activeView = 'warning';
+    } else if (v && ['security', 'solar', 'blinds', 'auto', 'printer3d', 'more'].includes(v)) {
+      this._activeView = v;
+      this._activeRoomId = null;
+      this._activeWarningView = false;
+    } else {
+      this._activeView = 'overview';
+      this._activeRoomId = null;
+      this._activeWarningView = false;
+    }
+    if (shouldRender && this._data) this._render();
+  }
+
+  _pushHash(nextHash) {
+    if (typeof window === 'undefined') return;
+    const target = nextHash || '';
+    if ((window.location.hash || '') === target) return;
+    try {
+      const url = target || (window.location.pathname + window.location.search);
+      window.history.pushState(null, '', url);
+    } catch (_) {
+      window.location.hash = target;
+    }
+  }
+
+  _navigate(target) {
+    const internal = resolveInternalView(target);
+    if (!internal) {
+      if (typeof target === 'string' && target) navigate(target);
+      return;
+    }
+    if (internal === 'warning') {
+      this._openWarningDetail();
+      return;
+    }
+    this._prevView = this._activeView || 'overview';
+    this._activeWarningView = false;
+    this._activeRoomId = null;
+    this._activeView = internal;
+    this._pushHash(internal === 'overview' ? '' : `#view=${encodeURIComponent(internal)}`);
+    if (this._data) this._render();
+    this.scrollTop = 0;
+  }
+
+  _makeNavBar(config, user) {
+    const active = this._activeWarningView ? 'warning' : (this._activeView || 'overview');
+    return new NavBar(config.nav, {
+      activeView: active,
+      viewsConfig: config.views || {},
+      user,
+      onNavigate: (target) => this._navigate(target),
+    });
   }
 
   async _subscribe() {
@@ -9189,6 +12660,7 @@ class CompanionDashboardPanel extends HTMLElement {
       this._settingsBtn.hidden = !res.user?.is_admin;
       this._wizardBtn.hidden = !res.user?.is_admin;
       this._editBtn.hidden = !res.user?.is_admin;
+      this._syncToolbar();
       this._render();
       if (!this._whatsNewChecked) {
         this._whatsNewChecked = true;
@@ -9202,6 +12674,7 @@ class CompanionDashboardPanel extends HTMLElement {
 
   // ── rendering ──
   _render() {
+    this._destroyComponents();
     const { config, layout, user } = this._data;
     const ctx = {
       presets: config.color_presets || [],
@@ -9222,15 +12695,15 @@ class CompanionDashboardPanel extends HTMLElement {
       this._ro?.disconnect();
       this._backBtn.hidden = false;
       this._menuBtn.hidden = true;
+      this._syncToolbar();
       this._warningDetail = new WarningDetailView(config.warning || layout.warning || { entity_id: config.warning_entity }, () => this._closeWarningDetail());
-      this._nav = new NavBar(config.nav);
+      this._nav = this._makeNavBar(config, user);
       this._components = [this._warningDetail];
       this._content.replaceChildren(this._warningDetail.el, this._nav.el);
       if (this._editMode && this._editBanner) {
-      this._content.prepend(this._editBanner);
-    }
-
-    this._push();
+        this._content.prepend(this._editBanner);
+      }
+      this._push();
       return;
     }
 
@@ -9241,28 +12714,65 @@ class CompanionDashboardPanel extends HTMLElement {
         this._ro?.disconnect();
         this._backBtn.hidden = false;
         this._menuBtn.hidden = true;
+        this._syncToolbar();
         this._roomDetail = new RoomDetailView(roomSpec, ctx, () => this._closeRoom());
-        this._nav = new NavBar(config.nav);
+        this._nav = this._makeNavBar(config, user);
         this._components = [this._roomDetail];
         this._content.replaceChildren(this._roomDetail.el, this._nav.el);
         if (this._editMode && this._editBanner) {
-      this._content.prepend(this._editBanner);
-    }
-
-    this._push();
+          this._content.prepend(this._editBanner);
+        }
+        this._push();
         return;
       }
       this._activeRoomId = null;
     }
 
+    // Subview: built-in migrated views (security, solar, blinds, auto, printer3d, more)
+    const activeView = this._activeView;
+    if (activeView && activeView !== 'overview') {
+      let viewInst = null;
+      const goBack = () => this._navigate(this._prevView === 'more' && ['auto', 'printer3d'].includes(activeView) ? 'more' : 'overview');
+      if (activeView === 'security') viewInst = new SecurityView({ hass: this._hass, config, onBack: goBack });
+      else if (activeView === 'solar') viewInst = new SolarView({ hass: this._hass, onBack: goBack });
+      else if (activeView === 'blinds') viewInst = new BlindsView({ hass: this._hass, layout, onBack: goBack });
+      else if (activeView === 'auto') viewInst = new AutoView({ hass: this._hass, config, onBack: goBack });
+      else if (activeView === 'printer3d') viewInst = new Printer3DView({ hass: this._hass, onBack: goBack });
+      else if (activeView === 'more') {
+        viewInst = new MoreView({
+          hass: this._hass,
+          config,
+          user,
+          isAdmin: !!user?.is_admin,
+          onNavigate: (target) => this._navigate(target),
+          onOpenSettings: () => this._openSettings(),
+          onBack: () => this._navigate('overview'),
+        });
+      }
+
+      if (viewInst) {
+        this._ro?.disconnect();
+        this._backBtn.hidden = false;
+        this._menuBtn.hidden = true;
+        this._syncToolbar();
+        this._nav = this._makeNavBar(config, user);
+        this._components = [viewInst];
+        this._content.replaceChildren(viewInst.el, this._nav.el);
+        this._push();
+        return;
+      }
+      this._activeView = 'overview';
+    }
+
     this._backBtn.hidden = true;
     this._menuBtn.hidden = !this._narrow;
+    this._syncToolbar();
 
     const scroll = this.scrollTop;
 
     // Greeting + badges
     this._greeting = h('h1', {});
-    this._badges = new Badges(config.badges, user);
+    this._badges = new Badges(config.badges, user, (target) => this._navigate(target));
 
     // Side column (alerts / trash / persons / announcement)
     this._smoke = new SmokeAlerts();
@@ -9279,7 +12789,7 @@ class CompanionDashboardPanel extends HTMLElement {
     this._roomsWrap = h('div', { class: 'rooms' });
     const roomsEl = this._rooms.length ? this._roomsWrap : this._emptyState();
 
-    this._nav = new NavBar(config.nav);
+    this._nav = this._makeNavBar(config, user);
 
     this._components = [this._badges, this._smoke, this._warning, this._trash, this._persons, this._announce, ...this._rooms];
 
@@ -9376,7 +12886,9 @@ class CompanionDashboardPanel extends HTMLElement {
   // ── room subview ──
   _openRoom(areaId) {
     this._activeWarningView = false;
+    this._activeView = 'overview';
     this._activeRoomId = areaId;
+    this._pushHash(areaId ? `#room=${encodeURIComponent(areaId)}` : '');
     this._render();
     this.scrollTop = 0;
   }
@@ -9384,8 +12896,11 @@ class CompanionDashboardPanel extends HTMLElement {
   _closeRoom() {
     this._activeWarningView = false;
     this._activeRoomId = null;
+    this._activeView = 'overview';
+    this._pushHash('');
     this._backBtn.hidden = true;
     this._menuBtn.hidden = !this._narrow;
+    this._syncToolbar();
     this._render();
   }
 
@@ -9393,14 +12908,19 @@ class CompanionDashboardPanel extends HTMLElement {
   _openWarningDetail() {
     this._activeWarningView = true;
     this._activeRoomId = null;
+    this._activeView = 'warning';
+    this._pushHash('#view=warning');
     this._render();
     this.scrollTop = 0;
   }
 
   _closeWarningDetail() {
     this._activeWarningView = false;
+    this._activeView = 'overview';
+    this._pushHash('');
     this._backBtn.hidden = true;
     this._menuBtn.hidden = !this._narrow;
+    this._syncToolbar();
     this._render();
   }
 
@@ -9429,15 +12949,29 @@ class CompanionDashboardPanel extends HTMLElement {
   }
 
   // ── room edit modal ──
-  _openRoomEdit(roomSpec) {
+  async _openRoomEdit(roomSpec) {
     if (!this._hass || !roomSpec) return;
+    if (!this._usersCache) {
+      try {
+        const res = await this._hass.callWS({ type: 'smarthome_companion/dashboard/users' });
+        this._usersCache = res?.users || [];
+      } catch (_) {
+        this._usersCache = [];
+      }
+    }
     this._roomModal?.destroy?.();
     this._roomModal = new RoomEditModal({
       hass: this._hass,
       roomSpec,
-      onClose: () => { this._roomModal = null; },
-      onSaved: () => {
+      users: this._usersCache || [],
+      onClose: () => {
+        this._roomModal?.destroy?.();
         this._roomModal = null;
+      },
+      onSaved: () => {
+        this._roomModal?.destroy?.();
+        this._roomModal = null;
+        this._serialized = null;
         this._load();
         this._toast('Raum gespeichert');
       },
@@ -9564,9 +13098,15 @@ class CompanionDashboardCard extends HTMLElement {
     if (!this._panel) {
       this._panel = document.createElement('companion-dashboard-panel');
       this._panel.panel = { config: { ...this._config, is_lovelace_card: true } };
+      this._panel.narrow = !!this._narrow;
       this.replaceChildren(this._panel);
     }
     this._panel.hass = hass;
+  }
+
+  set narrow(value) {
+    this._narrow = value;
+    if (this._panel) this._panel.narrow = value;
   }
 
   getCardSize() {

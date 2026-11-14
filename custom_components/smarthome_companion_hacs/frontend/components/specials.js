@@ -1,6 +1,7 @@
 // Special cards: header badges, smoke alerts, weather warning, trash, persons, announcement, bottom navigation.
 import {
   h, icon, domainOf, entityIcon, isUnavailable, stateLabel, numeric, moreInfo, navigate, resolveColor, renderTrashBin,
+  resolveInternalView,
 } from '../lib/util.js';
 
 const allowed = (users, userId) => !users || users.length === 0 || users.includes(userId);
@@ -24,19 +25,22 @@ function bindPress(el, onTap, onHold) {
 
 // ═══════════════ Header badges ═══════════════
 export class Badges {
-  constructor(badges, user) {
+  constructor(badges, user, onNavigate = null) {
     this.user = user;
+    this.onNavigate = onNavigate;
     this.items = (badges || []).filter((b) => b && b.entity_id).map((cfg) => this._make(cfg));
     this.el = h('div', { class: 'badges' }, this.items.map((i) => i.el));
   }
 
   _make(cfg) {
-    const el = h('button', { class: 'badge', hidden: true });
-    const item = { cfg, el };
+    const el = h('button', { class: 'badge', type: 'button', hidden: true });
+    const item = { cfg, el, key: null };
     const open = () => moreInfo(el, cfg.entity_id);
     const tap = () => {
-      if (cfg.tap === 'navigate' && cfg.path) navigate(cfg.path);
-      else if (cfg.tap === 'service' && cfg.service?.includes('.')) {
+      if (cfg.tap === 'navigate' && cfg.path) {
+        if (this.onNavigate) this.onNavigate(cfg.path);
+        else navigate(cfg.path);
+      } else if (cfg.tap === 'service' && cfg.service?.includes('.')) {
         const [domain, service] = cfg.service.split('.');
         this.hass?.callService(domain, service, { entity_id: cfg.entity_id });
       } else if (cfg.tap === 'none') { /* no-op */ } else open();
@@ -59,16 +63,24 @@ export class Badges {
 
   update(hass) {
     this.hass = hass;
-    for (const { cfg, el } of this.items) {
+    for (const item of this.items) {
+      const { cfg, el } = item;
       const st = hass.states[cfg.entity_id];
       const show = Badges.visible(cfg, st);
-      el.hidden = !show;
+      if (el.hidden !== !show) el.hidden = !show;
       if (!show) continue;
+      const ic = cfg.icon || entityIcon(cfg.entity_id, st);
+      const nameTxt = cfg.show_name ? (cfg.name || st?.attributes?.friendly_name || cfg.entity_id) : '';
+      const valTxt = cfg.show_state ? stateLabel(hass, st) : '';
+      const color = resolveColor(cfg.color) || 'var(--cd-accent)';
+      const nextKey = `${ic}|${nameTxt}|${valTxt}|${color}`;
+      if (item.key === nextKey) continue;
+      item.key = nextKey;
       const parts = [];
-      if (cfg.show_name) parts.push(h('span', { class: 'badge-name' }, cfg.name || st?.attributes?.friendly_name || cfg.entity_id));
-      if (cfg.show_state) parts.push(h('span', {}, stateLabel(hass, st)));
-      el.style.setProperty('--badge-color', resolveColor(cfg.color) || 'var(--cd-accent)');
-      el.replaceChildren(icon(cfg.icon || entityIcon(cfg.entity_id, st)), ...parts);
+      if (cfg.show_name) parts.push(h('span', { class: 'badge-name' }, nameTxt));
+      if (cfg.show_state) parts.push(h('span', {}, valTxt));
+      el.style.setProperty('--badge-color', color);
+      el.replaceChildren(icon(ic), ...parts);
     }
   }
 }
@@ -232,6 +244,7 @@ export class PersonCards {
     this.el = h('div', { class: 'card persons-card', hidden: true }, this.itemsWrap);
     this.items = this.persons.map((p) => ({
       cfg: p,
+      key: null,
       el: h('div', { class: 'person', hidden: true, onClick: () => moreInfo(this.el, p.entity_id) }),
     }));
     this.itemsWrap.append(...this.items.map((i) => i.el));
@@ -239,17 +252,23 @@ export class PersonCards {
 
   update(hass) {
     let any = false;
-    for (const { cfg, el } of this.items) {
+    for (const item of this.items) {
+      const { cfg, el } = item;
       const st = hass.states[cfg.entity_id];
       const show = !!st && st.state === 'home';
-      el.hidden = !show;
+      if (el.hidden !== !show) el.hidden = !show;
       if (!show) continue;
       any = true;
-      const pic = st.attributes?.entity_picture;
+      const pic = st.attributes?.entity_picture || '';
+      const nameTxt = st.attributes?.friendly_name || cfg.entity_id;
+      const lbl = stateLabel(hass, st);
+      const nextKey = `${pic}|${nameTxt}|${lbl}`;
+      if (item.key === nextKey) continue;
+      item.key = nextKey;
       const avatar = h('div', { class: 'avatar', style: pic ? { backgroundImage: `url("${pic}")` } : {} }, pic ? null : icon('mdi:account'));
       el.replaceChildren(avatar, h('div', {},
-        h('div', { class: 'p-name' }, st.attributes?.friendly_name || cfg.entity_id),
-        h('div', { class: 'p-state' }, stateLabel(hass, st))));
+        h('div', { class: 'p-name' }, nameTxt),
+        h('div', { class: 'p-state' }, lbl)));
     }
     this.el.hidden = !any;
     this.el.style.display = any ? '' : 'none';
@@ -283,10 +302,70 @@ export class AnnounceCard {
 
 // ═══════════════ Bottom navigation ═══════════════
 export class NavBar {
-  constructor(buttons) {
-    const items = (buttons || []).filter((b) => b && b.path);
-    this.el = h('nav', { class: 'nav', hidden: items.length === 0 },
-      items.map((b) => h('button', { class: 'nav-btn', onClick: () => navigate(b.path), 'aria-label': b.name || b.path },
-        b.icon ? icon(b.icon) : null, b.name || null)));
+  constructor(buttons, opts = {}) {
+    const { activeView = 'overview', viewsConfig = {}, user = null, onNavigate = null } = opts;
+    const viewAllowed = (viewId) => {
+      const vc = viewsConfig?.[viewId];
+      if (!vc) return true;
+      if (vc.enabled === false) return false;
+      return allowed(vc.users, user?.id);
+    };
+
+    const raw = (buttons || []).filter((b) => b && (b.path || b.view));
+    const list = [];
+    const seenViews = new Set();
+
+    // Always lead with "Übersicht"
+    list.push({ name: 'Übersicht', icon: 'mdi:view-dashboard', view: 'overview' });
+    seenViews.add('overview');
+
+    for (const b of raw) {
+      const internal = resolveInternalView(b);
+      if (internal) {
+        if (!viewAllowed(internal) || seenViews.has(internal)) continue;
+        seenViews.add(internal);
+        const fallbackName = internal === 'more' ? 'Mehr' : b.name;
+        list.push({ ...b, name: fallbackName ?? b.name, view: internal });
+      } else {
+        list.push(b);
+      }
+    }
+
+    // Ensure core hubs Solar, Blinds, and Mehr are easily reachable if not already listed
+    const defaults = [
+      { view: 'security', name: 'Sicherheit', icon: 'mdi:shield-home' },
+      { view: 'solar', name: 'Solar', icon: 'mdi:solar-power-variant' },
+      { view: 'blinds', name: 'Rollläden', icon: 'mdi:window-shutter' },
+      { view: 'more', name: 'Mehr', icon: 'mdi:apps' },
+    ];
+    for (const def of defaults) {
+      if (!seenViews.has(def.view) && viewAllowed(def.view)) {
+        // Place Mehr always at the end
+        if (def.view === 'more') continue;
+        seenViews.add(def.view);
+        const moreIdx = list.findIndex((i) => i.view === 'more');
+        if (moreIdx >= 0) list.splice(moreIdx, 0, def);
+        else list.push(def);
+      }
+    }
+    if (!seenViews.has('more') && viewAllowed('more')) {
+      list.push({ view: 'more', name: 'Mehr', icon: 'mdi:apps' });
+    }
+
+    this.el = h('nav', { class: 'nav', 'aria-label': 'Hauptnavigation', hidden: list.length === 0 },
+      list.map((b) => {
+        const isActive = (b.view && b.view === activeView)
+          || (b.view === 'more' && ['auto', 'printer3d'].includes(activeView));
+        return h('button', {
+          type: 'button',
+          class: 'nav-btn',
+          ...(isActive ? { 'data-active': '', 'aria-current': 'page' } : {}),
+          'aria-label': b.name || b.view || b.path,
+          onClick: () => {
+            if (onNavigate) onNavigate(b.view || b.path);
+            else if (b.path) navigate(b.path);
+          },
+        }, b.icon ? icon(b.icon) : null, b.name ? h('span', {}, b.name) : null);
+      }));
   }
 }

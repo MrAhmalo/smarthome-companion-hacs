@@ -1,124 +1,10 @@
 // Shared modals for Room Editing (Edit Mode) and Dynamic Sensor Conflict Resolution.
 import {
-  h, icon, ROOM_ICON_OPTIONS, ROOM_SENSOR_TYPES, preserveScroll, showConfirmDialog, showToast,
+  h, icon, showConfirmDialog, showToast,
 } from '../lib/util.js';
-import { IconPicker } from './icon_picker.js';
+import { RoomSettingsForm, buildSensorPrefBlock, syncExpandedUsers } from './room_settings_form.js';
 
-function _sensorMeta(type) {
-  return ROOM_SENSOR_TYPES.find((t) => t.value === type) || {
-    value: type,
-    label: type,
-    icon: 'mdi:gauge',
-    color: 'var(--cd-accent)',
-  };
-}
-
-function _formatLiveValue(hass, entityId) {
-  const st = hass?.states?.[entityId];
-  if (!st) return 'unbekannt';
-  const unit = st.attributes?.unit_of_measurement;
-  return unit ? `${st.state} ${unit}` : st.state;
-}
-
-function _entityLabel(hass, entityId) {
-  return hass?.states?.[entityId]?.attributes?.friendly_name || entityId;
-}
-
-/**
- * Renders an interactive selector for a sensor type with 2+ sensors in a room:
- * Mode A: Exclusive single sensor
- * Mode B: Average (or combined) of selected sensors via checkboxes
- */
-export function buildSensorPrefBlock({ hass, type, entityIds, currentPref, onChange }) {
-  const meta = _sensorMeta(type);
-  const isBinary = type === 'motion' || type === 'moisture';
-
-  let mode = currentPref?.mode === 'single' ? 'single' : 'average';
-  let selected = Array.isArray(currentPref?.entities)
-    ? currentPref.entities.filter((e) => entityIds.includes(e))
-    : [];
-  if (!selected.length) {
-    selected = mode === 'single' ? [entityIds[0]] : [...entityIds];
-  }
-
-  const container = h('div', { class: 'sensor-pref-card' });
-
-  const render = () => preserveScroll(container.closest?.('.dialog-body'), () => {
-    const modeRow = h('div', { class: 'sensor-mode-tabs' },
-      h('button', {
-        type: 'button',
-        class: `sensor-mode-tab${mode === 'single' ? ' active' : ''}`,
-        onClick: () => {
-          mode = 'single';
-          selected = [selected[0] || entityIds[0]];
-          onChange({ mode, entities: [...selected] });
-          render();
-        },
-      }, icon('mdi:radiobox-marked'), 'Einzelner Sensor'),
-      h('button', {
-        type: 'button',
-        class: `sensor-mode-tab${mode === 'average' ? ' active' : ''}`,
-        onClick: () => {
-          mode = 'average';
-          if (selected.length < 2) selected = [...entityIds];
-          onChange({ mode, entities: [...selected] });
-          render();
-        },
-      }, icon(isBinary ? 'mdi:checkbox-multiple-marked' : 'mdi:chart-line'), isBinary ? 'Kombiniert' : 'Durchschnitt'));
-
-    const rows = entityIds.map((eid) => {
-      const isChecked = mode === 'single' ? selected[0] === eid : selected.includes(eid);
-      const name = _entityLabel(hass, eid);
-      const liveVal = _formatLiveValue(hass, eid);
-
-      return h('div', {
-        class: `sensor-choice-row${isChecked ? ' selected' : ''}`,
-        onClick: () => {
-          if (mode === 'single') {
-            selected = [eid];
-          } else {
-            if (selected.includes(eid)) {
-              if (selected.length <= 1) return; // keep at least 1 selected
-              selected = selected.filter((id) => id !== eid);
-            } else {
-              selected = [...selected, eid];
-            }
-          }
-          onChange({ mode, entities: [...selected] });
-          render();
-        },
-      },
-      h('div', { class: 'sensor-choice-check' },
-        icon(mode === 'single'
-          ? (isChecked ? 'mdi:radiobox-marked' : 'mdi:radiobox-blank')
-          : (isChecked ? 'mdi:checkbox-marked' : 'mdi:checkbox-blank-outline'))),
-      h('div', { class: 'sensor-choice-info' },
-        h('div', { class: 'sensor-choice-name' }, name),
-        h('div', { class: 'sensor-choice-id' }, eid)),
-      h('span', { class: 'badge-tag' }, liveVal));
-    });
-
-    const hintText = mode === 'single'
-      ? '• Nur ausgewählter Sensor aktiv'
-      : (isBinary
-        ? '• Auswahl kombiniert gemeldet'
-        : `• Durchschnitt aus ${selected.length} von ${entityIds.length} Sensoren`);
-
-    container.replaceChildren(
-      h('div', { class: 'sensor-pref-head' },
-        h('div', { class: 'sensor-pref-title', style: { color: meta.color } },
-          icon(meta.icon),
-          h('span', {}, meta.label)),
-        h('span', { class: 'badge-tag' }, `${entityIds.length} Sensoren`)),
-      modeRow,
-      h('div', { class: 'hint', style: { marginBottom: '8px' } }, hintText),
-      h('div', { class: 'sensor-choice-list' }, ...rows),
-    );
-  });
-
-  render();
-  return container;
-}
+export { buildSensorPrefBlock };
 
 /**
  * Dynamic conflict resolution modal when adding a sensor of a type that already exists in the room.
@@ -144,6 +30,7 @@ export class SensorConflictModal {
 
   destroy() {
     this.el?.remove();
+    this.el = null;
   }
 
   _build() {
@@ -152,128 +39,105 @@ export class SensorConflictModal {
       type: c.type,
       entityIds: c.entityIds,
       currentPref: this.prefs[c.type],
-      onChange: (pref) => { this.prefs[c.type] = pref; },
+      onChange: (next) => { this.prefs[c.type] = next; },
     }));
 
-    this.saveBtn = h('button', {
+    const saveBtn = h('button', {
       type: 'button',
       class: 'btn primary',
-      onClick: () => this._submit(),
+      onClick: () => {
+        if (this._saving) return;
+        this._saving = true;
+        saveBtn.disabled = true;
+        this.destroy();
+        this.onSave?.(this.prefs);
+      },
     }, icon('mdi:check'), 'Übernehmen');
 
-    this.el = h('div', { class: 'overlay', style: { zIndex: '1010' } },
-      h('div', { class: 'dialog room-modal-dialog' },
-        h('div', { class: 'dialog-head' },
-          icon('mdi:tune-variant'),
-          h('h2', {}, `Sensoren: ${this.areaName}`)),
-        h('div', { class: 'dialog-body' },
-          h('div', { class: 'hint', style: { marginBottom: '10px' } },
-            '• Mehrere Sensoren gleichen Typs\n• Einzelsensor oder Durchschnitt wählen'),
-          ...blocks),
-        h('div', { class: 'dialog-foot', style: { justifyContent: 'flex-end' } },
-          h('div', { class: 'dialog-foot-actions' },
-            h('button', {
-              type: 'button',
-              class: 'btn',
-              onClick: () => { this.destroy(); this.onCancel?.(); },
-            }, 'Standard (Alle)'),
-            this.saveBtn))));
-  }
-
-  async _submit() {
-    if (this._saving) return;
-    this._saving = true;
-    this.saveBtn.disabled = true;
-    try {
-      await this.onSave?.(this.prefs);
-      this.destroy();
-    } catch (err) {
-      this._saving = false;
-      this.saveBtn.disabled = false;
-      showToast(this.el, `Fehler: ${err?.message || err}`, { error: true });
-    }
+    this.el = h('div', {
+      class: 'overlay',
+      onClick: (e) => {
+        if (e.target === this.el) {
+          this.destroy();
+          this.onCancel?.();
+        }
+      },
+    },
+    h('div', { class: 'dialog room-modal-dialog', role: 'dialog', 'aria-label': 'Mehrere Raumsensoren erkannt' },
+      h('div', { class: 'dialog-head' },
+        icon('mdi:thermometer-lines'),
+        h('h2', {}, `Sensoren in „${this.areaName}“`),
+        h('button', {
+          type: 'button',
+          class: 'icon-btn',
+          'aria-label': 'Schließen',
+          onClick: () => {
+            this.destroy();
+            this.onCancel?.();
+          },
+        }, icon('mdi:close'))),
+      h('div', { class: 'dialog-body' },
+        h('div', { class: 'hint', style: { marginBottom: '12px' } },
+          '• Mehrere Sensoren gleichen Typs erkannt\n• Einzelauswahl oder Durchschnitt festlegen'),
+        ...blocks),
+      h('div', { class: 'dialog-foot' },
+        h('button', {
+          type: 'button',
+          class: 'btn',
+          onClick: () => {
+            this.destroy();
+            this.onCancel?.();
+          },
+        }, 'Abbrechen'),
+        saveBtn)));
   }
 }
 
 /**
- * Room Edit Modal opened when clicking a room header in Dashboard Edit Mode.
- * Allows changing the room icon and sensor conflict/average preferences.
+ * Full Room Edit Modal triggered by clicking a room header in Edit Mode.
+ * Shares RoomSettingsForm identically with Settings -> "Räume & Kacheln".
  */
 export class RoomEditModal {
-  constructor({ hass, roomSpec, onSaved, onClose }) {
+  constructor({ hass, roomSpec, users = [], onClose, onSaved }) {
     this.hass = hass;
     this.roomSpec = roomSpec;
-    this.onSaved = onSaved;
+    this.users = users;
     this.onClose = onClose;
-    this.roomName = roomSpec.name || '';
-    this.selectedIcon = roomSpec.icon || 'mdi:home-outline';
-    this.sensorPrefs = JSON.parse(JSON.stringify(roomSpec.sensor_prefs || {}));
+    this.onSaved = onSaved;
     this._saving = false;
+
+    this.roomConfig = {
+      name: roomSpec.name || '',
+      icon: roomSpec.icon || 'mdi:home-outline',
+      expanded: roomSpec.mode || 'collapsed',
+      visible_users: Array.isArray(roomSpec.visible_users) ? [...roomSpec.visible_users] : [],
+      expanded_users: Array.isArray(roomSpec.expanded_users) ? [...roomSpec.expanded_users] : [],
+      user_expanded: (roomSpec.user_expanded && typeof roomSpec.user_expanded === 'object') ? { ...roomSpec.user_expanded } : {},
+      sensor_prefs: (roomSpec.sensor_prefs && typeof roomSpec.sensor_prefs === 'object') ? { ...roomSpec.sensor_prefs } : {},
+    };
     this._build();
   }
 
   destroy() {
-    this.iconPicker?.destroy();
+    this.form?.destroy?.();
+    this.form = null;
+    if (this._onKeyDown) {
+      document.removeEventListener('keydown', this._onKeyDown);
+      this._onKeyDown = null;
+    }
     this.el?.remove();
+    this.el = null;
   }
 
   _build() {
     const isUnassigned = this.roomSpec.area_id === '__none__';
-    this.nameInput = h('input', {
-      type: 'text',
-      value: this.roomName,
-      disabled: isUnassigned,
-      placeholder: 'Raumname',
-      onInput: (e) => { this.roomName = e.target.value; },
-    });
 
-    this.headIcon = icon(this.selectedIcon);
-    this.iconPicker = new IconPicker({
+    this.form = new RoomSettingsForm({
       hass: this.hass,
-      value: this.selectedIcon,
-      priorityIcons: ROOM_ICON_OPTIONS,
-      placeholder: 'Raum-Icon suchen',
-      onChange: (val) => {
-        const nextIcon = (val && val.includes(':')) ? val : 'mdi:home-outline';
-        this.selectedIcon = nextIcon;
-        this.headIcon?.setAttribute('icon', nextIcon);
-      },
+      roomSpec: this.roomSpec,
+      roomConfig: this.roomConfig,
+      users: this.users,
     });
-
-    const allSensors = this.roomSpec.all_sensors || {};
-    const sensorEntries = Object.entries(allSensors).filter(([, eids]) => Array.isArray(eids) && eids.length > 0);
-
-    const sensorBlocks = sensorEntries.length
-      ? sensorEntries.map(([type, eids]) => {
-          if (eids.length > 1) {
-            return buildSensorPrefBlock({
-              hass: this.hass,
-              type,
-              entityIds: eids,
-              currentPref: this.sensorPrefs[type],
-              onChange: (pref) => { this.sensorPrefs[type] = pref; },
-            });
-          }
-          const meta = _sensorMeta(type);
-          const eid = eids[0];
-          return h('div', { class: 'sensor-pref-card' },
-            h('div', { class: 'sensor-pref-head' },
-              h('div', { class: 'sensor-pref-title', style: { color: meta.color } },
-                icon(meta.icon),
-                h('span', {}, meta.label)),
-              h('span', { class: 'badge-tag' }, _formatLiveValue(this.hass, eid))),
-            h('div', { class: 'sensor-choice-row selected', style: { cursor: 'default' } },
-              h('div', { class: 'sensor-choice-info' },
-                h('div', { class: 'sensor-choice-name' }, _entityLabel(this.hass, eid)),
-                h('div', { class: 'sensor-choice-id' }, eid))));
-        })
-      : [h('div', { class: 'hint' }, 'Keine Raumsensoren zugewiesen')];
-
-    this.saveBtn = h('button', {
-      type: 'button',
-      class: 'btn primary',
-      onClick: () => this._save(),
-    }, icon('mdi:content-save'), 'Speichern');
 
     const deleteBtn = !isUnassigned ? h('button', {
       type: 'button',
@@ -281,31 +145,38 @@ export class RoomEditModal {
       onClick: () => this._confirmDelete(),
     }, icon('mdi:delete-outline'), 'Raum löschen') : null;
 
+    this.saveBtn = h('button', {
+      type: 'button',
+      class: 'btn primary',
+      onClick: () => this._save(),
+    }, icon('mdi:content-save'), 'Speichern');
+
     this.el = h('div', {
       class: 'overlay',
-      style: { zIndex: '1010' },
       onClick: (e) => { if (e.target === this.el) this._close(); },
     },
-    h('div', { class: 'dialog room-modal-dialog' },
+    h('div', { class: 'dialog room-modal-dialog', role: 'dialog', 'aria-label': `Raum bearbeiten: ${this.roomSpec.name}` },
       h('div', { class: 'dialog-head' },
-        this.headIcon,
-        h('h2', {}, `Raum: ${this.roomSpec.name}`),
+        icon(this.roomConfig.icon || 'mdi:home-outline'),
+        h('h2', {}, `Raum „${this.roomSpec.name}“`),
         h('button', {
-          type: 'button', class: 'icon-btn', 'aria-label': 'Schließen',
+          type: 'button',
+          class: 'icon-btn',
+          'aria-label': 'Schließen',
           onClick: () => this._close(),
         }, icon('mdi:close'))),
       h('div', { class: 'dialog-body' },
-        isUnassigned ? null : h('div', { class: 'section-title' }, 'Raumname'),
-        isUnassigned ? null : h('div', { class: 'field', style: { marginBottom: '10px' } }, this.nameInput),
-        h('div', { class: 'section-title' }, 'Raum-Icon'),
-        h('div', { class: 'field', style: { marginBottom: '10px' } }, this.iconPicker.el),
-        h('div', { class: 'section-title' }, 'Raumsensoren'),
-        ...sensorBlocks),
+        this.form.el),
       h('div', { class: 'dialog-foot' },
         h('div', { class: 'dialog-foot-actions' }, deleteBtn),
         h('div', { class: 'dialog-foot-actions' },
           h('button', { type: 'button', class: 'btn', onClick: () => this._close() }, 'Abbrechen'),
           this.saveBtn))));
+
+    this._onKeyDown = (e) => {
+      if (e.key === 'Escape') this._close();
+    };
+    document.addEventListener('keydown', this._onKeyDown);
   }
 
   _close() {
@@ -339,12 +210,8 @@ export class RoomEditModal {
         if (!/unknown_command|not found|unknown command/i.test(String(wsErr?.code || wsErr?.message || wsErr))) {
           throw wsErr;
         }
-        // Fallback for mock/dev mode
         if (areaId && areaId !== '__none__') {
-          await this.hass.callWS({
-            type: 'config/area_registry/delete',
-            area_id: areaId,
-          });
+          await this.hass.callWS({ type: 'config/area_registry/delete', area_id: areaId });
         }
         const data = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
         const config = data?.config || {};
@@ -368,15 +235,21 @@ export class RoomEditModal {
     this._saving = true;
     this.saveBtn.disabled = true;
     const areaId = this.roomSpec.area_id;
-    const trimmedName = (this.roomName || '').trim();
+    const trimmedName = (this.roomConfig.name || '').trim();
     const isUnassigned = areaId === '__none__';
+    syncExpandedUsers(this.roomConfig);
+
     try {
       try {
         const payload = {
           type: 'smarthome_companion/dashboard/room_update',
           area_id: areaId,
-          icon: this.selectedIcon,
-          sensor_prefs: this.sensorPrefs,
+          icon: this.roomConfig.icon,
+          sensor_prefs: this.roomConfig.sensor_prefs,
+          expanded: this.roomConfig.expanded,
+          expanded_users: this.roomConfig.expanded_users,
+          user_expanded: this.roomConfig.user_expanded,
+          visible_users: this.roomConfig.visible_users,
         };
         if (!isUnassigned && trimmedName) {
           payload.name = trimmedName;
@@ -387,28 +260,31 @@ export class RoomEditModal {
         if (!/unknown_command|not found|unknown command/i.test(String(wsErr?.code || wsErr?.message || wsErr))) {
           throw wsErr;
         }
-        // Fallback for mock/dev mode
         if (areaId && !isUnassigned) {
           try {
             const areaUpdate = {
               type: 'config/area_registry/update',
               area_id: areaId,
-              icon: this.selectedIcon,
+              icon: this.roomConfig.icon,
             };
             if (trimmedName && trimmedName !== this.roomSpec.name) {
               areaUpdate.name = trimmedName;
             }
             await this.hass.callWS(areaUpdate);
-          } catch (_) {
-            // Non-fatal in mock/dev mode
-          }
+          } catch (_) { /* non-fatal in dev mode */ }
         }
         const data = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
         const config = data?.config || {};
         config.rooms ||= {};
-        config.rooms[areaId] ||= {};
-        config.rooms[areaId].icon = this.selectedIcon;
-        config.rooms[areaId].sensor_prefs = this.sensorPrefs;
+        config.rooms[areaId] = {
+          ...(config.rooms[areaId] || {}),
+          icon: this.roomConfig.icon,
+          sensor_prefs: this.roomConfig.sensor_prefs,
+          expanded: this.roomConfig.expanded,
+          expanded_users: this.roomConfig.expanded_users,
+          user_expanded: this.roomConfig.user_expanded,
+          visible_users: this.roomConfig.visible_users,
+        };
         const res = await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
         if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
       }

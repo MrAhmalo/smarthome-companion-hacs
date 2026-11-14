@@ -1,9 +1,10 @@
 // Room detail subview: dedicated granular control page for a single room.
 import {
-  h, icon, editBorder, domainOf, numeric, isActive, isUnavailable, entityIcon, setSliderVal, parseChannelKey,
+  h, icon, isActive,
 } from '../lib/util.js';
 import { Tile, GroupTile } from './tile.js';
 import { effectiveCategory, applySmartTileLayout, GROUPS, average } from './room.js';
+import { createCoverRow, updateCoverRow } from './cover_row.js';
 
 export class RoomDetailView {
   constructor(roomSpec, ctx, onBack) {
@@ -75,13 +76,12 @@ export class RoomDetailView {
       })
       .filter((g) => g.ids.length > 0)
       .map((g) => {
-        const countEl = h('span', { class: 'count', hidden: true });
         const btn = h('button', {
-          class: 'ctrl-btn', 'aria-label': g.label,
+          class: 'ctrl-btn', type: 'button', 'aria-label': g.label, title: g.label,
           style: { '--group-color': g.color },
           onClick: (e) => { e.stopPropagation(); this._toggleGroup(g); },
-        }, icon(g.icon), countEl);
-        return { ...g, btn, countEl };
+        }, icon(g.icon));
+        return { ...g, btn };
       });
 
     this.actionsEl = h('div', { class: 'room-detail-actions' }, ...this.groups.map((g) => g.btn));
@@ -157,96 +157,13 @@ export class RoomDetailView {
   }
 
   _buildCoverRow(spec) {
-    const iconEl = icon('mdi:window-shutter');
-    const nameEl = h('div', { class: 'cover-detail-name' }, spec.name);
-    const stateEl = h('div', { class: 'cover-detail-state' }, 'Laden...');
-
-    const mkBtn = (ic, lbl, fn) => h('button', {
-      class: 'mini-btn', 'aria-label': lbl,
-      onClick: (e) => { e.stopPropagation(); fn(); },
-    }, icon(ic));
-
-    const btnUp = mkBtn('mdi:arrow-up', 'Öffnen', () => this._coverService(spec, 'open_cover'));
-    const btnStop = mkBtn('mdi:stop', 'Stopp', () => this._coverService(spec, 'stop_cover'));
-    const btnDown = mkBtn('mdi:arrow-down', 'Schließen', () => this._coverService(spec, 'close_cover'));
-
-    const slider = h('input', {
-      type: 'range', class: 'slider', min: '0', max: '100', step: '1', 'aria-label': `${spec.name} Position`,
-      style: { touchAction: 'none', '--tile-color': '#9c27b0' },
-    });
-    slider.addEventListener('pointerdown', (e) => e.stopPropagation());
-    slider.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
-    slider.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
-    slider.addEventListener('click', (e) => e.stopPropagation());
-
-    let dragging = false;
-    slider.addEventListener('input', () => {
-      dragging = true;
-      setSliderVal(slider, slider.value);
-      stateEl.textContent = `Position: ${slider.value}%`;
-    });
-    slider.addEventListener('change', () => {
-      dragging = false;
-      const rawDom = domainOf(spec.entity_id);
-      if (rawDom === 'cover') {
-        this.hass?.callService('cover', 'set_cover_position', {
-          entity_id: spec.entity_id,
-          position: Number(slider.value),
-        });
-      } else {
-        this.hass?.callService(rawDom, Number(slider.value) > 0 ? 'turn_on' : 'turn_off', {
-          entity_id: spec.entity_id,
-        });
-      }
-    });
-
-    const sliderWrap = h('div', { class: 'cover-slider-wrap' },
-      h('span', { class: 'cover-slider-label' }, '0%'),
-      slider,
-      h('span', { class: 'cover-slider-label' }, '100%'));
-
-    const row = h('div', { class: 'cover-detail-row' },
-      h('div', { class: 'cover-detail-top' },
-        h('div', {
-          class: 'cover-detail-info',
-          onClick: () => {
-            if (this.ctx?.isEditMode?.()) {
-              const devId = spec.device_id || parseChannelKey(spec.key).deviceId || spec.entity_id;
-              if (devId) { this.ctx.onOpenDevice?.(devId); return; }
-            }
-          },
-        },
-          h('div', { class: 'cover-detail-icon' }, iconEl),
-          h('div', { class: 'cover-detail-texts' }, nameEl, stateEl)),
-        h('div', { class: 'tile-btns' }, btnUp, btnStop, btnDown)),
-      sliderWrap,
-      editBorder(10));
-
-    row.addEventListener('pointerdown', (e) => {
-      if (this.ctx?.isEditMode?.()) {
-        e.stopPropagation();
-        e.preventDefault();
-      }
-    }, true);
-    row.addEventListener('click', (e) => {
-      if (this.ctx?.isEditMode?.()) {
-        e.stopPropagation();
-        e.preventDefault();
-        const devId = spec.device_id || parseChannelKey(spec.key).deviceId || spec.entity_id;
-        if (devId) this.ctx.onOpenDevice?.(devId);
-      }
-    }, true);
-
-    return {
-      spec, row, iconEl, stateEl, slider, btnUp, btnStop, btnDown,
-      get dragging() { return dragging; },
-    };
+    return createCoverRow(spec, { getHass: () => this.hass, ctx: this.ctx });
   }
 
   update(hass) {
     this.hass = hass;
 
-    // Group quick controls
+    // Group quick controls (clean icons only, no clipped numbers)
     if (this.groups) {
       for (const g of this.groups) {
         const states = g.ids.map((id) => hass.states[id]).filter(Boolean);
@@ -254,8 +171,6 @@ export class RoomDetailView {
           ? states.filter((s) => s.state !== 'closed').length
           : states.filter((s) => isActive(s)).length;
         g.btn.toggleAttribute('data-on', count > 0);
-        g.countEl.hidden = count === 0;
-        g.countEl.textContent = String(count);
       }
     }
 
@@ -268,52 +183,26 @@ export class RoomDetailView {
     // Update covers with granular positions
     if (this.coverRows) {
       for (const cr of this.coverRows) {
-        const st = hass.states[cr.spec.entity_id];
-        const unav = isUnavailable(st);
-        cr.iconEl.setAttribute('icon', entityIcon(cr.spec.entity_id, st, cr.spec.icon, cr.spec.category));
-        cr.btnUp.disabled = unav;
-        cr.btnStop.disabled = unav;
-        cr.btnDown.disabled = unav;
-        cr.slider.disabled = unav;
-
-        if (unav) {
-          cr.stateEl.textContent = 'Nicht verfügbar';
-          continue;
-        }
-
-        const pos = st?.attributes?.current_position != null ? Number(st.attributes.current_position) : null;
-        const state = st?.state;
-        const moving = state === 'opening' || state === 'closing';
-
-        if (moving) {
-          cr.stateEl.textContent = state === 'opening' ? 'Öffnet...' : 'Schließt...';
-          cr.btnStop.style.color = '#9c27b0';
-        } else {
-          cr.btnStop.style.color = '';
-          const posTxt = pos != null ? ` · ${pos}%` : '';
-          cr.stateEl.textContent = (state === 'closed' ? 'Geschlossen' : 'Geöffnet') + posTxt;
-        }
-
-        if (pos != null && !cr.dragging) {
-          setSliderVal(cr.slider, pos);
-        }
+        updateCoverRow(cr, hass);
       }
     }
 
-    // Header sensors chips
+    // Header sensor chips (only mutate DOM when sensor values change)
     const { sensors } = this.spec;
-    const chips = [];
     const temp = sensors.temperature?.length ? average(hass, sensors.temperature) : null;
     const hum = sensors.humidity?.length ? average(hass, sensors.humidity) : null;
-    if (temp) chips.push(h('div', { class: 'room-detail-chip' }, icon('mdi:thermometer'), temp));
-    if (hum) chips.push(h('div', { class: 'room-detail-chip' }, icon('mdi:water-percent'), hum));
-    if ((sensors.motion || []).some((id) => hass.states[id]?.state === 'on')) {
-      chips.push(h('div', { class: 'room-detail-chip', style: { color: '#ffb74d' } }, icon('mdi:motion-sensor'), 'Bewegung'));
+    const mot = (sensors.motion || []).some((id) => hass.states[id]?.state === 'on');
+    const moi = (sensors.moisture || []).some((id) => hass.states[id]?.state === 'on');
+    const chipKey = `${temp || ''}|${hum || ''}|${mot ? 1 : 0}|${moi ? 1 : 0}`;
+    if (chipKey !== this._chipKey) {
+      this._chipKey = chipKey;
+      const chips = [];
+      if (temp) chips.push(h('div', { class: 'room-detail-chip' }, icon('mdi:thermometer'), temp));
+      if (hum) chips.push(h('div', { class: 'room-detail-chip' }, icon('mdi:water-percent'), hum));
+      if (mot) chips.push(h('div', { class: 'room-detail-chip', style: { color: '#ffb74d' } }, icon('mdi:motion-sensor'), 'Bewegung'));
+      if (moi) chips.push(h('div', { class: 'room-detail-chip', style: { color: '#e57373' } }, icon('mdi:water-alert'), 'Feuchtigkeit'));
+      this.metaEl.replaceChildren(...chips);
     }
-    if ((sensors.moisture || []).some((id) => hass.states[id]?.state === 'on')) {
-      chips.push(h('div', { class: 'room-detail-chip', style: { color: '#e57373' } }, icon('mdi:water-alert'), 'Feuchtigkeit'));
-    }
-    this.metaEl.replaceChildren(...chips);
   }
 
   _orderAndLayoutTiles() {

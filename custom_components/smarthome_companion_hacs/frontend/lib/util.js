@@ -319,6 +319,19 @@ export function numeric(st) {
   return Number.isFinite(n) ? n : null;
 }
 
+export const formatState = (st, hass = null) => stateLabel(hass || {}, st);
+
+export function areaIdForEntity(hass, entityId) {
+  if (!hass || !entityId) return '';
+  const ent = hass.entities?.[entityId];
+  if (!ent) return '';
+  if (ent.area_id) return ent.area_id;
+  if (ent.device_id && hass.devices?.[ent.device_id]?.area_id) {
+    return hass.devices[ent.device_id].area_id;
+  }
+  return '';
+}
+
 const DEVICE_CLASS_ICON = {
   temperature: 'mdi:thermometer', humidity: 'mdi:water-percent', power: 'mdi:flash', energy: 'mdi:lightning-bolt',
   battery: 'mdi:battery', illuminance: 'mdi:brightness-5', motion: 'mdi:motion-sensor', moisture: 'mdi:water-alert',
@@ -731,4 +744,167 @@ export function showConfirmDialog(anchorOrRoot, opts = {}) {
     }
     root.appendChild(overlayEl);
   });
+}
+
+// ── Internal Subview Registry & Hybrid Navigation ──
+export const BUILTIN_VIEWS = [
+  { id: 'overview', label: 'Übersicht', icon: 'mdi:view-dashboard', color: '#03a9f4', desc: 'Räume & Startseite' },
+  { id: 'security', label: 'Sicherheit', icon: 'mdi:shield-home', color: '#ef4444', desc: 'Alarm, Rauchmelder, Kameras' },
+  { id: 'solar', label: 'Solar', icon: 'mdi:solar-power-variant', color: '#f59e0b', desc: 'PV-Ertrag, Batterie, Prognose' },
+  { id: 'blinds', label: 'Rollläden', icon: 'mdi:window-shutter-cog', color: '#9c27b0', desc: 'Steuerung, Verlauf, Sonne' },
+  { id: 'auto', label: 'Auto', icon: 'mdi:car-connected', color: '#0ea5e9', desc: 'BMW & Fahrzeugstatus' },
+  { id: 'printer3d', label: '3D-Druck', icon: 'mdi:printer-3d', color: '#10b981', desc: 'A1 Mini Status & Steuerung' },
+  { id: 'more', label: 'Mehr', icon: 'mdi:apps', color: '#6366f1', desc: 'Alle Bereiche & Helfer' },
+];
+
+export const LEGACY_VIEW_ALIASES = {
+  '/lovelace/overview': 'overview',
+  '/lovelace/ubersicht': 'overview',
+  '/lovelace/sicherheit': 'security',
+  '/lovelace/solar': 'solar',
+  '/lovelace/auto': 'auto',
+  '/lovelace/jalousien': 'blinds',
+  '/lovelace/3d-drucker': 'printer3d',
+  '/lovelace/mehr': 'more',
+  '/dashboard-warnungen/dash-warnungen': 'warning',
+};
+
+export function resolveInternalView(itemOrPath) {
+  if (!itemOrPath) return null;
+  if (typeof itemOrPath === 'object') {
+    if (itemOrPath.view && BUILTIN_VIEWS.some((v) => v.id === itemOrPath.view)) return itemOrPath.view;
+    return resolveInternalView(itemOrPath.path);
+  }
+  const raw = String(itemOrPath).trim();
+  if (!raw) return null;
+  if (BUILTIN_VIEWS.some((v) => v.id === raw)) return raw;
+  if (raw.startsWith('companion:')) {
+    const sub = raw.slice('companion:'.length);
+    if (BUILTIN_VIEWS.some((v) => v.id === sub) || sub === 'warning') return sub;
+  }
+  const normalized = raw.split('?')[0].replace(/\/+$/, '') || '/';
+  return LEGACY_VIEW_ALIASES[normalized] || null;
+}
+
+/**
+ * Enables touch + mouse pointer drag-and-drop reordering on a list container.
+ * Uses pointer capture exclusively on `handleSelector` so vertical scrolling stays smooth.
+ */
+export function enablePointerReorder(listEl, { itemSelector = '[data-reorder-item]', handleSelector = '.drag-handle', onMove }) {
+  if (!listEl || typeof onMove !== 'function') return () => {};
+  let active = null;
+
+  const onPointerDown = (e) => {
+    if (e.button && e.button !== 0) return;
+    const handle = e.target.closest?.(handleSelector);
+    if (!handle || !listEl.contains(handle)) return;
+    const item = handle.closest?.(itemSelector);
+    if (!item || item.parentElement !== listEl) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    const items = [...listEl.children].filter((c) => c.matches?.(itemSelector));
+    const startIdx = items.indexOf(item);
+    if (startIdx < 0) return;
+
+    const rects = items.map((el) => el.getBoundingClientRect());
+    const scrollEl = listEl.closest?.('.dialog-body') || null;
+    item.setAttribute('data-dragging', '');
+    try { handle.setPointerCapture?.(e.pointerId); } catch {}
+
+    active = {
+      pointerId: e.pointerId,
+      handle,
+      item,
+      items,
+      rects,
+      startIdx,
+      currentIdx: startIdx,
+      startY: e.clientY,
+      lastY: e.clientY,
+      scrollEl,
+      raf: 0,
+    };
+
+    const tickScroll = () => {
+      if (!active || !active.scrollEl) return;
+      const box = active.scrollEl.getBoundingClientRect();
+      const dyTop = active.lastY - box.top;
+      const dyBot = box.bottom - active.lastY;
+      if (dyTop < 48) active.scrollEl.scrollTop -= Math.max(4, Math.round((48 - dyTop) * 0.35));
+      else if (dyBot < 48) active.scrollEl.scrollTop += Math.max(4, Math.round((48 - dyBot) * 0.35));
+      active.raf = requestAnimationFrame(tickScroll);
+    };
+    if (scrollEl) active.raf = requestAnimationFrame(tickScroll);
+  };
+
+  const onPointerMove = (e) => {
+    if (!active || e.pointerId !== active.pointerId) return;
+    e.preventDefault();
+    active.lastY = e.clientY;
+    const dy = e.clientY - active.startY;
+    active.item.style.transform = `translate3d(0, ${Math.round(dy)}px, 0)`;
+
+    const itemRect = active.rects[active.startIdx];
+    const center = itemRect.top + itemRect.height / 2 + dy;
+    let targetIdx = active.startIdx;
+    for (let i = 0; i < active.rects.length; i++) {
+      const r = active.rects[i];
+      if (center > r.top + r.height / 2) targetIdx = i;
+    }
+    if (dy < 0) {
+      targetIdx = active.startIdx;
+      for (let i = active.rects.length - 1; i >= 0; i--) {
+        const r = active.rects[i];
+        if (center < r.top + r.height / 2) targetIdx = i;
+      }
+    }
+    active.currentIdx = targetIdx;
+    active.items.forEach((el, idx) => {
+      if (el === active.item) return;
+      el.toggleAttribute('data-drop-before', idx === targetIdx && targetIdx < active.startIdx);
+      el.toggleAttribute('data-drop-after', idx === targetIdx && targetIdx > active.startIdx);
+    });
+  };
+
+  const cleanup = (commit) => {
+    if (!active) return;
+    if (active.raf) cancelAnimationFrame(active.raf);
+    try { active.handle.releasePointerCapture?.(active.pointerId); } catch {}
+    active.item.removeAttribute('data-dragging');
+    active.item.style.transform = '';
+    active.items.forEach((el) => {
+      el.removeAttribute('data-drop-before');
+      el.removeAttribute('data-drop-after');
+    });
+    const from = active.startIdx;
+    const to = active.currentIdx;
+    active = null;
+    if (commit && from !== to) onMove(from, to);
+  };
+
+  const onPointerUp = (e) => { if (active && e.pointerId === active.pointerId) cleanup(true); };
+  const onPointerCancel = (e) => { if (active && e.pointerId === active.pointerId) cleanup(false); };
+
+  listEl.addEventListener('pointerdown', onPointerDown);
+  listEl.addEventListener('pointermove', onPointerMove);
+  listEl.addEventListener('pointerup', onPointerUp);
+  listEl.addEventListener('pointercancel', onPointerCancel);
+  return () => {
+    cleanup(false);
+    listEl.removeEventListener('pointerdown', onPointerDown);
+    listEl.removeEventListener('pointermove', onPointerMove);
+    listEl.removeEventListener('pointerup', onPointerUp);
+    listEl.removeEventListener('pointercancel', onPointerCancel);
+  };
+}
+
+/** Formats countdown milliseconds cleanly as mm:ss or hh:mm:ss. */
+export function formatCountdownMs(ms) {
+  const totalSec = Math.max(0, Math.ceil((ms || 0) / 1000));
+  const hPart = Math.floor(totalSec / 3600);
+  const mPart = Math.floor((totalSec % 3600) / 60);
+  const sPart = totalSec % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return hPart > 0 ? `${hPart}:${pad(mPart)}:${pad(sPart)}` : `${pad(mPart)}:${pad(sPart)}`;
 }

@@ -2,7 +2,9 @@
 // Self-contained: no HACS cards required. The layout is resolved by the backend on every load,
 // so renamed entities / re-configured devices never leave dead tiles behind.
 import { STYLES } from './lib/styles.js';
-import { h, icon, debounce, showToast } from './lib/util.js';
+import {
+  h, icon, debounce, showToast, navigate, resolveInternalView,
+} from './lib/util.js';
 import { Room } from './components/room.js';
 import { RoomDetailView } from './components/room_detail.js';
 import { WarningDetailView } from './components/warning_detail.js';
@@ -15,6 +17,12 @@ import {
   WhatsNewModal, shouldShowWhatsNew, recordWhatsNewShown, recordWhatsNewDismissed,
 } from './components/whats_new_modal.js';
 import { DeviceWizard } from './components/device_wizard.js';
+import { SecurityView } from './components/view_security.js';
+import { SolarView } from './components/view_solar.js';
+import { BlindsView } from './components/view_blinds.js';
+import { AutoView } from './components/view_auto.js';
+import { Printer3DView } from './components/view_printer3d.js';
+import { MoreView } from './components/view_more.js';
 
 class CompanionDashboardPanel extends HTMLElement {
   constructor() {
@@ -24,10 +32,15 @@ class CompanionDashboardPanel extends HTMLElement {
     this._components = [];
     this._data = null;
     this._raf = 0;
+    this._activeView = 'overview';
+    this._prevView = 'overview';
     this._activeRoomId = null;
     this._activeWarningView = false;
     this._editMode = false;
+    this._isLovelaceCard = false;
+    this._usersCache = null;
     this._reload = debounce(() => this._load(), 800);
+    this._onPopState = () => this._syncRouteFromHash(true);
   }
 
   // ── HA panel contract ──
@@ -43,13 +56,25 @@ class CompanionDashboardPanel extends HTMLElement {
   set narrow(value) {
     this._narrow = value;
     this._menuBtn?.toggleAttribute('hidden', !value);
+    this._syncToolbar();
   }
 
-  set panel(_value) { /* unused */ }
+  set panel(value) {
+    const isCard = Boolean(value?.config?.is_lovelace_card);
+    this._isLovelaceCard = isCard;
+    if (isCard) this.setAttribute('data-lovelace', '');
+    else this.removeAttribute('data-lovelace');
+  }
+
   set route(_value) { /* unused */ }
 
   connectedCallback() {
     if (this._hass && !this._initialised) this._init();
+  }
+
+  _destroyComponents() {
+    for (const c of this._components) c?.destroy?.();
+    this._components = [];
   }
 
   disconnectedCallback() {
@@ -57,6 +82,10 @@ class CompanionDashboardPanel extends HTMLElement {
     this._unsub = null;
     this._ro?.disconnect();
     this._ro = null;
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('popstate', this._onPopState);
+    }
+    this._destroyComponents();
     this._roomModal?.destroy?.();
     this._roomModal = null;
     this._whatsNew?.destroy?.();
@@ -88,6 +117,9 @@ class CompanionDashboardPanel extends HTMLElement {
       onClick: () => {
         if (this._activeWarningView) this._closeWarningDetail();
         else if (this._activeRoomId) this._closeRoom();
+        else if (this._activeView && this._activeView !== 'overview') {
+          this._navigate(this._prevView === 'more' && ['auto', 'printer3d'].includes(this._activeView) ? 'more' : 'overview');
+        }
       },
     }, icon('mdi:arrow-left'));
     this._wizardBtn = h('button', {
@@ -103,13 +135,92 @@ class CompanionDashboardPanel extends HTMLElement {
       onClick: () => this._openSettings(),
     }, icon('mdi:cog-outline'));
     this._content = h('div');
-    this._page = h('div', { class: 'page' },
-      h('div', { class: 'toolbar' }, this._menuBtn, this._backBtn, h('div', { class: 'spacer' }), this._wizardBtn, this._editBtn, this._settingsBtn),
-      this._content);
+    this._toolbar = h('div', { class: 'toolbar' },
+      this._menuBtn, this._backBtn, h('div', { class: 'spacer' }), this._wizardBtn, this._editBtn, this._settingsBtn);
+    this._page = h('div', { class: 'page' }, this._toolbar, this._content);
     this.shadowRoot.replaceChildren(style, this._page);
 
+    if (typeof window !== 'undefined') {
+      window.addEventListener('popstate', this._onPopState);
+      this._syncRouteFromHash(false);
+    }
+    this._syncToolbar();
     this._load();
     this._subscribe();
+  }
+
+  _syncToolbar() {
+    if (!this._toolbar) return;
+    const anyVisible = [this._menuBtn, this._backBtn, this._wizardBtn, this._editBtn, this._settingsBtn]
+      .some((b) => b && !b.hidden);
+    this._toolbar.hidden = !anyVisible;
+  }
+
+  _syncRouteFromHash(shouldRender = true) {
+    if (typeof window === 'undefined') return;
+    const raw = (window.location.hash || '').replace(/^#/, '');
+    const params = new URLSearchParams(raw);
+    const v = params.get('view');
+    const r = params.get('room');
+    if (r) {
+      this._activeRoomId = r;
+      this._activeWarningView = false;
+      this._activeView = 'overview';
+    } else if (v === 'warning') {
+      this._activeWarningView = true;
+      this._activeRoomId = null;
+      this._activeView = 'warning';
+    } else if (v && ['security', 'solar', 'blinds', 'auto', 'printer3d', 'more'].includes(v)) {
+      this._activeView = v;
+      this._activeRoomId = null;
+      this._activeWarningView = false;
+    } else {
+      this._activeView = 'overview';
+      this._activeRoomId = null;
+      this._activeWarningView = false;
+    }
+    if (shouldRender && this._data) this._render();
+  }
+
+  _pushHash(nextHash) {
+    if (typeof window === 'undefined') return;
+    const target = nextHash || '';
+    if ((window.location.hash || '') === target) return;
+    try {
+      const url = target || (window.location.pathname + window.location.search);
+      window.history.pushState(null, '', url);
+    } catch (_) {
+      window.location.hash = target;
+    }
+  }
+
+  _navigate(target) {
+    const internal = resolveInternalView(target);
+    if (!internal) {
+      if (typeof target === 'string' && target) navigate(target);
+      return;
+    }
+    if (internal === 'warning') {
+      this._openWarningDetail();
+      return;
+    }
+    this._prevView = this._activeView || 'overview';
+    this._activeWarningView = false;
+    this._activeRoomId = null;
+    this._activeView = internal;
+    this._pushHash(internal === 'overview' ? '' : `#view=${encodeURIComponent(internal)}`);
+    if (this._data) this._render();
+    this.scrollTop = 0;
+  }
+
+  _makeNavBar(config, user) {
+    const active = this._activeWarningView ? 'warning' : (this._activeView || 'overview');
+    return new NavBar(config.nav, {
+      activeView: active,
+      viewsConfig: config.views || {},
+      user,
+      onNavigate: (target) => this._navigate(target),
+    });
   }
 
   async _subscribe() {
@@ -133,6 +244,7 @@ class CompanionDashboardPanel extends HTMLElement {
       this._settingsBtn.hidden = !res.user?.is_admin;
       this._wizardBtn.hidden = !res.user?.is_admin;
       this._editBtn.hidden = !res.user?.is_admin;
+      this._syncToolbar();
       this._render();
       if (!this._whatsNewChecked) {
         this._whatsNewChecked = true;
@@ -146,6 +258,7 @@ class CompanionDashboardPanel extends HTMLElement {
 
   // ── rendering ──
   _render() {
+    this._destroyComponents();
     const { config, layout, user } = this._data;
     const ctx = {
       presets: config.color_presets || [],
@@ -166,15 +279,15 @@ class CompanionDashboardPanel extends HTMLElement {
       this._ro?.disconnect();
       this._backBtn.hidden = false;
       this._menuBtn.hidden = true;
+      this._syncToolbar();
       this._warningDetail = new WarningDetailView(config.warning || layout.warning || { entity_id: config.warning_entity }, () => this._closeWarningDetail());
-      this._nav = new NavBar(config.nav);
+      this._nav = this._makeNavBar(config, user);
       this._components = [this._warningDetail];
       this._content.replaceChildren(this._warningDetail.el, this._nav.el);
       if (this._editMode && this._editBanner) {
-      this._content.prepend(this._editBanner);
-    }
-
-    this._push();
+        this._content.prepend(this._editBanner);
+      }
+      this._push();
       return;
     }
 
@@ -185,28 +298,65 @@ class CompanionDashboardPanel extends HTMLElement {
         this._ro?.disconnect();
         this._backBtn.hidden = false;
         this._menuBtn.hidden = true;
+        this._syncToolbar();
         this._roomDetail = new RoomDetailView(roomSpec, ctx, () => this._closeRoom());
-        this._nav = new NavBar(config.nav);
+        this._nav = this._makeNavBar(config, user);
         this._components = [this._roomDetail];
         this._content.replaceChildren(this._roomDetail.el, this._nav.el);
         if (this._editMode && this._editBanner) {
-      this._content.prepend(this._editBanner);
-    }
-
-    this._push();
+          this._content.prepend(this._editBanner);
+        }
+        this._push();
         return;
       }
       this._activeRoomId = null;
     }
 
+    // Subview: built-in migrated views (security, solar, blinds, auto, printer3d, more)
+    const activeView = this._activeView;
+    if (activeView && activeView !== 'overview') {
+      let viewInst = null;
+      const goBack = () => this._navigate(this._prevView === 'more' && ['auto', 'printer3d'].includes(activeView) ? 'more' : 'overview');
+      if (activeView === 'security') viewInst = new SecurityView({ hass: this._hass, config, onBack: goBack });
+      else if (activeView === 'solar') viewInst = new SolarView({ hass: this._hass, onBack: goBack });
+      else if (activeView === 'blinds') viewInst = new BlindsView({ hass: this._hass, layout, onBack: goBack });
+      else if (activeView === 'auto') viewInst = new AutoView({ hass: this._hass, config, onBack: goBack });
+      else if (activeView === 'printer3d') viewInst = new Printer3DView({ hass: this._hass, onBack: goBack });
+      else if (activeView === 'more') {
+        viewInst = new MoreView({
+          hass: this._hass,
+          config,
+          user,
+          isAdmin: !!user?.is_admin,
+          onNavigate: (target) => this._navigate(target),
+          onOpenSettings: () => this._openSettings(),
+          onBack: () => this._navigate('overview'),
+        });
+      }
+
+      if (viewInst) {
+        this._ro?.disconnect();
+        this._backBtn.hidden = false;
+        this._menuBtn.hidden = true;
+        this._syncToolbar();
+        this._nav = this._makeNavBar(config, user);
+        this._components = [viewInst];
+        this._content.replaceChildren(viewInst.el, this._nav.el);
+        this._push();
+        return;
+      }
+      this._activeView = 'overview';
+    }
+
     this._backBtn.hidden = true;
     this._menuBtn.hidden = !this._narrow;
+    this._syncToolbar();
 
     const scroll = this.scrollTop;
 
     // Greeting + badges
     this._greeting = h('h1', {});
-    this._badges = new Badges(config.badges, user);
+    this._badges = new Badges(config.badges, user, (target) => this._navigate(target));
 
     // Side column (alerts / trash / persons / announcement)
     this._smoke = new SmokeAlerts();
@@ -223,7 +373,7 @@ class CompanionDashboardPanel extends HTMLElement {
     this._roomsWrap = h('div', { class: 'rooms' });
     const roomsEl = this._rooms.length ? this._roomsWrap : this._emptyState();
 
-    this._nav = new NavBar(config.nav);
+    this._nav = this._makeNavBar(config, user);
 
     this._components = [this._badges, this._smoke, this._warning, this._trash, this._persons, this._announce, ...this._rooms];
 
@@ -320,7 +470,9 @@ class CompanionDashboardPanel extends HTMLElement {
   // ── room subview ──
   _openRoom(areaId) {
     this._activeWarningView = false;
+    this._activeView = 'overview';
     this._activeRoomId = areaId;
+    this._pushHash(areaId ? `#room=${encodeURIComponent(areaId)}` : '');
     this._render();
     this.scrollTop = 0;
   }
@@ -328,8 +480,11 @@ class CompanionDashboardPanel extends HTMLElement {
   _closeRoom() {
     this._activeWarningView = false;
     this._activeRoomId = null;
+    this._activeView = 'overview';
+    this._pushHash('');
     this._backBtn.hidden = true;
     this._menuBtn.hidden = !this._narrow;
+    this._syncToolbar();
     this._render();
   }
 
@@ -337,14 +492,19 @@ class CompanionDashboardPanel extends HTMLElement {
   _openWarningDetail() {
     this._activeWarningView = true;
     this._activeRoomId = null;
+    this._activeView = 'warning';
+    this._pushHash('#view=warning');
     this._render();
     this.scrollTop = 0;
   }
 
   _closeWarningDetail() {
     this._activeWarningView = false;
+    this._activeView = 'overview';
+    this._pushHash('');
     this._backBtn.hidden = true;
     this._menuBtn.hidden = !this._narrow;
+    this._syncToolbar();
     this._render();
   }
 
@@ -373,15 +533,29 @@ class CompanionDashboardPanel extends HTMLElement {
   }
 
   // ── room edit modal ──
-  _openRoomEdit(roomSpec) {
+  async _openRoomEdit(roomSpec) {
     if (!this._hass || !roomSpec) return;
+    if (!this._usersCache) {
+      try {
+        const res = await this._hass.callWS({ type: 'smarthome_companion/dashboard/users' });
+        this._usersCache = res?.users || [];
+      } catch (_) {
+        this._usersCache = [];
+      }
+    }
     this._roomModal?.destroy?.();
     this._roomModal = new RoomEditModal({
       hass: this._hass,
       roomSpec,
-      onClose: () => { this._roomModal = null; },
-      onSaved: () => {
+      users: this._usersCache || [],
+      onClose: () => {
+        this._roomModal?.destroy?.();
         this._roomModal = null;
+      },
+      onSaved: () => {
+        this._roomModal?.destroy?.();
+        this._roomModal = null;
+        this._serialized = null;
         this._load();
         this._toast('Raum gespeichert');
       },
@@ -508,9 +682,15 @@ class CompanionDashboardCard extends HTMLElement {
     if (!this._panel) {
       this._panel = document.createElement('companion-dashboard-panel');
       this._panel.panel = { config: { ...this._config, is_lovelace_card: true } };
+      this._panel.narrow = !!this._narrow;
       this.replaceChildren(this._panel);
     }
     this._panel.hass = hass;
+  }
+
+  set narrow(value) {
+    this._narrow = value;
+    if (this._panel) this._panel.narrow = value;
   }
 
   getCardSize() {

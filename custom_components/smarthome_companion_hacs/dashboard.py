@@ -175,7 +175,7 @@ _LEGACY_SEEDED_EXTRA_ENTITIES = {
 }
 
 _LIST_KEYS = ("badges", "nav", "persons", "color_presets", "room_order", "hidden_tiles", "extra_tiles")
-_DICT_KEYS = ("warning", "announce", "trash", "rooms", "tile_order", "tile_users")
+_DICT_KEYS = ("warning", "announce", "trash", "rooms", "tile_order", "tile_users", "views")
 
 
 def _sanitize_config(raw: dict) -> dict:
@@ -680,7 +680,20 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
             t["name"].lower(),
         ))
         mode = rcfg.get("expanded", "collapsed")
-        expanded = mode in ("expanded", "always") or user_id in rcfg.get("expanded_users", [])
+        user_expanded = rcfg.get("user_expanded", {})
+        if not isinstance(user_expanded, dict):
+            user_expanded = {}
+        expanded_users = rcfg.get("expanded_users", [])
+        if not isinstance(expanded_users, list):
+            expanded_users = []
+        if mode == "always":
+            expanded = True
+        elif user_id in user_expanded and user_expanded[user_id] in ("expanded", "collapsed"):
+            expanded = user_expanded[user_id] == "expanded"
+        elif user_id in expanded_users:
+            expanded = True
+        else:
+            expanded = mode == "expanded"
         area = areas.get(area_id)
         sensor_prefs = rcfg.get("sensor_prefs", {}) if isinstance(rcfg.get("sensor_prefs"), dict) else {}
         effective_sensors: dict[str, list[str]] = {}
@@ -703,7 +716,8 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
             "expanded": expanded,
             "always_open": mode == "always",
             "visible_users": visible_users,
-            "expanded_users": rcfg.get("expanded_users", []),
+            "expanded_users": expanded_users,
+            "user_expanded": user_expanded,
             "mode": mode,
             "sensors": effective_sensors,
             "all_sensors": all_room_sensors,
@@ -725,6 +739,7 @@ def async_register_dashboard_websockets(hass):
     websocket_api.async_register_command(hass, handle_dashboard_save)
     websocket_api.async_register_command(hass, handle_dashboard_room_update)
     websocket_api.async_register_command(hass, handle_dashboard_room_delete)
+    websocket_api.async_register_command(hass, handle_dashboard_set_room_expanded)
     websocket_api.async_register_command(hass, handle_dashboard_users)
     websocket_api.async_register_command(hass, handle_dashboard_subscribe)
 
@@ -777,11 +792,15 @@ async def handle_dashboard_save(hass, connection, msg):
     vol.Optional("name"): str,
     vol.Optional("icon"): vol.Any(str, None),
     vol.Optional("sensor_prefs"): dict,
+    vol.Optional("expanded"): vol.In(["collapsed", "expanded", "always"]),
+    vol.Optional("expanded_users"): list,
+    vol.Optional("user_expanded"): dict,
+    vol.Optional("visible_users"): list,
 })
 @websocket_api.require_admin
 @websocket_api.async_response
 async def handle_dashboard_room_update(hass, connection, msg):
-    """Update a room's name/icon/sensor_prefs and cascade room slug changes to entities."""
+    """Update a room's settings/name/icon/sensor_prefs and cascade room slug changes to entities."""
     store = hass.data[DOMAIN]["store"]
     area_id = msg["area_id"]
     area_reg = ar.async_get(hass)
@@ -812,6 +831,20 @@ async def handle_dashboard_room_update(hass, connection, msg):
         room_cfg["icon"] = msg["icon"]
     if "sensor_prefs" in msg:
         room_cfg["sensor_prefs"] = msg["sensor_prefs"]
+    if "expanded" in msg:
+        room_cfg["expanded"] = msg["expanded"]
+    if "visible_users" in msg:
+        room_cfg["visible_users"] = [str(u) for u in msg["visible_users"] if u]
+    if "user_expanded" in msg:
+        clean_ue = {
+            str(uid): val
+            for uid, val in msg["user_expanded"].items()
+            if uid and val in ("expanded", "collapsed")
+        }
+        room_cfg["user_expanded"] = clean_ue
+        room_cfg["expanded_users"] = [uid for uid, val in clean_ue.items() if val == "expanded"]
+    elif "expanded_users" in msg:
+        room_cfg["expanded_users"] = [str(u) for u in msg["expanded_users"] if u]
 
     if not await store.save_dashboard_config(config):
         connection.send_result(msg["id"], {"save_failed": True})
@@ -892,6 +925,36 @@ async def handle_dashboard_room_delete(hass, connection, msg):
         connection.send_result(msg["id"], {"save_failed": True})
         return
 
+    hass.bus.async_fire(UPDATE_EVENT)
+    connection.send_result(msg["id"], {"success": True})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smarthome_companion/dashboard/set_room_expanded",
+    vol.Required("area_id"): str,
+    vol.Required("mode"): vol.In(["default", "collapsed", "expanded"]),
+})
+@websocket_api.async_response
+async def handle_dashboard_set_room_expanded(hass, connection, msg):
+    """Allow any user to set their own personal room default (default/collapsed/expanded)."""
+    store = hass.data[DOMAIN]["store"]
+    user_id = connection.user.id
+    area_id = msg["area_id"]
+    mode = msg["mode"]
+    config = _sanitize_config(await async_get_or_create_config(hass, store))
+    room_cfg = config["rooms"].setdefault(area_id, {})
+    ue = room_cfg.setdefault("user_expanded", {})
+    if not isinstance(ue, dict):
+        ue = {}
+        room_cfg["user_expanded"] = ue
+    if mode == "default":
+        ue.pop(user_id, None)
+    else:
+        ue[user_id] = mode
+    room_cfg["expanded_users"] = [uid for uid, val in ue.items() if val == "expanded"]
+    if not await store.save_dashboard_config(config):
+        connection.send_result(msg["id"], {"save_failed": True})
+        return
     hass.bus.async_fire(UPDATE_EVENT)
     connection.send_result(msg["id"], {"success": True})
 

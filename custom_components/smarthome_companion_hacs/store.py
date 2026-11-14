@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import copy
 import re
@@ -10,6 +11,7 @@ class CompanionStore:
     def __init__(self, hass):
         self.hass = hass
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+        self._save_lock = asyncio.Lock()
         self.data = {"blinds": {}, "irrigation": {}, "devices": {}, "categories": {}, "dismissed_devices": [], "simulation": {}, "dashboard": None, "migrations": {}}
 
     async def async_load(self):
@@ -45,26 +47,27 @@ class CompanionStore:
         
         If data is provided, it will be set as the current data first.
         """
-        if data is not None and data is not self.data:
-            self.data = data
-            
-        try:
-            # We deepcopy to avoid mutating the dict while it's being serialized
-            # by Home Assistant's executor job, which could raise
-            # "dictionary changed size during iteration".
-            data_to_save = copy.deepcopy(self.data)
-        except Exception as e:
-            _LOGGER.error("Deepcopy failed in CompanionStore, falling back to JSON copy: %s", e)
-            import json
-            # Fallback to json dump/load to strip uncopyable/unserializable objects
-            data_to_save = json.loads(json.dumps(self.data, default=str))
-            
-        try:
-            await self._store.async_save(data_to_save)
-            return True
-        except Exception as e:
-            _LOGGER.error("HA Store async_save failed: %s", e)
-            return False
+        async with self._save_lock:
+            if data is not None and data is not self.data:
+                self.data = data
+
+            try:
+                # We deepcopy to avoid mutating the dict while it's being serialized
+                # by Home Assistant's executor job, which could raise
+                # "dictionary changed size during iteration".
+                data_to_save = copy.deepcopy(self.data)
+            except Exception as e:
+                _LOGGER.error("Deepcopy failed in CompanionStore, falling back to JSON copy: %s", e)
+                import json
+                # Fallback to json dump/load to strip uncopyable/unserializable objects
+                data_to_save = json.loads(json.dumps(self.data, default=str))
+
+            try:
+                await self._store.async_save(data_to_save)
+                return True
+            except Exception as e:
+                _LOGGER.error("HA Store async_save failed: %s", e)
+                return False
 
     # ── Blinds ──
 
