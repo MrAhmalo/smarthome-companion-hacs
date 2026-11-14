@@ -1,6 +1,6 @@
 // Room detail subview: dedicated granular control page for a single room.
 import {
-  h, icon, domainOf, numeric, isActive, isUnavailable, entityIcon, setSliderVal,
+  h, icon, editBorder, domainOf, numeric, isActive, isUnavailable, entityIcon, setSliderVal,
 } from '../lib/util.js';
 import { Tile, GroupTile } from './tile.js';
 import { effectiveCategory, applySmartTileLayout, GROUPS, average } from './room.js';
@@ -205,7 +205,8 @@ export class RoomDetailView {
           h('div', { class: 'cover-detail-icon' }, iconEl),
           h('div', { class: 'cover-detail-texts' }, nameEl, stateEl)),
         h('div', { class: 'tile-btns' }, btnUp, btnStop, btnDown)),
-      sliderWrap);
+      sliderWrap,
+      editBorder(10));
 
     row.addEventListener('pointerdown', (e) => {
       if (this.ctx?.isEditMode?.()) {

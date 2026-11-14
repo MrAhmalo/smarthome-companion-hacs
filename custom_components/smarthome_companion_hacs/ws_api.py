@@ -14,7 +14,7 @@ from homeassistant.helpers import (
 )
 from .const import DOMAIN
 from .util import safe_fire_event
-from .entity_sync import async_sync_renamed_entities
+from .entity_sync import async_sync_renamed_entities, slugify_ha
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -213,36 +213,84 @@ async def handle_configure_device(hass, connection, msg):
     except Exception as e:
         _LOGGER.warning("Could not update device registry for %s: %s", device_id, e)
 
-    # Sync primary entity ID in HA entity registry on rename
+    # Sync entity IDs in HA entity registry on rename (multi-channel, single-channel, or sensor-only)
     renamed_map = {}
-    if custom_name and primary:
-        ent_reg = er.async_get(hass)
-        p_entry = ent_reg.async_get(primary)
-        if p_entry:
-            old_eid = p_entry.entity_id
-            domain = p_entry.domain
-            clean_name = re.sub(r"[^a-z0-9_]+", "_", custom_name.lower()).strip("_")
-            effective_area = area_id or p_entry.area_id
-            area_slug = ""
-            if effective_area:
-                area_reg = ar.async_get(hass)
-                a_entry = area_reg.async_get_area(effective_area)
-                if a_entry:
-                    area_slug = re.sub(r"[^a-z0-9_]+", "_", a_entry.name.lower()).strip("_")
-            if area_slug and not clean_name.startswith(f"{area_slug}_") and clean_name != area_slug:
-                clean_slug = f"{area_slug}_{clean_name}"
-            else:
-                clean_slug = clean_name
-            target_eid = f"{domain}.{clean_slug}"
-            if old_eid != target_eid:
-                existing = ent_reg.async_get(target_eid)
-                if not existing or existing.unique_id == p_entry.unique_id:
-                    try:
-                        ent_reg.async_update_entity(old_eid, new_entity_id=target_eid)
-                        renamed_map[old_eid] = target_eid
-                        _LOGGER.info("Updated primary entity ID from %s to %s", old_eid, target_eid)
-                    except Exception as e:
-                        _LOGGER.warning("Could not rename entity ID for %s: %s", old_eid, e)
+    ent_reg = er.async_get(hass)
+    area_reg = ar.async_get(hass)
+
+    def _try_rename_entry(entry, raw_name: str, expected_uid: str | None = None) -> None:
+        if not entry or not raw_name:
+            return
+        clean_name = slugify_ha(raw_name)
+        if not clean_name:
+            return
+        old_eid = entry.entity_id
+        effective_area = area_id or entry.area_id
+        area_slug = ""
+        if effective_area:
+            a_entry = area_reg.async_get_area(effective_area)
+            if a_entry:
+                area_slug = slugify_ha(a_entry.name)
+        if area_slug and not clean_name.startswith(f"{area_slug}_") and clean_name != area_slug:
+            clean_slug = f"{area_slug}_{clean_name}"
+        else:
+            clean_slug = clean_name
+        target_eid = f"{entry.domain}.{clean_slug}"
+        if old_eid == target_eid:
+            return
+        existing = ent_reg.async_get(target_eid)
+        uid_match = entry.unique_id or expected_uid
+        if not existing or (uid_match and existing.unique_id == uid_match):
+            try:
+                ent_reg.async_update_entity(old_eid, new_entity_id=target_eid)
+                renamed_map[old_eid] = target_eid
+                _LOGGER.info("Updated entity ID from %s to %s", old_eid, target_eid)
+            except Exception as e:
+                _LOGGER.warning("Could not rename entity ID for %s: %s", old_eid, e)
+
+    sub_entities = entities.get("sub_entities") if isinstance(entities, dict) else None
+    room_sensors = entities.get("room_sensors") if isinstance(entities, dict) else None
+
+    def _find_entry_by_uid(uid: str | None, fallback_id: str) -> object | None:
+        if not uid:
+            return None
+        dom = fallback_id.split(".", 1)[0] if "." in fallback_id else None
+        for e in ent_reg.entities.values():
+            if e.unique_id == uid and (dom is None or e.domain == dom):
+                return e
+        return None
+
+    if isinstance(sub_entities, dict) and sub_entities:
+        for sub_id, sub_data in list(sub_entities.items()):
+            if not isinstance(sub_data, dict):
+                continue
+            sub_name = sub_data.get("custom_name") or sub_data.get("name") or custom_name
+            s_entry = (
+                ent_reg.async_get(sub_id)
+                or ent_reg.async_get(sub_data.get("original_id", ""))
+                or _find_entry_by_uid(sub_data.get("unique_id"), sub_id)
+            )
+            _try_rename_entry(s_entry, sub_name, sub_data.get("unique_id"))
+    elif custom_name and primary:
+        p_entry = ent_reg.async_get(primary) or _find_entry_by_uid(
+            entities.get("primary_unique_id") if isinstance(entities, dict) else None, primary
+        )
+        _try_rename_entry(p_entry, custom_name, entities.get("primary_unique_id") if isinstance(entities, dict) else None)
+    elif custom_name and isinstance(room_sensors, dict) and room_sensors:
+        enabled_sensors = [
+            (s_id, s_data)
+            for s_id, s_data in room_sensors.items()
+            if isinstance(s_data, dict) and s_data.get("enabled", True)
+        ]
+        for s_id, s_data in enabled_sensors:
+            rs_entry = (
+                ent_reg.async_get(s_id)
+                or ent_reg.async_get(s_data.get("original_id", ""))
+                or _find_entry_by_uid(s_data.get("unique_id"), s_id)
+            )
+            s_type = str(s_data.get("type") or "").strip()
+            rs_name = f"{custom_name}_{s_type}" if (len(enabled_sensors) > 1 and s_type) else custom_name
+            _try_rename_entry(rs_entry, rs_name, s_data.get("unique_id"))
 
     if renamed_map:
         await async_sync_renamed_entities(hass, store, renamed_map)
@@ -354,18 +402,18 @@ async def handle_save_group(hass, connection, msg):
         unique_id = f"smarthome_companion_group_light_{group_id}"
         current_eid = ent_reg.async_get_entity_id("light", DOMAIN, unique_id)
         if current_eid:
-            clean_name = re.sub(r"[^a-z0-9_]+", "_", group_name.lower()).strip("_")
+            clean_name = slugify_ha(group_name)
             area_slug = ""
             if area_id:
                 area_reg = ar.async_get(hass)
                 a_entry = area_reg.async_get_area(area_id)
                 if a_entry:
-                    area_slug = re.sub(r"[^a-z0-9_]+", "_", a_entry.name.lower()).strip("_")
-            if area_slug and not clean_name.startswith(f"{area_slug}_") and clean_name != area_slug:
+                    area_slug = slugify_ha(a_entry.name)
+            if area_slug and clean_name and not clean_name.startswith(f"{area_slug}_") and clean_name != area_slug:
                 clean_slug = f"{area_slug}_{clean_name}"
             else:
                 clean_slug = clean_name
-            target_eid = f"light.{clean_slug}"
+            target_eid = f"light.{clean_slug}" if clean_slug else current_eid
             if current_eid != target_eid:
                 existing = ent_reg.async_get(target_eid)
                 if not existing or existing.unique_id == unique_id:

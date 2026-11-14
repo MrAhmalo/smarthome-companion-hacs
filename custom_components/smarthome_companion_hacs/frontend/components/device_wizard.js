@@ -92,7 +92,7 @@ export class DeviceWizard {
     this.stepBar = h('div', { class: 'wizard-steps' });
     this.foot = h('div', { class: 'dialog-foot' });
 
-    this.dialog = h('div', { class: 'dialog', role: 'dialog', 'aria-label': 'Gerät einrichten' },
+    this.dialog = h('div', { class: 'dialog', role: 'dialog', 'aria-label': 'Gerät einrichten', hidden: !!this.initialGroupId },
       h('div', { class: 'dialog-head' },
         icon('mdi:plus-circle-outline'),
         h('h2', {}, 'Gerät einrichten'),
@@ -251,14 +251,13 @@ export class DeviceWizard {
       if (res?.save_failed) throw new Error('Löschen fehlgeschlagen');
 
       delete this.configuredDevices[deviceId];
+      if (this.directMode) {
+        this.onSaved(null);
+        return;
+      }
       if (this.selectedDevice?.id === deviceId) {
         this.selectedDevice = null;
         this.step = 0;
-      }
-      if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
-        this.dialog.hidden = true;
-        this._openGroupModal(this.groups[this.initialGroupId], true);
-        return;
       }
 
       this._render();
@@ -506,13 +505,7 @@ export class DeviceWizard {
                 this.selectedDevice = d;
                 this._initDevice();
                 this.step = 1;
-                if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
-        this.dialog.hidden = true;
-        this._openGroupModal(this.groups[this.initialGroupId], true);
-        return;
-      }
-
-      this._render();
+                this._render();
               },
             }, icon('mdi:pencil'), 'Bearbeiten'),
             h('button', {
@@ -536,13 +529,7 @@ export class DeviceWizard {
                 this.selectedDevice = d;
                 this._initDevice();
                 this.step = 1;
-                if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
-        this.dialog.hidden = true;
-        this._openGroupModal(this.groups[this.initialGroupId], true);
-        return;
-      }
-
-      this._render();
+                this._render();
               },
             }, icon('mdi:plus'), 'Einrichten')
           );
@@ -561,13 +548,7 @@ export class DeviceWizard {
             this.selectedDevice = d;
             this._initDevice();
             this.step = 1;
-            if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
-        this.dialog.hidden = true;
-        this._openGroupModal(this.groups[this.initialGroupId], true);
-        return;
-      }
-
-      this._render();
+            this._render();
           },
         },
         chk,
@@ -869,7 +850,7 @@ export class DeviceWizard {
     });
 
     const getLabelForId = (id) => {
-      if (this.groups[id]) return `📁 ${this.groups[id].name} (Gruppe)`;
+      if (this.groups[id]) return `${this.groups[id].name} (Gruppe)`;
       if (id.startsWith('d:')) {
         const parts = id.split(':', 2);
         const ent = this.entities.find((e) => e.entity_id === parts[2]);
@@ -911,7 +892,7 @@ export class DeviceWizard {
     for (const [gid, g] of Object.entries(this.groups)) {
       if (existingGroup && gid === existingGroup.id) continue;
       if (!selectedIds.includes(gid)) {
-        availableToAdd.push({ value: gid, label: `📁 ${g.name} (Gruppe)`, icon: 'mdi:folder-multiple' });
+        availableToAdd.push({ value: gid, label: `${g.name} (Gruppe)`, icon: 'mdi:folder-multiple' });
       }
     }
     // Devices
@@ -923,8 +904,9 @@ export class DeviceWizard {
     }
 
     let addDropdownWrap = null;
+    let addDd = null;
     if (availableToAdd.length > 0) {
-      const addDd = new CustomDropdown({
+      addDd = new CustomDropdown({
         options: availableToAdd,
         value: '',
         placeholder: '+ Element hinzufügen...',
@@ -943,8 +925,18 @@ export class DeviceWizard {
       overlay.remove();
       areaDd.destroy();
       catDd.destroy();
+      addDd?.destroy();
+      iconPicker._close();
       if (isDirect) this.onClose?.();
     };
+    if (isDirect) {
+      overlay.style.background = 'transparent';
+      overlay.style.backdropFilter = 'none';
+      overlay.style.webkitBackdropFilter = 'none';
+    }
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeGroupModal();
+    });
 
     const dialog = h('div', { class: 'dialog group-modal-dialog', style: { maxWidth: '520px', width: 'min(520px, 94vw)' } },
       h('div', { class: 'dialog-head' },
@@ -970,7 +962,23 @@ export class DeviceWizard {
           addDropdownWrap)),
       h('div', { class: 'dialog-foot' },
         h('div', { class: 'dialog-foot-actions' },
-          h('button', { class: 'btn', onClick: closeGroupModal }, 'Abbrechen')),
+          h('button', { class: 'btn', onClick: closeGroupModal }, 'Abbrechen'),
+          existingGroup ? h('button', {
+            class: 'btn danger',
+            type: 'button',
+            onClick: async () => {
+              const removed = await this._removeGroup(existingGroup.id, existingGroup.name, true);
+              if (removed) {
+                overlay.remove();
+                areaDd.destroy();
+                catDd.destroy();
+                addDd?.destroy();
+                iconPicker._close();
+                if (isDirect) this.onSaved?.(null);
+                else this._load();
+              }
+            },
+          }, icon('mdi:delete-outline'), 'Gruppe auflösen') : null),
         h('div', { class: 'dialog-foot-actions' },
           h('button', {
             class: 'btn primary',
@@ -992,10 +1000,11 @@ export class DeviceWizard {
                 overlay.remove();
                 areaDd.destroy();
                 catDd.destroy();
+                addDd?.destroy();
                 iconPicker._close();
                 this.selectedDevices.clear();
-                this._load();
-                this.onSaved?.(null);
+                if (isDirect) this.onSaved?.(null);
+                else this._load();
               } catch (err) {
                 alert(`Fehler beim Speichern der Gruppe: ${err.message || err}`);
               }
@@ -1007,16 +1016,19 @@ export class DeviceWizard {
     this.el.appendChild(overlay);
   }
 
-  async _removeGroup(groupId, groupName) {
+  async _removeGroup(groupId, groupName, skipReload = false) {
     const conf = window.confirm(`Gruppe „${groupName}“ auflösen?\n\nDie enthaltenen Geräte bleiben erhalten.`);
-    if (!conf) return;
+    if (!conf) return false;
     try {
       await this.hass.callWS({ type: 'smarthome_companion/groups/delete', group_id: groupId });
       delete this.groups[groupId];
-      this._load();
-      this.onSaved?.(null);
+      if (!skipReload) {
+        this._load();
+      }
+      return true;
     } catch (err) {
       alert(`Fehler beim Auflösen der Gruppe: ${err.message || err}`);
+      return false;
     }
   }
 
@@ -1128,7 +1140,9 @@ export class DeviceWizard {
     const existingSensors = existing?.entities?.room_sensors || {};
     const rawRoomSensors = devEntities.filter((e) => ['sensor', 'binary_sensor'].includes(domainOf(e.entity_id)));
     this.sensorEntities = rawRoomSensors.map((e) => {
-      const saved = existingSensors[e.entity_id];
+      const saved = existingSensors[e.entity_id] || (e.unique_id
+        ? Object.values(existingSensors).find((s) => s?.unique_id === e.unique_id)
+        : null);
       const detectedType = this._detectSensorType(e);
       const type = saved?.type || (saved?.enabled === false ? 'ignore' : detectedType);
       return {
@@ -1161,7 +1175,9 @@ export class DeviceWizard {
     // Sub-entities / channels
     const existingSubs = existing?.entities?.sub_entities || {};
     this.channels = controllable.map((e, idx) => {
-      const sub = existingSubs[e.entity_id] || {};
+      const sub = existingSubs[e.entity_id] || (e.unique_id
+        ? Object.values(existingSubs).find((s) => s?.unique_id === e.unique_id)
+        : null) || {};
       let channelName = sub.custom_name || sub.name || e.name || e.original_name || (controllable.length > 1 ? `Kanal ${idx + 1}` : this.customName);
       if (!sub.custom_name && !sub.name) {
         channelName = this._stripRoomName(channelName, this.selectedAreaId);
@@ -1257,13 +1273,7 @@ export class DeviceWizard {
             if (!this.customIcon) {
               devIconPicker._setValue(c.icon);
             }
-            if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
-        this.dialog.hidden = true;
-        this._openGroupModal(this.groups[this.initialGroupId], true);
-        return;
-      }
-
-      this._render();
+            this._render();
           },
         },
         icon(c.icon),
@@ -1653,15 +1663,18 @@ export class DeviceWizard {
           console.warn('[wizard] device rename failed', err);
         }
 
-        // Entity renames
+        // Entity renames (only set name for multi-channel entities; keep single-channel Friendly Name intact)
         for (const ch of activeChannels) {
           try {
-            await this.hass.callWS({
+            const payload = {
               type: 'config/entity_registry/update',
               entity_id: ch.entity_id,
-              name: ch.name || undefined,
               area_id: this.selectedAreaId || undefined,
-            });
+            };
+            if (isMulti && ch.name) {
+              payload.name = ch.name;
+            }
+            await this.hass.callWS(payload);
           } catch (err) {
             console.warn('[wizard] entity rename failed', err);
           }
@@ -1761,6 +1774,7 @@ export class DeviceWizard {
 
           if (conflicts.length > 0) {
             this._saving = false;
+            this.dialog.hidden = true;
             const conflictModal = new SensorConflictModal({
               hass: this.hass,
               areaName: room?.name || 'Raum',
@@ -1772,12 +1786,24 @@ export class DeviceWizard {
                 cfg.rooms[this.selectedAreaId] ||= {};
                 cfg.rooms[this.selectedAreaId].sensor_prefs = prefs;
                 await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config: cfg });
-                this.isCelebration = true;
-                this._renderCelebration();
+                if (this.directMode) {
+                  this.onClose();
+                  this.onSaved(null);
+                } else {
+                  this.dialog.hidden = false;
+                  this.isCelebration = true;
+                  this._renderCelebration();
+                }
               },
               onCancel: () => {
-                this.isCelebration = true;
-                this._renderCelebration();
+                if (this.directMode) {
+                  this.onClose();
+                  this.onSaved(null);
+                } else {
+                  this.dialog.hidden = false;
+                  this.isCelebration = true;
+                  this._renderCelebration();
+                }
               },
             });
             this.el.append(conflictModal.el);
@@ -1789,8 +1815,13 @@ export class DeviceWizard {
       }
 
       this._saving = false;
-      this.isCelebration = true;
-      this._renderCelebration();
+      if (this.directMode) {
+        this.onClose();
+        this.onSaved(null);
+      } else {
+        this.isCelebration = true;
+        this._renderCelebration();
+      }
     } catch (err) {
       this._saving = false;
       this._renderFoot();

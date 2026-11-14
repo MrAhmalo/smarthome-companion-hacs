@@ -34,6 +34,21 @@ function appendChildren(el, children) {
 
 export const icon = (name, cls = '') => h('ha-icon', { icon: name, class: cls });
 
+/** Reusable SVG marching-ants dashed overlay rect rendered in Edit Mode. */
+export function editBorder(rx = 10) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('class', 'edit-march-svg');
+  svg.setAttribute('aria-hidden', 'true');
+  const rect = document.createElementNS(ns, 'rect');
+  rect.setAttribute('width', '100%');
+  rect.setAttribute('height', '100%');
+  rect.setAttribute('rx', String(rx));
+  rect.setAttribute('ry', String(rx));
+  svg.appendChild(rect);
+  return svg;
+}
+
 export const domainOf = (entityId) => (entityId || '').split('.')[0];
 
 /** Replace all children of `el`. */

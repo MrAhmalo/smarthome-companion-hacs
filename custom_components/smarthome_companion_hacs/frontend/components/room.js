@@ -1,6 +1,6 @@
 // Room component: collapsible "expander" card with area header (sensors, alerts, group controls) and tiles.
 import {
-  h, icon, domainOf, isActive, numeric, effectiveCategory,
+  h, icon, editBorder, domainOf, isActive, numeric, effectiveCategory,
 } from '../lib/util.js';
 import { Tile, GroupTile } from './tile.js';
 
@@ -155,7 +155,7 @@ export class GroupedCoverTile {
     this.el = h('div', {
       class: 'tile grouped-cover wide',
       'data-active': 'true',
-    }, h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns));
+    }, h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns), editBorder(10));
 
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
@@ -317,13 +317,18 @@ export class Room {
     h('div', { class: 'room-icon' }, icon(spec.icon)),
     h('div', { class: 'room-title' }, h('div', { class: 'room-name' }, spec.name), this.metaEl),
     this.controlsEl,
-    icon('mdi:chevron-down', 'chevron'));
+    icon('mdi:chevron-down', 'chevron'),
+    editBorder(17));
 
-    // Capture clicks anywhere on the room header in Edit Mode (including group controls)
+    // Capture clicks anywhere on the room header in Edit Mode (except chevron expand/collapse)
     this.head.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
         e.stopPropagation();
         e.preventDefault();
+        if (e.target.closest('.chevron')) {
+          this._toggleOpen();
+          return;
+        }
         this.ctx.onEditRoom?.(this.spec);
       }
     }, true);
@@ -364,19 +369,20 @@ export class Room {
     } else {
       const anyOn = states.some((s) => isActive(s));
       const targetService = anyOn ? 'turn_off' : 'turn_on';
-      const byDomain = {};
+      const valveIds = [];
+      const genericIds = [];
       for (const id of group.ids) {
-        const dom = domainOf(id);
-        (byDomain[dom] ||= []).push(id);
-      }
-      for (const [dom, ids] of Object.entries(byDomain)) {
-        if (['light', 'switch', 'input_boolean'].includes(dom)) {
-          this.hass.callService(dom, targetService, { entity_id: ids });
-        } else if (dom === 'valve') {
-          this.hass.callService('valve', targetService === 'turn_on' ? 'open_valve' : 'close_valve', { entity_id: ids });
+        if (domainOf(id) === 'valve') {
+          valveIds.push(id);
         } else {
-          this.hass.callService('homeassistant', targetService, { entity_id: ids });
+          genericIds.push(id);
         }
+      }
+      if (genericIds.length) {
+        this.hass.callService('homeassistant', targetService, { entity_id: genericIds });
+      }
+      if (valveIds.length) {
+        this.hass.callService('valve', targetService === 'turn_on' ? 'open_valve' : 'close_valve', { entity_id: valveIds });
       }
     }
   }

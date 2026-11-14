@@ -1,6 +1,6 @@
 // Tile component: one entity as a HA-tile-like card (lights, switches, covers, climate, media, sensors).
 import {
-  h, icon, domainOf, entityIcon, isActive, isUnavailable, stateLabel, numeric, moreInfo, toggleEntity,
+  h, icon, editBorder, domainOf, entityIcon, isActive, isUnavailable, stateLabel, numeric, moreInfo, toggleEntity,
   isToggleable, resolveColor, effectiveCategory, getEntityColor, setSliderVal,
 } from '../lib/util.js';
 
@@ -35,6 +35,8 @@ export class Tile {
     this._st = undefined;
     this._pw = undefined;
     this._presetKey = '';
+    this._optimisticOn = null;
+    this._optimisticUntil = 0;
     this._build();
   }
 
@@ -63,7 +65,8 @@ export class Tile {
     const wide = ['cover', 'media_player', 'climate'].includes(this.kind);
     this.el = h('div', { class: `tile ${this.kind}${wide ? ' wide' : ''}`, 'data-key': this.spec.key },
       h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns),
-      this.feature);
+      this.feature,
+      editBorder(10));
 
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
@@ -195,11 +198,24 @@ export class Tile {
     }
   }
 
+  _applyOptimistic(desiredOn, until) {
+    this._optimisticOn = desiredOn;
+    this._optimisticUntil = until;
+    if (this.hass) this.update(this.hass);
+  }
+
   update(hass) {
     this.hass = hass;
     const st = hass.states[this.entityId];
     const pw = this.spec.power ? hass.states[this.spec.power] : null;
-    const stateKey = `${st?.state}|${st?.attributes?.brightness}|${st?.attributes?.current_position}|${st?.attributes?.rgb_color}|${st?.last_updated}|${pw?.state}`;
+    if (this._optimisticOn !== null) {
+      const actualActive = this._active(st);
+      if (actualActive === this._optimisticOn || Date.now() >= this._optimisticUntil) {
+        this._optimisticOn = null;
+        this._optimisticUntil = 0;
+      }
+    }
+    const stateKey = `${st?.state}|${st?.attributes?.brightness}|${st?.attributes?.current_position}|${st?.attributes?.rgb_color}|${st?.last_updated}|${pw?.state}|${this._optimisticOn}`;
     if (this._rendered && this._stateKey === stateKey) return;
     this._rendered = true;
     this._stateKey = stateKey;
@@ -208,7 +224,7 @@ export class Tile {
 
     const attrs = st?.attributes || {};
     const unavailable = isUnavailable(st);
-    const active = this._active(st);
+    const active = this._optimisticOn !== null ? this._optimisticOn : this._active(st);
     this.el.toggleAttribute('data-unavailable', unavailable);
     this.el.dataset.active = String(active);
 
@@ -216,15 +232,20 @@ export class Tile {
     this.nameEl.textContent = this.spec.name || attrs.friendly_name || this.entityId;
 
     // Icon + colour
-    this.iconEl.setAttribute('icon', entityIcon(this.entityId, st, this.spec.icon, this.spec.category));
+    const effectiveSt = this._optimisticOn !== null && st
+      ? { ...st, state: this._optimisticOn ? 'on' : 'off' }
+      : st;
+    this.iconEl.setAttribute('icon', entityIcon(this.entityId, effectiveSt, this.spec.icon, this.spec.category));
     let color = '';
     if (active) {
-      color = getEntityColor(this.entityId, st, this.spec.category, this.spec.color);
+      color = getEntityColor(this.entityId, effectiveSt, this.spec.category, this.spec.color);
     }
     if (color) this.el.style.setProperty('--tile-color', color); else this.el.style.removeProperty('--tile-color');
 
     // State text
-    this.stateEl.textContent = this._stateText(hass, st, pw, active);
+    this.stateEl.textContent = this._optimisticOn !== null
+      ? (this._optimisticOn ? 'An' : 'Aus')
+      : this._stateText(hass, st, pw, active);
 
     // Kind specifics
     if (this.kind === 'cover') this._updateCover(st, unavailable);
@@ -319,6 +340,9 @@ export class GroupTile {
     this.hass = null;
     this._open = false;
     this._dragging = false;
+    this._optimisticOn = null;
+    this._optimisticUntil = 0;
+    this._stragglerTimer = null;
 
     // Sub-groups inside a group NEVER have children or nested accordions!
     if (this.isSubGroup) {
@@ -369,21 +393,15 @@ export class GroupTile {
     this.nameEl = h('div', { class: 'tile-name' }, this.spec.name);
     this.stateEl = h('div', { class: 'tile-state' }, 'Aus');
 
-    const openGroupMoreInfo = () => {
-      const targetEntity = this.spec.entity_id || this.entityIds[0];
-      if (targetEntity) moreInfo(this.el, targetEntity);
-    };
-
     this.info = h('div', {
       class: 'tile-info',
-      title: 'Details öffnen',
       onClick: (e) => {
         e.stopPropagation();
         if (this.ctx?.isEditMode?.()) {
           this.ctx.onOpenGroup?.(this.spec.group_id);
           return;
         }
-        openGroupMoreInfo();
+        this._toggleMaster();
       },
     }, this.nameEl, this.stateEl);
 
@@ -430,7 +448,7 @@ export class GroupTile {
           this.ctx.onOpenGroup?.(this.spec.group_id);
           return;
         }
-        openGroupMoreInfo();
+        this._toggleMaster();
       },
     }, this.iconBtn, this.info, this.btns);
 
@@ -439,7 +457,7 @@ export class GroupTile {
         class: 'tile group subgroup',
         'data-key': this.spec.key,
         'data-group': 'true',
-      }, mainRow, this.feature);
+      }, mainRow, this.feature, editBorder(10));
     } else {
       if (this.children.length % 2 === 1) {
         for (let i = 0; i < this.children.length - 1; i++) {
@@ -457,12 +475,16 @@ export class GroupTile {
         class: 'tile group wide',
         'data-key': this.spec.key,
         'data-group': 'true',
-      }, mainRow, this.feature, this.subBody);
+      }, mainRow, this.feature, this.subBody, editBorder(10));
     }
 
-    // Edit Mode click interception
+    // Edit Mode click interception (allow chevron toggle & child/subgroup tile clicks)
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
+        const closestTile = e.target.closest('.tile');
+        if (e.target.closest('.chevron-btn') || (closestTile && closestTile !== this.el) || (this.subBody && this.subBody.contains(e.target))) {
+          return;
+        }
         e.stopPropagation();
         e.preventDefault();
         this.ctx.onOpenGroup?.(this.spec.group_id);
@@ -477,16 +499,45 @@ export class GroupTile {
     this.btnChevron?.setAttribute('aria-expanded', String(this._open));
   }
 
+  _applyOptimistic(desiredOn, until) {
+    this._optimisticOn = desiredOn;
+    this._optimisticUntil = until;
+    this.children.forEach((c) => c._applyOptimistic?.(desiredOn, until));
+    if (this.hass) this.update(this.hass);
+  }
+
   _toggleMaster() {
-    if (!this.hass) return;
+    if (!this.hass || !this.entityIds.length) return;
     const states = this.entityIds.map((id) => this.hass.states[id]).filter(Boolean);
-    const anyOn = states.some((s) => s.state === 'on');
-    const service = anyOn ? 'turn_off' : 'turn_on';
-    const domain = this.domain;
-    for (const eid of this.entityIds) {
-      const d = domainOf(eid);
-      this.hass.callService(d === 'light' || d === 'switch' ? d : domain, service, { entity_id: eid });
-    }
+    const hasActiveLock = this._optimisticOn !== null && Date.now() < this._optimisticUntil;
+    const anyOn = hasActiveLock ? this._optimisticOn : states.some((s) => s.state === 'on');
+    const desiredOn = !anyOn;
+    const service = desiredOn ? 'turn_on' : 'turn_off';
+    const until = Date.now() + 4000;
+
+    this._applyOptimistic(desiredOn, until);
+    this.hass.callService('homeassistant', service, { entity_id: this.entityIds });
+
+    if (this._stragglerTimer) clearTimeout(this._stragglerTimer);
+    this._stragglerTimer = setTimeout(() => {
+      this._stragglerTimer = null;
+      if (!this.hass) return;
+      const targetState = desiredOn ? 'on' : 'off';
+      const stragglers = this.entityIds.filter((eid) => {
+        const st = this.hass.states[eid];
+        return !st || st.state !== targetState;
+      });
+      if (stragglers.length > 0 && Date.now() < this._optimisticUntil) {
+        this.hass.callService('homeassistant', service, { entity_id: stragglers });
+      }
+      setTimeout(() => {
+        if (this.hass && Date.now() >= this._optimisticUntil) {
+          this._optimisticOn = null;
+          this._optimisticUntil = 0;
+          this.update(this.hass);
+        }
+      }, 2600);
+    }, 1500);
   }
 
   _setMasterBrightness(pct) {
@@ -503,9 +554,19 @@ export class GroupTile {
     this.children.forEach((c) => c.update(hass));
 
     const states = this.entityIds.map((id) => hass.states[id]).filter(Boolean);
+    if (this._optimisticOn !== null) {
+      const targetState = this._optimisticOn ? 'on' : 'off';
+      const allConverged =
+        states.length === this.entityIds.length &&
+        states.every((s) => s.state === targetState);
+      if (allConverged || Date.now() >= this._optimisticUntil) {
+        this._optimisticOn = null;
+        this._optimisticUntil = 0;
+      }
+    }
+
     const activeStates = states.filter((s) => s.state === 'on');
-    const activeCount = activeStates.length;
-    const anyOn = activeCount > 0;
+    const anyOn = this._optimisticOn !== null ? this._optimisticOn : activeStates.length > 0;
 
     this.el.dataset.active = String(anyOn);
     this.iconBtn.classList.toggle('active', anyOn);
@@ -522,7 +583,7 @@ export class GroupTile {
 
     if (!states.length) {
       this.stateEl.textContent = 'Keine Entitäten';
-    } else if (activeCount === 0) {
+    } else if (!anyOn) {
       this.stateEl.textContent = 'Aus';
     } else {
       const avgBr = this._avgBrightness(activeStates);

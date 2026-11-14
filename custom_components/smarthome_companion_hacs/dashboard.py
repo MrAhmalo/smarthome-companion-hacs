@@ -31,6 +31,7 @@ from homeassistant.helpers import (
 )
 
 from .const import DOMAIN, VERSION
+from .entity_sync import async_sync_renamed_entities, slugify_ha
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -275,6 +276,9 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
     hidden_tiles = set(config.get("hidden_tiles", []))
     tile_users = config.get("tile_users", {})
 
+    def valid_area(aid: str | None) -> str | None:
+        return aid if (aid and aid in areas) else None
+
     tiles_by_area: dict[str, list[dict]] = {}
     configured_sensors: dict[str, dict[str, list[str]]] = {}
     seen_entities: set[str] = set()
@@ -288,11 +292,11 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
         if not edit:
             if tile["hidden"] or not _allowed(tile["users"], user_id):
                 return
-        tiles_by_area.setdefault(area_id or NO_AREA_ID, []).append(tile)
+        tiles_by_area.setdefault(valid_area(area_id) or NO_AREA_ID, []).append(tile)
 
     def make_tile(key, entry, entity_id, name, category, icon, device, power=None, energy=None):
         cat = categories.get(category, {}) if category else {}
-        area_id = (entry.area_id if entry else None) or (device.area_id if device else None)
+        area_id = valid_area((entry.area_id if entry else None) or (device.area_id if device else None))
         return area_id, {
             "key": key,
             "device_id": device.id if device else (key.split(":")[0] if ":" in key else None),
@@ -394,7 +398,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                     s_eid = s_key
                 else:
                     continue
-                s_area = (s_entry.area_id if s_entry else None) or (device.area_id if device else None) or NO_AREA_ID
+                s_area = valid_area((s_entry.area_id if s_entry else None) or (device.area_id if device else None)) or NO_AREA_ID
                 bucket = configured_sensors.setdefault(s_area, {}).setdefault(s_type, [])
                 if s_eid not in bucket:
                     bucket.append(s_eid)
@@ -412,7 +416,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
             f"extra:{(entry.unique_id if entry and entry.unique_id else entity_id)}",
             entry, entity_id, extra.get("name"), None, extra.get("icon"), device,
         )
-        add_tile(extra.get("area_id") or area_id, tile)
+        add_tile(valid_area(extra.get("area_id")) or area_id, tile)
 
     # Only configured devices and extra_tiles are included on the dashboard
 
@@ -515,14 +519,14 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                                 "name": item_name,
                                 "category": g_cat,
                                 "icon": g.get("icon") or cat_info.get("icon"),
-                                "area_id": dev.area_id or g.get("area_id"),
+                                "area_id": valid_area(dev.area_id) or valid_area(g.get("area_id")),
                             })
 
             unique_eids = list(dict.fromkeys(descendant_eids))
-            area_id = g.get("area_id")
+            area_id = valid_area(g.get("area_id"))
             if not area_id and child_specs:
                 first = child_specs[0]
-                area_id = first.get("area_id")
+                area_id = valid_area(first.get("area_id"))
 
             group_entry = by_uid.get(("light", f"smarthome_companion_group_light_{gid}"))
             return {
@@ -583,6 +587,9 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
         if not edit and not _allowed(visible_users, user_id):
             continue
         tiles = list(tiles_by_area.get(area_id, []))
+        all_room_sensors = configured_sensors.get(area_id, {})
+        if (not edit or area_id == NO_AREA_ID) and not tiles and not all_room_sensors:
+            continue
         custom_order = config.get("tile_order", {}).get(area_id, [])
         pos = {k: i for i, k in enumerate(custom_order)}
         # Strict hierarchy: 1. Jalousien, 2. Medien/TV, 3. Rest. Custom order applies within category.
@@ -594,7 +601,6 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
         mode = rcfg.get("expanded", "collapsed")
         expanded = mode in ("expanded", "always") or user_id in rcfg.get("expanded_users", [])
         area = areas.get(area_id)
-        all_room_sensors = configured_sensors.get(area_id, {})
         sensor_prefs = rcfg.get("sensor_prefs", {}) if isinstance(rcfg.get("sensor_prefs"), dict) else {}
         effective_sensors: dict[str, list[str]] = {}
         for s_type, eids in all_room_sensors.items():
@@ -636,6 +642,8 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
 def async_register_dashboard_websockets(hass):
     websocket_api.async_register_command(hass, handle_dashboard_get)
     websocket_api.async_register_command(hass, handle_dashboard_save)
+    websocket_api.async_register_command(hass, handle_dashboard_room_update)
+    websocket_api.async_register_command(hass, handle_dashboard_room_delete)
     websocket_api.async_register_command(hass, handle_dashboard_users)
     websocket_api.async_register_command(hass, handle_dashboard_subscribe)
 
@@ -680,6 +688,131 @@ async def handle_dashboard_save(hass, connection, msg):
         return
     hass.bus.async_fire(UPDATE_EVENT)
     connection.send_result(msg["id"], {"success": True, "config": config})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smarthome_companion/dashboard/room_update",
+    vol.Required("area_id"): str,
+    vol.Optional("name"): str,
+    vol.Optional("icon"): vol.Any(str, None),
+    vol.Optional("sensor_prefs"): dict,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def handle_dashboard_room_update(hass, connection, msg):
+    """Update a room's name/icon/sensor_prefs and cascade room slug changes to entities."""
+    store = hass.data[DOMAIN]["store"]
+    area_id = msg["area_id"]
+    area_reg = ar.async_get(hass)
+    dev_reg = dr.async_get(hass)
+    ent_reg = er.async_get(hass)
+
+    old_slug = ""
+    new_slug = ""
+    renamed_map: dict[str, str] = {}
+
+    if area_id != NO_AREA_ID:
+        area_entry = area_reg.async_get_area(area_id)
+        if area_entry:
+            old_slug = slugify_ha(area_entry.name)
+            area_kwargs = {}
+            new_name = (msg.get("name") or "").strip()
+            if new_name and new_name != area_entry.name:
+                area_kwargs["name"] = new_name
+                new_slug = slugify_ha(new_name)
+            if "icon" in msg:
+                area_kwargs["icon"] = msg["icon"] or None
+            if area_kwargs:
+                area_reg.async_update(area_id, **area_kwargs)
+
+    config = _sanitize_config(await async_get_or_create_config(hass, store))
+    room_cfg = config["rooms"].setdefault(area_id, {})
+    if "icon" in msg:
+        room_cfg["icon"] = msg["icon"]
+    if "sensor_prefs" in msg:
+        room_cfg["sensor_prefs"] = msg["sensor_prefs"]
+
+    if not await store.save_dashboard_config(config):
+        connection.send_result(msg["id"], {"save_failed": True})
+        return
+
+    if old_slug and new_slug and old_slug != new_slug:
+        room_dev_ids = {d.id for d in dev_reg.devices.values() if d.area_id == area_id}
+        for e in list(ent_reg.entities.values()):
+            in_room = e.area_id == area_id or (e.device_id in room_dev_ids and not e.area_id)
+            if not in_room:
+                continue
+            prefix = f"{e.domain}.{old_slug}_"
+            if not e.entity_id.startswith(prefix):
+                continue
+            suffix = e.entity_id[len(prefix):]
+            target_eid = f"{e.domain}.{new_slug}_{suffix}"
+            if target_eid != e.entity_id and not ent_reg.async_get(target_eid):
+                try:
+                    ent_reg.async_update_entity(e.entity_id, new_entity_id=target_eid)
+                    renamed_map[e.entity_id] = target_eid
+                    _LOGGER.info("Cascaded room rename to entity ID: %s -> %s", e.entity_id, target_eid)
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.warning("Could not cascade room rename to %s: %s", e.entity_id, err)
+        if renamed_map:
+            await async_sync_renamed_entities(hass, store, renamed_map)
+
+    hass.bus.async_fire(UPDATE_EVENT)
+    connection.send_result(msg["id"], {"success": True, "renamed": renamed_map})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smarthome_companion/dashboard/room_delete",
+    vol.Required("area_id"): str,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def handle_dashboard_room_delete(hass, connection, msg):
+    """Delete an HA area cleanly and unassign all devices, entities, groups, and dashboard refs."""
+    store = hass.data[DOMAIN]["store"]
+    area_id = msg["area_id"]
+    if area_id == NO_AREA_ID:
+        connection.send_result(msg["id"], {"success": True})
+        return
+
+    area_reg = ar.async_get(hass)
+    dev_reg = dr.async_get(hass)
+    ent_reg = er.async_get(hass)
+
+    if area_reg.async_get_area(area_id):
+        area_reg.async_delete(area_id)
+
+    for d in list(dev_reg.devices.values()):
+        if d.area_id == area_id:
+            dev_reg.async_update_device(d.id, area_id=None)
+
+    for e in list(ent_reg.entities.values()):
+        if e.area_id == area_id:
+            ent_reg.async_update_entity(e.entity_id, area_id=None)
+
+    groups = store.get_groups()
+    groups_changed = False
+    for g in groups.values():
+        if isinstance(g, dict) and g.get("area_id") == area_id:
+            g["area_id"] = ""
+            groups_changed = True
+    if groups_changed:
+        await store.save_groups(groups)
+
+    config = _sanitize_config(await async_get_or_create_config(hass, store))
+    for extra in config["extra_tiles"]:
+        if isinstance(extra, dict) and extra.get("area_id") == area_id:
+            extra["area_id"] = ""
+    config["rooms"].pop(area_id, None)
+    config["room_order"] = [rid for rid in config["room_order"] if rid != area_id]
+    config["tile_order"].pop(area_id, None)
+
+    if not await store.save_dashboard_config(config):
+        connection.send_result(msg["id"], {"save_failed": True})
+        return
+
+    hass.bus.async_fire(UPDATE_EVENT)
+    connection.send_result(msg["id"], {"success": True})
 
 
 @websocket_api.websocket_command({

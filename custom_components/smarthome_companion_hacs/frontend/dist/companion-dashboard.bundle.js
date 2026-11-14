@@ -73,42 +73,38 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   cursor: pointer !important;
   position: relative !important;
 }
-.page[data-edit-mode] .tile::before,
-.page[data-edit-mode] .cover-detail-row::before {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  border: 2px dashed var(--cd-accent);
-  border-radius: calc(var(--cd-tile-radius, 12px) - 2px);
-  pointer-events: none;
-  z-index: 2;
-  box-sizing: border-box;
-}
-.page[data-edit-mode] .room-head::before {
-  content: '';
+.edit-march-svg {
+  display: none;
   position: absolute;
   inset: 3px;
-  border: 2px dashed var(--cd-accent);
-  border-radius: calc(var(--cd-radius) - 3px);
+  width: calc(100% - 6px);
+  height: calc(100% - 6px);
+  overflow: visible;
   pointer-events: none;
   z-index: 2;
-  box-sizing: border-box;
+}
+.room-head > .edit-march-svg {
+  inset: 4px;
+  width: calc(100% - 8px);
+  height: calc(100% - 8px);
+}
+.page[data-edit-mode] .edit-march-svg {
+  display: block;
+}
+.edit-march-svg rect {
+  fill: none;
+  stroke: var(--cd-accent);
+  stroke-width: 2px;
+  stroke-dasharray: 8 6;
 }
 @keyframes cdEditMarch {
-  0%   { background-position: 0 0, 0 100%, 0 0, 100% 0; }
-  100% { background-position: 24px 0, -24px 100%, 0 -24px, 100% 24px; }
+  to { stroke-dashoffset: -28; }
 }
 @media (hover: hover) {
-  .page[data-edit-mode] .tile:hover::before,
-  .page[data-edit-mode] .cover-detail-row:hover::before,
-  .page[data-edit-mode] .room-head:hover::before {
-    border-color: transparent;
-    background:
-      repeating-linear-gradient(90deg, var(--cd-accent) 0 7px, transparent 7px 12px) 0 0 / 24px 2px repeat-x,
-      repeating-linear-gradient(90deg, var(--cd-accent) 0 7px, transparent 7px 12px) 0 100% / 24px 2px repeat-x,
-      repeating-linear-gradient(0deg, var(--cd-accent) 0 7px, transparent 7px 12px) 0 0 / 2px 24px repeat-y,
-      repeating-linear-gradient(0deg, var(--cd-accent) 0 7px, transparent 7px 12px) 100% 0 / 2px 24px repeat-y;
-    animation: cdEditMarch 0.7s linear infinite;
+  .page[data-edit-mode] .tile:hover:not(:has(.tile:hover)) > .edit-march-svg rect,
+  .page[data-edit-mode] .cover-detail-row:hover > .edit-march-svg rect,
+  .page[data-edit-mode] .room-head:hover > .edit-march-svg rect {
+    animation: cdEditMarch 0.8s linear infinite;
   }
 }
 .device-room-section { margin-top: 16px; }
@@ -217,20 +213,32 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .tile.group {
   position: relative;
   gap: 0;
+  padding: 10px;
+  border: 1px solid transparent;
+  box-sizing: border-box;
   transition: background .2s, border-color .2s;
   box-shadow: none;
 }
+.tile.group .tile-main {
+  cursor: pointer;
+}
+.tile.group .tile-btns:empty {
+  display: none;
+}
 .tile.group .tile-feature:not([hidden]) {
-  margin-top: 8px;
+  margin-top: 10px;
 }
 .tile.group[data-open] {
   background: var(--cd-tile-bg);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-color: rgba(128, 128, 128, 0.16);
+  border-color: color-mix(in srgb, var(--primary-text-color, #fff) 10%, transparent);
   box-shadow: none;
 }
 .tile.group.subgroup {
+  padding: 10px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(128, 128, 128, 0.12);
+  border-color: color-mix(in srgb, var(--primary-text-color, #fff) 8%, transparent);
   grid-column: span 1;
 }
 @media (hover: hover) {
@@ -243,7 +251,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
-  transition: grid-template-rows .3s ease, opacity .25s ease;
+  transition: grid-template-rows .28s cubic-bezier(0.22, 1, 0.36, 1), opacity .22s ease;
 }
 .tile.group[data-open] .group-sub-body {
   grid-template-rows: 1fr;
@@ -254,16 +262,17 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   min-height: 0;
 }
 .group-sub-container {
-  width: 100%; padding: 8px 0 0 0; margin-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  width: 100%; padding: 10px 0 0 0; margin-top: 10px;
+  border-top: 1px solid rgba(128, 128, 128, 0.12);
+  border-top-color: color-mix(in srgb, var(--primary-text-color, #fff) 8%, transparent);
   background: transparent;
   border-radius: 0;
 }
 .group-sub-grid {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0;
 }
 .chevron-btn { flex-shrink: 0; }
-.chevron-btn ha-icon { transition: transform .28s ease; }
+.chevron-btn ha-icon { transition: transform .28s cubic-bezier(0.22, 1, 0.36, 1); }
 .tile.group[data-open] .chevron-btn ha-icon { transform: rotate(180deg); }
 
 /* ── Multi-select & Action Bar ── */
@@ -485,14 +494,14 @@ input[type=range].slider::-moz-range-thumb {
   overflow: hidden;
   position: relative;
 }
-.dialog-head { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 12px 12px 12px 20px; border-bottom: 1px solid rgba(128,128,128,.18); }
+.dialog-head { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 12px 12px 12px 20px; border-bottom: 1px solid rgba(128,128,128,.18); border-radius: calc(var(--cd-radius) - 1px) calc(var(--cd-radius) - 1px) 0 0; }
 .dialog-head h2 { flex: 1; margin: 0; font-size: 18px; }
 .tabs { flex-shrink: 0; display: flex; gap: 4px; padding: 6px 12px 0; min-height: 44px; align-items: flex-end; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid rgba(128,128,128,.18); }
 .tab { flex-shrink: 0; border: 0; background: transparent; cursor: pointer; padding: 9px 14px; border-radius: 10px 10px 0 0; font-weight: 600; font-size: 13px; color: var(--cd-secondary); white-space: nowrap; transition: color .15s, background .15s; }
 .tab:hover { color: var(--primary-text-color, #fff); background: rgba(128,128,128,.08); }
 .tab[data-active] { color: var(--cd-accent); box-shadow: inset 0 -2px 0 var(--cd-accent); }
 .dialog-body { flex: 1; min-height: 480px; overflow-y: auto; overflow-x: hidden; padding: 20px 24px 20px; display: flex; flex-direction: column; gap: 14px; }
-.dialog-foot { flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 24px; border-top: 1px solid rgba(128,128,128,.18); background: var(--cd-card); }
+.dialog-foot { flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 24px; border-top: 1px solid rgba(128,128,128,.18); background: var(--cd-card); border-radius: 0 0 calc(var(--cd-radius) - 1px) calc(var(--cd-radius) - 1px); }
 .dialog-foot-actions { display: flex; align-items: center; gap: 10px; }
 .hint { font-size: 12px; color: var(--cd-secondary); line-height: 1.5; white-space: pre-line; }
 .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--cd-secondary); margin-top: 6px; }
@@ -1124,6 +1133,9 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
 .room-modal-dialog {
   overflow: hidden !important;
 }
+.room-modal-dialog:has([data-open]) {
+  overflow: visible !important;
+}
 .group-modal-dialog .dialog-body,
 .room-modal-dialog .dialog-body {
   min-height: auto !important;
@@ -1136,8 +1148,11 @@ details.adv-options summary:hover { color: var(--primary-text-color, #fff); }
   max-height: calc(100dvh - 180px);
   overflow-y: auto !important;
 }
+.room-modal-dialog .dialog-body:has([data-open]) {
+  overflow: visible !important;
+}
 .room-modal-dialog .dialog-foot {
-  border-radius: 0 0 var(--cd-radius) var(--cd-radius);
+  border-radius: 0 0 calc(var(--cd-radius) - 1px) calc(var(--cd-radius) - 1px);
 }
 .room-modal-dialog .cdd-menu {
   max-height: min(220px, 38dvh);
@@ -1305,6 +1320,21 @@ function appendChildren(el, children) {
   }
 }
 const icon = (name, cls = '') => h('ha-icon', { icon: name, class: cls });
+
+/** Reusable SVG marching-ants dashed overlay rect rendered in Edit Mode. */
+function editBorder(rx = 10) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('class', 'edit-march-svg');
+  svg.setAttribute('aria-hidden', 'true');
+  const rect = document.createElementNS(ns, 'rect');
+  rect.setAttribute('width', '100%');
+  rect.setAttribute('height', '100%');
+  rect.setAttribute('rx', String(rx));
+  rect.setAttribute('ry', String(rx));
+  svg.appendChild(rect);
+  return svg;
+}
 const domainOf = (entityId) => (entityId || '').split('.')[0];
 
 /** Replace all children of `el`. */
@@ -2609,6 +2639,8 @@ class Tile {
     this._st = undefined;
     this._pw = undefined;
     this._presetKey = '';
+    this._optimisticOn = null;
+    this._optimisticUntil = 0;
     this._build();
   }
 
@@ -2637,7 +2669,8 @@ class Tile {
     const wide = ['cover', 'media_player', 'climate'].includes(this.kind);
     this.el = h('div', { class: `tile ${this.kind}${wide ? ' wide' : ''}`, 'data-key': this.spec.key },
       h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns),
-      this.feature);
+      this.feature,
+      editBorder(10));
 
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
@@ -2769,11 +2802,24 @@ class Tile {
     }
   }
 
+  _applyOptimistic(desiredOn, until) {
+    this._optimisticOn = desiredOn;
+    this._optimisticUntil = until;
+    if (this.hass) this.update(this.hass);
+  }
+
   update(hass) {
     this.hass = hass;
     const st = hass.states[this.entityId];
     const pw = this.spec.power ? hass.states[this.spec.power] : null;
-    const stateKey = `${st?.state}|${st?.attributes?.brightness}|${st?.attributes?.current_position}|${st?.attributes?.rgb_color}|${st?.last_updated}|${pw?.state}`;
+    if (this._optimisticOn !== null) {
+      const actualActive = this._active(st);
+      if (actualActive === this._optimisticOn || Date.now() >= this._optimisticUntil) {
+        this._optimisticOn = null;
+        this._optimisticUntil = 0;
+      }
+    }
+    const stateKey = `${st?.state}|${st?.attributes?.brightness}|${st?.attributes?.current_position}|${st?.attributes?.rgb_color}|${st?.last_updated}|${pw?.state}|${this._optimisticOn}`;
     if (this._rendered && this._stateKey === stateKey) return;
     this._rendered = true;
     this._stateKey = stateKey;
@@ -2782,7 +2828,7 @@ class Tile {
 
     const attrs = st?.attributes || {};
     const unavailable = isUnavailable(st);
-    const active = this._active(st);
+    const active = this._optimisticOn !== null ? this._optimisticOn : this._active(st);
     this.el.toggleAttribute('data-unavailable', unavailable);
     this.el.dataset.active = String(active);
 
@@ -2790,15 +2836,20 @@ class Tile {
     this.nameEl.textContent = this.spec.name || attrs.friendly_name || this.entityId;
 
     // Icon + colour
-    this.iconEl.setAttribute('icon', entityIcon(this.entityId, st, this.spec.icon, this.spec.category));
+    const effectiveSt = this._optimisticOn !== null && st
+      ? { ...st, state: this._optimisticOn ? 'on' : 'off' }
+      : st;
+    this.iconEl.setAttribute('icon', entityIcon(this.entityId, effectiveSt, this.spec.icon, this.spec.category));
     let color = '';
     if (active) {
-      color = getEntityColor(this.entityId, st, this.spec.category, this.spec.color);
+      color = getEntityColor(this.entityId, effectiveSt, this.spec.category, this.spec.color);
     }
     if (color) this.el.style.setProperty('--tile-color', color); else this.el.style.removeProperty('--tile-color');
 
     // State text
-    this.stateEl.textContent = this._stateText(hass, st, pw, active);
+    this.stateEl.textContent = this._optimisticOn !== null
+      ? (this._optimisticOn ? 'An' : 'Aus')
+      : this._stateText(hass, st, pw, active);
 
     // Kind specifics
     if (this.kind === 'cover') this._updateCover(st, unavailable);
@@ -2893,6 +2944,9 @@ class GroupTile {
     this.hass = null;
     this._open = false;
     this._dragging = false;
+    this._optimisticOn = null;
+    this._optimisticUntil = 0;
+    this._stragglerTimer = null;
 
     // Sub-groups inside a group NEVER have children or nested accordions!
     if (this.isSubGroup) {
@@ -2943,21 +2997,15 @@ class GroupTile {
     this.nameEl = h('div', { class: 'tile-name' }, this.spec.name);
     this.stateEl = h('div', { class: 'tile-state' }, 'Aus');
 
-    const openGroupMoreInfo = () => {
-      const targetEntity = this.spec.entity_id || this.entityIds[0];
-      if (targetEntity) moreInfo(this.el, targetEntity);
-    };
-
     this.info = h('div', {
       class: 'tile-info',
-      title: 'Details öffnen',
       onClick: (e) => {
         e.stopPropagation();
         if (this.ctx?.isEditMode?.()) {
           this.ctx.onOpenGroup?.(this.spec.group_id);
           return;
         }
-        openGroupMoreInfo();
+        this._toggleMaster();
       },
     }, this.nameEl, this.stateEl);
 
@@ -3004,7 +3052,7 @@ class GroupTile {
           this.ctx.onOpenGroup?.(this.spec.group_id);
           return;
         }
-        openGroupMoreInfo();
+        this._toggleMaster();
       },
     }, this.iconBtn, this.info, this.btns);
 
@@ -3013,7 +3061,7 @@ class GroupTile {
         class: 'tile group subgroup',
         'data-key': this.spec.key,
         'data-group': 'true',
-      }, mainRow, this.feature);
+      }, mainRow, this.feature, editBorder(10));
     } else {
       if (this.children.length % 2 === 1) {
         for (let i = 0; i < this.children.length - 1; i++) {
@@ -3031,12 +3079,16 @@ class GroupTile {
         class: 'tile group wide',
         'data-key': this.spec.key,
         'data-group': 'true',
-      }, mainRow, this.feature, this.subBody);
+      }, mainRow, this.feature, this.subBody, editBorder(10));
     }
 
-    // Edit Mode click interception
+    // Edit Mode click interception (allow chevron toggle & child/subgroup tile clicks)
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
+        const closestTile = e.target.closest('.tile');
+        if (e.target.closest('.chevron-btn') || (closestTile && closestTile !== this.el) || (this.subBody && this.subBody.contains(e.target))) {
+          return;
+        }
         e.stopPropagation();
         e.preventDefault();
         this.ctx.onOpenGroup?.(this.spec.group_id);
@@ -3051,16 +3103,45 @@ class GroupTile {
     this.btnChevron?.setAttribute('aria-expanded', String(this._open));
   }
 
+  _applyOptimistic(desiredOn, until) {
+    this._optimisticOn = desiredOn;
+    this._optimisticUntil = until;
+    this.children.forEach((c) => c._applyOptimistic?.(desiredOn, until));
+    if (this.hass) this.update(this.hass);
+  }
+
   _toggleMaster() {
-    if (!this.hass) return;
+    if (!this.hass || !this.entityIds.length) return;
     const states = this.entityIds.map((id) => this.hass.states[id]).filter(Boolean);
-    const anyOn = states.some((s) => s.state === 'on');
-    const service = anyOn ? 'turn_off' : 'turn_on';
-    const domain = this.domain;
-    for (const eid of this.entityIds) {
-      const d = domainOf(eid);
-      this.hass.callService(d === 'light' || d === 'switch' ? d : domain, service, { entity_id: eid });
-    }
+    const hasActiveLock = this._optimisticOn !== null && Date.now() < this._optimisticUntil;
+    const anyOn = hasActiveLock ? this._optimisticOn : states.some((s) => s.state === 'on');
+    const desiredOn = !anyOn;
+    const service = desiredOn ? 'turn_on' : 'turn_off';
+    const until = Date.now() + 4000;
+
+    this._applyOptimistic(desiredOn, until);
+    this.hass.callService('homeassistant', service, { entity_id: this.entityIds });
+
+    if (this._stragglerTimer) clearTimeout(this._stragglerTimer);
+    this._stragglerTimer = setTimeout(() => {
+      this._stragglerTimer = null;
+      if (!this.hass) return;
+      const targetState = desiredOn ? 'on' : 'off';
+      const stragglers = this.entityIds.filter((eid) => {
+        const st = this.hass.states[eid];
+        return !st || st.state !== targetState;
+      });
+      if (stragglers.length > 0 && Date.now() < this._optimisticUntil) {
+        this.hass.callService('homeassistant', service, { entity_id: stragglers });
+      }
+      setTimeout(() => {
+        if (this.hass && Date.now() >= this._optimisticUntil) {
+          this._optimisticOn = null;
+          this._optimisticUntil = 0;
+          this.update(this.hass);
+        }
+      }, 2600);
+    }, 1500);
   }
 
   _setMasterBrightness(pct) {
@@ -3077,9 +3158,19 @@ class GroupTile {
     this.children.forEach((c) => c.update(hass));
 
     const states = this.entityIds.map((id) => hass.states[id]).filter(Boolean);
+    if (this._optimisticOn !== null) {
+      const targetState = this._optimisticOn ? 'on' : 'off';
+      const allConverged =
+        states.length === this.entityIds.length &&
+        states.every((s) => s.state === targetState);
+      if (allConverged || Date.now() >= this._optimisticUntil) {
+        this._optimisticOn = null;
+        this._optimisticUntil = 0;
+      }
+    }
+
     const activeStates = states.filter((s) => s.state === 'on');
-    const activeCount = activeStates.length;
-    const anyOn = activeCount > 0;
+    const anyOn = this._optimisticOn !== null ? this._optimisticOn : activeStates.length > 0;
 
     this.el.dataset.active = String(anyOn);
     this.iconBtn.classList.toggle('active', anyOn);
@@ -3096,7 +3187,7 @@ class GroupTile {
 
     if (!states.length) {
       this.stateEl.textContent = 'Keine Entitäten';
-    } else if (activeCount === 0) {
+    } else if (!anyOn) {
       this.stateEl.textContent = 'Aus';
     } else {
       const avgBr = this._avgBrightness(activeStates);
@@ -3280,7 +3371,7 @@ class GroupedCoverTile {
     this.el = h('div', {
       class: 'tile grouped-cover wide',
       'data-active': 'true',
-    }, h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns));
+    }, h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns), editBorder(10));
 
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
@@ -3441,13 +3532,18 @@ class Room {
     h('div', { class: 'room-icon' }, icon(spec.icon)),
     h('div', { class: 'room-title' }, h('div', { class: 'room-name' }, spec.name), this.metaEl),
     this.controlsEl,
-    icon('mdi:chevron-down', 'chevron'));
+    icon('mdi:chevron-down', 'chevron'),
+    editBorder(17));
 
-    // Capture clicks anywhere on the room header in Edit Mode (including group controls)
+    // Capture clicks anywhere on the room header in Edit Mode (except chevron expand/collapse)
     this.head.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
         e.stopPropagation();
         e.preventDefault();
+        if (e.target.closest('.chevron')) {
+          this._toggleOpen();
+          return;
+        }
         this.ctx.onEditRoom?.(this.spec);
       }
     }, true);
@@ -3488,19 +3584,20 @@ class Room {
     } else {
       const anyOn = states.some((s) => isActive(s));
       const targetService = anyOn ? 'turn_off' : 'turn_on';
-      const byDomain = {};
+      const valveIds = [];
+      const genericIds = [];
       for (const id of group.ids) {
-        const dom = domainOf(id);
-        (byDomain[dom] ||= []).push(id);
-      }
-      for (const [dom, ids] of Object.entries(byDomain)) {
-        if (['light', 'switch', 'input_boolean'].includes(dom)) {
-          this.hass.callService(dom, targetService, { entity_id: ids });
-        } else if (dom === 'valve') {
-          this.hass.callService('valve', targetService === 'turn_on' ? 'open_valve' : 'close_valve', { entity_id: ids });
+        if (domainOf(id) === 'valve') {
+          valveIds.push(id);
         } else {
-          this.hass.callService('homeassistant', targetService, { entity_id: ids });
+          genericIds.push(id);
         }
+      }
+      if (genericIds.length) {
+        this.hass.callService('homeassistant', targetService, { entity_id: genericIds });
+      }
+      if (valveIds.length) {
+        this.hass.callService('valve', targetService === 'turn_on' ? 'open_valve' : 'close_valve', { entity_id: valveIds });
       }
     }
   }
@@ -3753,7 +3850,8 @@ class RoomDetailView {
           h('div', { class: 'cover-detail-icon' }, iconEl),
           h('div', { class: 'cover-detail-texts' }, nameEl, stateEl)),
         h('div', { class: 'tile-btns' }, btnUp, btnStop, btnDown)),
-      sliderWrap);
+      sliderWrap,
+      editBorder(10));
 
     row.addEventListener('pointerdown', (e) => {
       if (this.ctx?.isEditMode?.()) {
@@ -5251,25 +5349,30 @@ class RoomEditModal {
     this._saving = true;
     const areaId = this.roomSpec.area_id;
     try {
-      if (areaId && areaId !== '__none__') {
-        await this.hass.callWS({
-          type: 'config/area_registry/delete',
+      try {
+        const res = await this.hass.callWS({
+          type: 'smarthome_companion/dashboard/room_delete',
           area_id: areaId,
         });
+        if (res?.save_failed) throw new Error('Löschen fehlgeschlagen');
+      } catch (wsErr) {
+        if (!/unknown_command|not found|unknown command/i.test(String(wsErr?.code || wsErr?.message || wsErr))) {
+          throw wsErr;
+        }
+        // Fallback for mock/dev mode
+        if (areaId && areaId !== '__none__') {
+          await this.hass.callWS({
+            type: 'config/area_registry/delete',
+            area_id: areaId,
+          });
+        }
+        const data = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
+        const config = data?.config || {};
+        if (config.rooms && areaId in config.rooms) delete config.rooms[areaId];
+        if (Array.isArray(config.room_order)) config.room_order = config.room_order.filter((id) => id !== areaId);
+        if (config.tile_order && areaId in config.tile_order) delete config.tile_order[areaId];
+        await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
       }
-
-      const data = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
-      const config = data?.config || {};
-      if (config.rooms && areaId in config.rooms) {
-        delete config.rooms[areaId];
-      }
-      if (Array.isArray(config.room_order)) {
-        config.room_order = config.room_order.filter((id) => id !== areaId);
-      }
-      if (config.tile_order && areaId in config.tile_order) {
-        delete config.tile_order[areaId];
-      }
-      await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
 
       this.iconDropdown?.destroy();
       this.el.remove();
@@ -5286,32 +5389,49 @@ class RoomEditModal {
     this.saveBtn.disabled = true;
     const areaId = this.roomSpec.area_id;
     const trimmedName = (this.roomName || '').trim();
+    const isUnassigned = areaId === '__none__';
     try {
-      if (areaId && areaId !== '__none__') {
-        try {
-          const areaUpdate = {
-            type: 'config/area_registry/update',
-            area_id: areaId,
-            icon: this.selectedIcon,
-          };
-          if (trimmedName && trimmedName !== this.roomSpec.name) {
-            areaUpdate.name = trimmedName;
-          }
-          await this.hass.callWS(areaUpdate);
-        } catch (_) {
-          // Non-fatal in mock/dev mode
+      try {
+        const payload = {
+          type: 'smarthome_companion/dashboard/room_update',
+          area_id: areaId,
+          icon: this.selectedIcon,
+          sensor_prefs: this.sensorPrefs,
+        };
+        if (!isUnassigned && trimmedName) {
+          payload.name = trimmedName;
         }
+        const res = await this.hass.callWS(payload);
+        if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
+      } catch (wsErr) {
+        if (!/unknown_command|not found|unknown command/i.test(String(wsErr?.code || wsErr?.message || wsErr))) {
+          throw wsErr;
+        }
+        // Fallback for mock/dev mode
+        if (areaId && !isUnassigned) {
+          try {
+            const areaUpdate = {
+              type: 'config/area_registry/update',
+              area_id: areaId,
+              icon: this.selectedIcon,
+            };
+            if (trimmedName && trimmedName !== this.roomSpec.name) {
+              areaUpdate.name = trimmedName;
+            }
+            await this.hass.callWS(areaUpdate);
+          } catch (_) {
+            // Non-fatal in mock/dev mode
+          }
+        }
+        const data = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
+        const config = data?.config || {};
+        config.rooms ||= {};
+        config.rooms[areaId] ||= {};
+        config.rooms[areaId].icon = this.selectedIcon;
+        config.rooms[areaId].sensor_prefs = this.sensorPrefs;
+        const res = await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
+        if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
       }
-
-      const data = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
-      const config = data?.config || {};
-      config.rooms ||= {};
-      config.rooms[areaId] ||= {};
-      config.rooms[areaId].icon = this.selectedIcon;
-      config.rooms[areaId].sensor_prefs = this.sensorPrefs;
-
-      const res = await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
-      if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
 
       this.iconDropdown?.destroy();
       this.el.remove();
@@ -5414,7 +5534,7 @@ class DeviceWizard {
     this.stepBar = h('div', { class: 'wizard-steps' });
     this.foot = h('div', { class: 'dialog-foot' });
 
-    this.dialog = h('div', { class: 'dialog', role: 'dialog', 'aria-label': 'Gerät einrichten' },
+    this.dialog = h('div', { class: 'dialog', role: 'dialog', 'aria-label': 'Gerät einrichten', hidden: !!this.initialGroupId },
       h('div', { class: 'dialog-head' },
         icon('mdi:plus-circle-outline'),
         h('h2', {}, 'Gerät einrichten'),
@@ -5573,14 +5693,13 @@ class DeviceWizard {
       if (res?.save_failed) throw new Error('Löschen fehlgeschlagen');
 
       delete this.configuredDevices[deviceId];
+      if (this.directMode) {
+        this.onSaved(null);
+        return;
+      }
       if (this.selectedDevice?.id === deviceId) {
         this.selectedDevice = null;
         this.step = 0;
-      }
-      if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
-        this.dialog.hidden = true;
-        this._openGroupModal(this.groups[this.initialGroupId], true);
-        return;
       }
 
       this._render();
@@ -5828,13 +5947,7 @@ class DeviceWizard {
                 this.selectedDevice = d;
                 this._initDevice();
                 this.step = 1;
-                if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
-        this.dialog.hidden = true;
-        this._openGroupModal(this.groups[this.initialGroupId], true);
-        return;
-      }
-
-      this._render();
+                this._render();
               },
             }, icon('mdi:pencil'), 'Bearbeiten'),
             h('button', {
@@ -5858,13 +5971,7 @@ class DeviceWizard {
                 this.selectedDevice = d;
                 this._initDevice();
                 this.step = 1;
-                if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
-        this.dialog.hidden = true;
-        this._openGroupModal(this.groups[this.initialGroupId], true);
-        return;
-      }
-
-      this._render();
+                this._render();
               },
             }, icon('mdi:plus'), 'Einrichten')
           );
@@ -5883,13 +5990,7 @@ class DeviceWizard {
             this.selectedDevice = d;
             this._initDevice();
             this.step = 1;
-            if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
-        this.dialog.hidden = true;
-        this._openGroupModal(this.groups[this.initialGroupId], true);
-        return;
-      }
-
-      this._render();
+            this._render();
           },
         },
         chk,
@@ -6191,7 +6292,7 @@ class DeviceWizard {
     });
 
     const getLabelForId = (id) => {
-      if (this.groups[id]) return `📁 ${this.groups[id].name} (Gruppe)`;
+      if (this.groups[id]) return `${this.groups[id].name} (Gruppe)`;
       if (id.startsWith('d:')) {
         const parts = id.split(':', 2);
         const ent = this.entities.find((e) => e.entity_id === parts[2]);
@@ -6233,7 +6334,7 @@ class DeviceWizard {
     for (const [gid, g] of Object.entries(this.groups)) {
       if (existingGroup && gid === existingGroup.id) continue;
       if (!selectedIds.includes(gid)) {
-        availableToAdd.push({ value: gid, label: `📁 ${g.name} (Gruppe)`, icon: 'mdi:folder-multiple' });
+        availableToAdd.push({ value: gid, label: `${g.name} (Gruppe)`, icon: 'mdi:folder-multiple' });
       }
     }
     // Devices
@@ -6245,8 +6346,9 @@ class DeviceWizard {
     }
 
     let addDropdownWrap = null;
+    let addDd = null;
     if (availableToAdd.length > 0) {
-      const addDd = new CustomDropdown({
+      addDd = new CustomDropdown({
         options: availableToAdd,
         value: '',
         placeholder: '+ Element hinzufügen...',
@@ -6265,8 +6367,18 @@ class DeviceWizard {
       overlay.remove();
       areaDd.destroy();
       catDd.destroy();
+      addDd?.destroy();
+      iconPicker._close();
       if (isDirect) this.onClose?.();
     };
+    if (isDirect) {
+      overlay.style.background = 'transparent';
+      overlay.style.backdropFilter = 'none';
+      overlay.style.webkitBackdropFilter = 'none';
+    }
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeGroupModal();
+    });
 
     const dialog = h('div', { class: 'dialog group-modal-dialog', style: { maxWidth: '520px', width: 'min(520px, 94vw)' } },
       h('div', { class: 'dialog-head' },
@@ -6292,7 +6404,23 @@ class DeviceWizard {
           addDropdownWrap)),
       h('div', { class: 'dialog-foot' },
         h('div', { class: 'dialog-foot-actions' },
-          h('button', { class: 'btn', onClick: closeGroupModal }, 'Abbrechen')),
+          h('button', { class: 'btn', onClick: closeGroupModal }, 'Abbrechen'),
+          existingGroup ? h('button', {
+            class: 'btn danger',
+            type: 'button',
+            onClick: async () => {
+              const removed = await this._removeGroup(existingGroup.id, existingGroup.name, true);
+              if (removed) {
+                overlay.remove();
+                areaDd.destroy();
+                catDd.destroy();
+                addDd?.destroy();
+                iconPicker._close();
+                if (isDirect) this.onSaved?.(null);
+                else this._load();
+              }
+            },
+          }, icon('mdi:delete-outline'), 'Gruppe auflösen') : null),
         h('div', { class: 'dialog-foot-actions' },
           h('button', {
             class: 'btn primary',
@@ -6314,10 +6442,11 @@ class DeviceWizard {
                 overlay.remove();
                 areaDd.destroy();
                 catDd.destroy();
+                addDd?.destroy();
                 iconPicker._close();
                 this.selectedDevices.clear();
-                this._load();
-                this.onSaved?.(null);
+                if (isDirect) this.onSaved?.(null);
+                else this._load();
               } catch (err) {
                 alert(`Fehler beim Speichern der Gruppe: ${err.message || err}`);
               }
@@ -6329,16 +6458,19 @@ class DeviceWizard {
     this.el.appendChild(overlay);
   }
 
-  async _removeGroup(groupId, groupName) {
+  async _removeGroup(groupId, groupName, skipReload = false) {
     const conf = window.confirm(`Gruppe „${groupName}“ auflösen?\n\nDie enthaltenen Geräte bleiben erhalten.`);
-    if (!conf) return;
+    if (!conf) return false;
     try {
       await this.hass.callWS({ type: 'smarthome_companion/groups/delete', group_id: groupId });
       delete this.groups[groupId];
-      this._load();
-      this.onSaved?.(null);
+      if (!skipReload) {
+        this._load();
+      }
+      return true;
     } catch (err) {
       alert(`Fehler beim Auflösen der Gruppe: ${err.message || err}`);
+      return false;
     }
   }
 
@@ -6450,7 +6582,9 @@ class DeviceWizard {
     const existingSensors = existing?.entities?.room_sensors || {};
     const rawRoomSensors = devEntities.filter((e) => ['sensor', 'binary_sensor'].includes(domainOf(e.entity_id)));
     this.sensorEntities = rawRoomSensors.map((e) => {
-      const saved = existingSensors[e.entity_id];
+      const saved = existingSensors[e.entity_id] || (e.unique_id
+        ? Object.values(existingSensors).find((s) => s?.unique_id === e.unique_id)
+        : null);
       const detectedType = this._detectSensorType(e);
       const type = saved?.type || (saved?.enabled === false ? 'ignore' : detectedType);
       return {
@@ -6483,7 +6617,9 @@ class DeviceWizard {
     // Sub-entities / channels
     const existingSubs = existing?.entities?.sub_entities || {};
     this.channels = controllable.map((e, idx) => {
-      const sub = existingSubs[e.entity_id] || {};
+      const sub = existingSubs[e.entity_id] || (e.unique_id
+        ? Object.values(existingSubs).find((s) => s?.unique_id === e.unique_id)
+        : null) || {};
       let channelName = sub.custom_name || sub.name || e.name || e.original_name || (controllable.length > 1 ? `Kanal ${idx + 1}` : this.customName);
       if (!sub.custom_name && !sub.name) {
         channelName = this._stripRoomName(channelName, this.selectedAreaId);
@@ -6579,13 +6715,7 @@ class DeviceWizard {
             if (!this.customIcon) {
               devIconPicker._setValue(c.icon);
             }
-            if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
-        this.dialog.hidden = true;
-        this._openGroupModal(this.groups[this.initialGroupId], true);
-        return;
-      }
-
-      this._render();
+            this._render();
           },
         },
         icon(c.icon),
@@ -6975,15 +7105,18 @@ class DeviceWizard {
           console.warn('[wizard] device rename failed', err);
         }
 
-        // Entity renames
+        // Entity renames (only set name for multi-channel entities; keep single-channel Friendly Name intact)
         for (const ch of activeChannels) {
           try {
-            await this.hass.callWS({
+            const payload = {
               type: 'config/entity_registry/update',
               entity_id: ch.entity_id,
-              name: ch.name || undefined,
               area_id: this.selectedAreaId || undefined,
-            });
+            };
+            if (isMulti && ch.name) {
+              payload.name = ch.name;
+            }
+            await this.hass.callWS(payload);
           } catch (err) {
             console.warn('[wizard] entity rename failed', err);
           }
@@ -7083,6 +7216,7 @@ class DeviceWizard {
 
           if (conflicts.length > 0) {
             this._saving = false;
+            this.dialog.hidden = true;
             const conflictModal = new SensorConflictModal({
               hass: this.hass,
               areaName: room?.name || 'Raum',
@@ -7094,12 +7228,24 @@ class DeviceWizard {
                 cfg.rooms[this.selectedAreaId] ||= {};
                 cfg.rooms[this.selectedAreaId].sensor_prefs = prefs;
                 await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config: cfg });
-                this.isCelebration = true;
-                this._renderCelebration();
+                if (this.directMode) {
+                  this.onClose();
+                  this.onSaved(null);
+                } else {
+                  this.dialog.hidden = false;
+                  this.isCelebration = true;
+                  this._renderCelebration();
+                }
               },
               onCancel: () => {
-                this.isCelebration = true;
-                this._renderCelebration();
+                if (this.directMode) {
+                  this.onClose();
+                  this.onSaved(null);
+                } else {
+                  this.dialog.hidden = false;
+                  this.isCelebration = true;
+                  this._renderCelebration();
+                }
               },
             });
             this.el.append(conflictModal.el);
@@ -7111,8 +7257,13 @@ class DeviceWizard {
       }
 
       this._saving = false;
-      this.isCelebration = true;
-      this._renderCelebration();
+      if (this.directMode) {
+        this.onClose();
+        this.onSaved(null);
+      } else {
+        this.isCelebration = true;
+        this._renderCelebration();
+      }
     } catch (err) {
       this._saving = false;
       this._renderFoot();

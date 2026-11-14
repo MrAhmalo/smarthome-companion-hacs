@@ -11,6 +11,13 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
+def slugify_ha(text: str) -> str:
+    """Transliterate German umlauts and slugify text for Home Assistant entity IDs."""
+    s = str(text or "").strip().lower()
+    s = s.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+    return re.sub(r"[^a-z0-9_]+", "_", s).strip("_")
+
+
 def _build_entity_id_pattern(id_map: dict[str, str]) -> re.Pattern[str] | None:
     """Compile a single-pass boundary-safe regex matching any entity ID in id_map."""
     keys = sorted((k for k in id_map if k), key=len, reverse=True)

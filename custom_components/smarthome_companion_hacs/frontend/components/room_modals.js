@@ -335,25 +335,30 @@ export class RoomEditModal {
     this._saving = true;
     const areaId = this.roomSpec.area_id;
     try {
-      if (areaId && areaId !== '__none__') {
-        await this.hass.callWS({
-          type: 'config/area_registry/delete',
+      try {
+        const res = await this.hass.callWS({
+          type: 'smarthome_companion/dashboard/room_delete',
           area_id: areaId,
         });
+        if (res?.save_failed) throw new Error('Löschen fehlgeschlagen');
+      } catch (wsErr) {
+        if (!/unknown_command|not found|unknown command/i.test(String(wsErr?.code || wsErr?.message || wsErr))) {
+          throw wsErr;
+        }
+        // Fallback for mock/dev mode
+        if (areaId && areaId !== '__none__') {
+          await this.hass.callWS({
+            type: 'config/area_registry/delete',
+            area_id: areaId,
+          });
+        }
+        const data = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
+        const config = data?.config || {};
+        if (config.rooms && areaId in config.rooms) delete config.rooms[areaId];
+        if (Array.isArray(config.room_order)) config.room_order = config.room_order.filter((id) => id !== areaId);
+        if (config.tile_order && areaId in config.tile_order) delete config.tile_order[areaId];
+        await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
       }
-
-      const data = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
-      const config = data?.config || {};
-      if (config.rooms && areaId in config.rooms) {
-        delete config.rooms[areaId];
-      }
-      if (Array.isArray(config.room_order)) {
-        config.room_order = config.room_order.filter((id) => id !== areaId);
-      }
-      if (config.tile_order && areaId in config.tile_order) {
-        delete config.tile_order[areaId];
-      }
-      await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
 
       this.iconDropdown?.destroy();
       this.el.remove();
@@ -370,32 +375,49 @@ export class RoomEditModal {
     this.saveBtn.disabled = true;
     const areaId = this.roomSpec.area_id;
     const trimmedName = (this.roomName || '').trim();
+    const isUnassigned = areaId === '__none__';
     try {
-      if (areaId && areaId !== '__none__') {
-        try {
-          const areaUpdate = {
-            type: 'config/area_registry/update',
-            area_id: areaId,
-            icon: this.selectedIcon,
-          };
-          if (trimmedName && trimmedName !== this.roomSpec.name) {
-            areaUpdate.name = trimmedName;
-          }
-          await this.hass.callWS(areaUpdate);
-        } catch (_) {
-          // Non-fatal in mock/dev mode
+      try {
+        const payload = {
+          type: 'smarthome_companion/dashboard/room_update',
+          area_id: areaId,
+          icon: this.selectedIcon,
+          sensor_prefs: this.sensorPrefs,
+        };
+        if (!isUnassigned && trimmedName) {
+          payload.name = trimmedName;
         }
+        const res = await this.hass.callWS(payload);
+        if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
+      } catch (wsErr) {
+        if (!/unknown_command|not found|unknown command/i.test(String(wsErr?.code || wsErr?.message || wsErr))) {
+          throw wsErr;
+        }
+        // Fallback for mock/dev mode
+        if (areaId && !isUnassigned) {
+          try {
+            const areaUpdate = {
+              type: 'config/area_registry/update',
+              area_id: areaId,
+              icon: this.selectedIcon,
+            };
+            if (trimmedName && trimmedName !== this.roomSpec.name) {
+              areaUpdate.name = trimmedName;
+            }
+            await this.hass.callWS(areaUpdate);
+          } catch (_) {
+            // Non-fatal in mock/dev mode
+          }
+        }
+        const data = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
+        const config = data?.config || {};
+        config.rooms ||= {};
+        config.rooms[areaId] ||= {};
+        config.rooms[areaId].icon = this.selectedIcon;
+        config.rooms[areaId].sensor_prefs = this.sensorPrefs;
+        const res = await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
+        if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
       }
-
-      const data = await this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true });
-      const config = data?.config || {};
-      config.rooms ||= {};
-      config.rooms[areaId] ||= {};
-      config.rooms[areaId].icon = this.selectedIcon;
-      config.rooms[areaId].sensor_prefs = this.sensorPrefs;
-
-      const res = await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
-      if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
 
       this.iconDropdown?.destroy();
       this.el.remove();
