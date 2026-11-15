@@ -15,20 +15,22 @@ export class RoomDetailView {
 
     const tiles = roomSpec.tiles || [];
     // Partition by effective category (custom category takes priority!)
+    this.smokeSpecs = tiles.filter((t) => effectiveCategory(t) === 'rauchmelder');
     this.coverSpecs = tiles.filter((t) => effectiveCategory(t) === 'cover');
     this.lightSpecs = tiles.filter((t) => effectiveCategory(t) === 'light');
     this.switchSpecs = tiles.filter((t) => ['switch', 'outlet', 'valve', 'pumpe'].includes(effectiveCategory(t)));
     this.mediaSpecs = tiles.filter((t) => effectiveCategory(t) === 'media_player');
     this.otherSpecs = tiles.filter((t) =>
-      !['cover', 'light', 'switch', 'outlet', 'valve', 'pumpe', 'media_player'].includes(effectiveCategory(t)));
+      !['rauchmelder', 'cover', 'light', 'switch', 'outlet', 'valve', 'pumpe', 'media_player'].includes(effectiveCategory(t)));
 
     const makeTileInstance = (t) => {
       if (t.is_group) return new GroupTile(t, this.ctx);
       return new Tile(t, this.ctx);
     };
 
-    // Strict priority for non-cover devices: 1. Media, 2. Light, 3. Switches, 4. Other
+    // Strict priority for non-cover devices: 0. Rauchmelder, 1. Media, 2. Light, 3. Switches, 4. Other
     const otherDeviceSpecs = [
+      ...this.smokeSpecs,
       ...this.mediaSpecs,
       ...this.lightSpecs,
       ...this.switchSpecs,
@@ -118,13 +120,17 @@ export class RoomDetailView {
     if (group.key === 'cover') {
       const anyOpen = states.some((s) => s.state !== 'closed');
       const targetService = anyOpen ? 'close_cover' : 'open_cover';
+      const coverIds = [];
+      const otherIds = [];
       for (const id of group.ids) {
-        const dom = domainOf(id);
-        if (dom === 'cover') {
-          this.hass.callService('cover', targetService, { entity_id: id });
-        } else {
-          this.hass.callService(dom, targetService === 'close_cover' ? 'turn_off' : 'turn_on', { entity_id: id });
-        }
+        if (domainOf(id) === 'cover') coverIds.push(id);
+        else otherIds.push(id);
+      }
+      if (coverIds.length) {
+        this.hass.callService('cover', targetService, { entity_id: coverIds });
+      }
+      if (otherIds.length) {
+        this.hass.callService('homeassistant', targetService === 'close_cover' ? 'turn_off' : 'turn_on', { entity_id: otherIds });
       }
     } else {
       const anyOn = states.some((s) => isActive(s));
@@ -183,10 +189,24 @@ export class RoomDetailView {
     const hum = sensors.humidity?.length ? average(hass, sensors.humidity) : null;
     const mot = (sensors.motion || []).some((id) => hass.states[id]?.state === 'on');
     const moi = (sensors.moisture || []).some((id) => hass.states[id]?.state === 'on');
-    const chipKey = `${temp || ''}|${hum || ''}|${mot ? 1 : 0}|${moi ? 1 : 0}`;
+    const tileSmokeIds = this.smokeSpecs.map((t) => t.entity_id).filter(Boolean);
+    const allSmokeIds = Array.from(new Set([...(sensors.smoke || []), ...tileSmokeIds]));
+    const smokeTriggered = allSmokeIds.some((id) => {
+      const v = String(hass.states[id]?.state || '').toLowerCase();
+      return ['on', 'detected', 'smoke', 'alarm', 'true'].includes(v);
+    });
+    this.el.toggleAttribute('data-smoke-alarm', smokeTriggered);
+    const chipKey = `${temp || ''}|${hum || ''}|${mot ? 1 : 0}|${moi ? 1 : 0}|${allSmokeIds.length}|${smokeTriggered ? 1 : 0}`;
     if (chipKey !== this._chipKey) {
       this._chipKey = chipKey;
       const chips = [];
+      if (allSmokeIds.length > 0) {
+        if (smokeTriggered) {
+          chips.push(h('div', { class: 'room-detail-chip', style: { color: '#fff', background: '#dc2626', fontWeight: '700' } }, icon('mdi:smoke-detector-alert'), 'Rauch!'));
+        } else {
+          chips.push(h('div', { class: 'room-detail-chip', title: 'Rauchmelder aktiv' }, icon('mdi:smoke-detector')));
+        }
+      }
       if (temp) chips.push(h('div', { class: 'room-detail-chip' }, icon('mdi:thermometer'), temp));
       if (hum) chips.push(h('div', { class: 'room-detail-chip' }, icon('mdi:water-percent'), hum));
       if (mot) chips.push(h('div', { class: 'room-detail-chip', style: { color: '#ffb74d' } }, icon('mdi:motion-sensor'), 'Bewegung'));

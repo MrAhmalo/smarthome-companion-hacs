@@ -85,28 +85,113 @@ export class Badges {
   }
 }
 
-// ═══════════════ Smoke alerts (automatic, no config) ═══════════════
+// ═══════════════ Smoke alerts (strictly configured smoke detectors) ═══════════════
 export class SmokeAlerts {
-  constructor() {
-    this.el = h('div', { class: 'side', style: { gap: '8px' } });
+  constructor({ onOpenSmoke = null } = {}) {
+    this.onOpenSmoke = onOpenSmoke;
+    this.el = h('div', { style: { display: 'grid', gap: '10px' } });
+    this._key = '';
+    this._layout = null;
+  }
+
+  setLayout(layout) {
+    this._layout = layout || null;
     this._key = '';
   }
 
+  _collectConfiguredSmokeEntries() {
+    const map = new Map();
+    const layout = this._layout;
+    if (!layout) return [];
+    const rooms = layout.rooms || [];
+    const roomById = new Map(rooms.map((r) => [r.area_id, r]));
+
+    for (const item of (layout.configured?.smoke || [])) {
+      if (!item?.entity_id) continue;
+      map.set(item.entity_id, {
+        entity_id: item.entity_id,
+        name: item.name || item.entity_id,
+        area_id: item.area_id || '__none__',
+        area_name: item.area_name || roomById.get(item.area_id)?.name || 'Nicht zugeordnet',
+        area_icon: item.area_icon || roomById.get(item.area_id)?.icon || 'mdi:home-outline',
+      });
+    }
+    for (const r of rooms) {
+      for (const eid of (r.sensors?.smoke || [])) {
+        if (!eid || map.has(eid)) continue;
+        map.set(eid, {
+          entity_id: eid,
+          name: eid,
+          area_id: r.area_id,
+          area_name: r.name || 'Raum',
+          area_icon: r.icon || 'mdi:home-outline',
+        });
+      }
+      for (const t of (r.tiles || [])) {
+        if ((t.category === 'rauchmelder' || t.category === 'smoke') && t.entity_id && !map.has(t.entity_id)) {
+          map.set(t.entity_id, {
+            entity_id: t.entity_id,
+            name: t.name || t.entity_id,
+            area_id: r.area_id,
+            area_name: r.name || 'Raum',
+            area_icon: r.icon || 'mdi:home-outline',
+          });
+        }
+      }
+    }
+    return Array.from(map.values());
+  }
+
   update(hass) {
-    const ids = Object.keys(hass.states).filter((id) => {
-      if (!id.startsWith('binary_sensor.')) return false;
-      const st = hass.states[id];
-      return st.state === 'on' && st.attributes?.device_class === 'smoke';
+    const entries = this._collectConfiguredSmokeEntries();
+    const triggered = entries.filter((entry) => {
+      const st = hass.states[entry.entity_id];
+      if (!st) return false;
+      const v = String(st.state || '').toLowerCase();
+      return ['on', 'detected', 'smoke', 'alarm', 'true'].includes(v);
     });
-    const key = ids.join(',');
+    const key = triggered.map((e) => `${e.entity_id}:${e.area_id}`).join('|');
     if (key === this._key) return;
     this._key = key;
-    this.el.replaceChildren(...ids.map((id) => h('div', { class: 'alert-card alert-smoke', onClick: () => moreInfo(this.el, id) },
-      h('div', { class: 'a-icon' }, icon('mdi:fire-alert')),
-      h('div', {},
-        h('div', { class: 'a-title' }, hass.states[id].attributes.friendly_name || id),
-        h('div', { class: 'a-sub' }, 'Rauch erkannt')))));
-    this.el.hidden = ids.length === 0;
+    if (!triggered.length) {
+      this.el.replaceChildren();
+      this.el.hidden = true;
+      return;
+    }
+
+    // Group active alarms by room so each affected room appears cleanly with its icon
+    const roomsById = new Map();
+    for (const entry of triggered) {
+      if (!roomsById.has(entry.area_id)) {
+        roomsById.set(entry.area_id, {
+          area_id: entry.area_id,
+          name: entry.area_name,
+          icon: entry.area_icon,
+          count: 1,
+        });
+      } else {
+        roomsById.get(entry.area_id).count += 1;
+      }
+    }
+
+    const banner = h('button', {
+      type: 'button',
+      class: 'smoke-home-banner',
+      onClick: () => this.onOpenSmoke?.(),
+    },
+    h('div', { class: 'smoke-home-banner-head' },
+      h('div', { class: 'smoke-home-banner-title' },
+        icon('mdi:smoke-detector-alert'),
+        h('span', {}, triggered.length === 1 ? 'Rauchalarm erkannt!' : `${triggered.length} Rauchmelder ausgelöst!`)),
+      icon('mdi:chevron-right')),
+    h('div', { class: 'smoke-home-banner-sub' }, 'Tippen für Sicherheits- & Rauchmelderübersicht'),
+    h('div', { class: 'smoke-home-rooms' },
+      ...Array.from(roomsById.values()).map((r) => h('span', { class: 'smoke-home-room-pill' },
+        icon(r.icon || 'mdi:home-outline'),
+        h('span', {}, r.count > 1 ? `${r.name} (${r.count})` : r.name)))));
+
+    this.el.replaceChildren(banner);
+    this.el.hidden = false;
   }
 }
 
@@ -351,7 +436,8 @@ export class NavBar {
       }
     }
 
-    // Ensure core hubs Solar, Blinds, and Mehr are easily reachable if not already listed
+    // Preserve configured order strictly; seed missing core hubs only when absent
+    const hasCustomOrder = raw.length > 0;
     const defaults = [
       { view: 'security', name: 'Sicherheit', icon: 'mdi:shield-home' },
       { view: 'solar', name: 'Solar', icon: 'mdi:solar-power-variant' },
@@ -360,8 +446,12 @@ export class NavBar {
     ];
     for (const def of defaults) {
       if (!seenViews.has(def.view) && viewAllowed(def.view)) {
-        // Place Mehr always at the end
-        if (def.view === 'more') continue;
+        if (def.view === 'more' && !hasCustomOrder) continue;
+        if (def.view === 'more') {
+          seenViews.add(def.view);
+          list.push(def);
+          continue;
+        }
         seenViews.add(def.view);
         const moreIdx = list.findIndex((i) => i.view === 'more');
         if (moreIdx >= 0) list.splice(moreIdx, 0, def);

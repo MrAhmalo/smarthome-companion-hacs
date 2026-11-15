@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 # pyrefly: ignore [missing-import]
@@ -7,6 +8,7 @@ from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
     ATTR_RGB_COLOR,
     ATTR_COLOR_TEMP_KELVIN,
+    ATTR_TRANSITION,
 )
 # pyrefly: ignore [missing-import]
 from homeassistant.helpers.entity import DeviceInfo
@@ -157,20 +159,53 @@ class CompanionGroupLight(LightEntity):
             service_data[ATTR_RGB_COLOR] = kwargs[ATTR_RGB_COLOR]
         if ATTR_COLOR_TEMP_KELVIN in kwargs:
             service_data[ATTR_COLOR_TEMP_KELVIN] = kwargs[ATTR_COLOR_TEMP_KELVIN]
+        if ATTR_TRANSITION in kwargs:
+            service_data[ATTR_TRANSITION] = kwargs[ATTR_TRANSITION]
 
-        for eid in eids:
-            domain = eid.split(".")[0]
-            if domain == "light":
-                await self.hass.services.async_call("light", "turn_on", {"entity_id": eid, **service_data}, blocking=False)
-            elif domain == "switch":
-                await self.hass.services.async_call("switch", "turn_on", {"entity_id": eid}, blocking=False)
+        light_eids = [eid for eid in eids if eid.startswith("light.")]
+        switch_eids = [eid for eid in eids if eid.startswith("switch.")]
+        other_eids = [eid for eid in eids if not eid.startswith(("light.", "switch."))]
+
+        calls = []
+        if light_eids:
+            calls.append(
+                self.hass.services.async_call(
+                    "light", "turn_on", {"entity_id": light_eids, **service_data}, blocking=False
+                )
+            )
+        if switch_eids:
+            calls.append(
+                self.hass.services.async_call(
+                    "switch", "turn_on", {"entity_id": switch_eids}, blocking=False
+                )
+            )
+        if other_eids:
+            calls.append(
+                self.hass.services.async_call(
+                    "homeassistant", "turn_on", {"entity_id": other_eids}, blocking=False
+                )
+            )
+        if calls:
+            await asyncio.gather(*calls)
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs) -> None:
         eids = self._get_child_entities()
+        if not eids:
+            return
+        by_domain: dict[str, list[str]] = {}
         for eid in eids:
-            domain = eid.split(".")[0]
-            await self.hass.services.async_call(domain, "turn_off", {"entity_id": eid}, blocking=False)
+            dom = eid.split(".")[0]
+            by_domain.setdefault(dom, []).append(eid)
+
+        calls = []
+        for dom, dom_eids in by_domain.items():
+            payload = {"entity_id": dom_eids}
+            if dom == "light" and ATTR_TRANSITION in kwargs:
+                payload[ATTR_TRANSITION] = kwargs[ATTR_TRANSITION]
+            calls.append(self.hass.services.async_call(dom, "turn_off", payload, blocking=False))
+        if calls:
+            await asyncio.gather(*calls)
         self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:

@@ -3,31 +3,8 @@ import {
   h, icon, numeric, moreInfo,
 } from '../lib/util.js';
 
-const SOLAR_SENSORS = {
-  pv: ['sensor.power_inverter_input_total', 'sensor.inverter_input_power'],
-  charge: ['sensor.power_battery_charge'],
-  discharge: ['sensor.power_battery_discharge'],
-  soc: ['sensor.batteries_batterieladung'],
-  imp: ['sensor.power_import'],
-  exp: ['sensor.power_export'],
-  house: ['sensor.power_house_load'],
-  dailyYield: ['sensor.daily_yield_total_energy'],
-  dailyHouse: ['sensor.daily_house_load_energy'],
-  dailyIncome: ['sensor.fsp_ne_148436238_today_income'],
-  schimmeldry: ['sensor.stromverbrauch_schimmeldry'],
-  westNow: ['sensor.solarproduktionsvorhersage_westen_geschaetzte_erzeugungsleistung_jetzt'],
-  westToday: ['sensor.solarproduktionsvorhersage_westen_geschaetzte_energieerezeugung_heute'],
-  westPeak: ['sensor.solarproduktionsvorhersage_westen_spitzenleistungszeitpunkt_heute'],
-  eastNow: ['sensor.solarproduktionsvorhersage_osten_geschaetzte_erzeugungsleistung_jetzt'],
-  eastToday: ['sensor.solarproduktionsvorhersage_osten_geschaetzte_energieerezeugung_heute'],
-  eastPeak: ['sensor.solarproduktionsvorhersage_osten_spitzenleistungszeitpunkt_heute'],
-};
-
-function _pickState(states, list) {
-  for (const id of list) {
-    if (states[id]) return states[id];
-  }
-  return null;
+function _pickState(states, id) {
+  return (id && states[id]) ? states[id] : null;
 }
 
 function _num(st) {
@@ -41,10 +18,11 @@ function _fmtWatts(w) {
 }
 
 export class SolarView {
-  constructor({ hass, config, onBack }) {
+  constructor({ hass, layout, config, ctx }) {
     this.hass = hass;
+    this.layout = layout || null;
     this.config = config || {};
-    this.onBack = onBack;
+    this.ctx = ctx || null;
     this._destroyed = false;
     this._lastSig = '';
     this._statsCache = null;
@@ -53,7 +31,7 @@ export class SolarView {
 
     this.el = h('div', { class: 'subview-page', style: { '--view-color': '#f59e0b' } });
     this._buildShell();
-    if (hass) this.update(hass, config);
+    if (hass) this.update(hass, layout, config);
   }
 
   destroy() {
@@ -106,26 +84,38 @@ export class SolarView {
       h('div', { class: 'hint' }, 'Lade 24h Solar-Verlauf...'));
     this._forecastWrap = h('div', { class: 'kpi-grid' });
 
+    this._flowSec = h('div', {
+      class: 'subview-section',
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('solar'); },
+    },
+      h('div', { class: 'subview-section-title' }, icon('mdi:transmission-tower'), 'Energiefluss'),
+      h('div', { class: 'solar-svg-wrap' }, flowSvg),
+      this._kpiWrap);
+    this._chartSec = h('div', {
+      class: 'subview-section',
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('solar'); },
+    },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:chart-areaspline'), '24h Verlauf (PV & Haus)'),
+        h('button', { type: 'button', class: 'btn secondary small', onClick: (e) => { e.stopPropagation(); this._loadHistory(true); } }, icon('mdi:refresh'), 'Aktualisieren')),
+      this._chartWrap);
+    this._forecastSec = h('div', {
+      class: 'subview-section',
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('solar'); },
+    },
+      h('div', { class: 'subview-section-title' }, icon('mdi:weather-sunny'), 'Produktions-Prognose (Ost / West)'),
+      this._forecastWrap);
+
     this.el.replaceChildren(
       h('div', { class: 'subview-head' },
         h('div', { class: 'subview-head-left' },
-          h('button', { type: 'button', class: 'room-detail-back', onClick: () => this.onBack?.() }, icon('mdi:arrow-left'), 'Zurück'),
           h('div', { class: 'subview-hero-icon' }, icon('mdi:solar-power-variant')),
           h('div', { style: { minWidth: '0' } },
             h('h2', { class: 'subview-title' }, 'Solar & Energie'),
             h('div', { class: 'subview-sub' }, 'Live-Energiefluss, Verlauf & Prognose')))),
-      h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:transmission-tower'), 'Energiefluss'),
-        h('div', { class: 'solar-svg-wrap' }, flowSvg),
-        this._kpiWrap),
-      h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon('mdi:chart-areaspline'), '24h Verlauf (PV & Haus)'),
-          h('button', { type: 'button', class: 'btn secondary small', onClick: () => this._loadHistory(true) }, icon('mdi:refresh'), 'Aktualisieren')),
-        this._chartWrap),
-      h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:weather-sunny'), 'Produktions-Prognose (Ost / West)'),
-        this._forecastWrap));
+      this._flowSec,
+      this._chartSec,
+      this._forecastSec);
   }
 
   async _loadHistory(force = false) {
@@ -140,12 +130,12 @@ export class SolarView {
     if (this._statsCache) this._chartWrap.style.opacity = '0.6';
 
     const sCfg = this.config?.views?.solar || {};
-    const pvId = _pickState(this.hass.states, [sCfg.pv_entity, ...SOLAR_SENSORS.pv].filter(Boolean))?.entity_id;
-    const houseId = _pickState(this.hass.states, [sCfg.house_entity, ...SOLAR_SENSORS.house].filter(Boolean))?.entity_id;
+    const pvId = _pickState(this.hass.states, sCfg.pv_entity)?.entity_id;
+    const houseId = _pickState(this.hass.states, sCfg.house_entity)?.entity_id;
     const entityIds = [pvId, houseId].filter(Boolean);
     if (!entityIds.length) {
       this._chartWrap.style.opacity = '1';
-      this._chartWrap.replaceChildren(h('div', { class: 'hint' }, '• Keine PV-/Haus-Verbrauchssensoren gefunden'));
+      this._chartWrap.replaceChildren(h('div', { class: 'hint' }, '• Keine PV-/Haus-Sensoren in Einstellungen hinterlegt'));
       return;
     }
 
@@ -247,32 +237,44 @@ export class SolarView {
       svg);
   }
 
-  update(hass, config) {
+  update(hass, arg1, arg2, arg3) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
-    if (config !== undefined) this.config = config;
+    if (arg1 && (Array.isArray(arg1.rooms) || 'configured' in arg1)) {
+      this.layout = arg1;
+      if (arg2 !== undefined) this.config = arg2;
+      if (arg3 !== undefined) this.ctx = arg3;
+    } else {
+      if (arg1 !== undefined) this.config = arg1;
+      if (arg2 !== undefined) this.ctx = arg2;
+    }
+    const editMode = Boolean(this.ctx?.editMode);
+    this._flowSec?.toggleAttribute('data-edit-mode', editMode);
+    this._chartSec?.toggleAttribute('data-edit-mode', editMode);
+    this._forecastSec?.toggleAttribute('data-edit-mode', editMode);
+
     const states = hass.states || {};
     const sCfg = this.config?.views?.solar || {};
-    const pick = (key, extra = []) => _pickState(states, [sCfg[key], ...(SOLAR_SENSORS[key] || []), ...extra].filter(Boolean));
+    const pick = (key) => _pickState(states, sCfg[key]);
 
-    const pv = pick('pv_entity', SOLAR_SENSORS.pv);
-    const chg = pick('charge_entity', SOLAR_SENSORS.charge);
-    const dis = pick('discharge_entity', SOLAR_SENSORS.discharge);
-    const soc = pick('soc_entity', SOLAR_SENSORS.soc);
-    const imp = pick('grid_import_entity', SOLAR_SENSORS.imp);
-    const exp = pick('grid_export_entity', SOLAR_SENSORS.exp);
-    const house = pick('house_entity', SOLAR_SENSORS.house);
-    const dy = pick('daily_yield_entity', SOLAR_SENSORS.dailyYield);
-    const dh = pick('daily_house_entity', SOLAR_SENSORS.dailyHouse);
-    const inc = _pickState(states, SOLAR_SENSORS.dailyIncome);
-    const sch = _pickState(states, SOLAR_SENSORS.schimmeldry);
+    const pv = pick('pv_entity');
+    const chg = pick('charge_entity');
+    const dis = pick('discharge_entity');
+    const soc = pick('soc_entity');
+    const imp = pick('grid_import_entity');
+    const exp = pick('grid_export_entity');
+    const house = pick('house_entity');
+    const dy = pick('daily_yield_entity');
+    const dh = pick('daily_house_entity');
+    const inc = pick('daily_income_entity');
+    const sch = pick('schimmeldry_entity');
 
-    const wNow = _pickState(states, SOLAR_SENSORS.westNow);
-    const wToday = _pickState(states, SOLAR_SENSORS.westToday);
-    const wPeak = _pickState(states, SOLAR_SENSORS.westPeak);
-    const eNow = _pickState(states, SOLAR_SENSORS.eastNow);
-    const eToday = _pickState(states, SOLAR_SENSORS.eastToday);
-    const ePeak = _pickState(states, SOLAR_SENSORS.eastPeak);
+    const wNow = pick('west_now_entity');
+    const wToday = pick('west_today_entity');
+    const wPeak = pick('west_peak_entity');
+    const eNow = pick('east_now_entity');
+    const eToday = pick('east_today_entity');
+    const ePeak = pick('east_peak_entity');
 
     const pvW = _num(pv);
     const chgW = _num(chg);
@@ -297,30 +299,36 @@ export class SolarView {
     this._flowBatHouse.toggleAttribute('data-active', disW > 15);
     this._flowGridHouse.toggleAttribute('data-active', impW > 15);
 
-    const sig = [pv, chg, dis, soc, imp, exp, house, dy, dh, inc, sch, wNow, wToday, eNow, eToday]
+    const sig = `${editMode ? 1 : 0}|` + [pv, chg, dis, soc, imp, exp, house, dy, dh, inc, sch, wNow, wToday, eNow, eToday]
       .map((s) => `${s?.entity_id || ''}:${s?.state || ''}`).join('|');
     if (sig === this._lastSig) return;
     this._lastSig = sig;
 
     const kpis = [
-      { label: 'PV-Leistung', val: _fmtWatts(pvW), icon: 'mdi:solar-power', color: '#f59e0b', id: pv?.entity_id },
-      { label: 'Hausverbrauch', val: _fmtWatts(houseW), icon: 'mdi:home-lightning-bolt', color: '#ef4444', id: house?.entity_id },
-      { label: 'Batterie', val: socVal, sub: chgW > 5 ? `Lädt ${_fmtWatts(chgW)}` : (disW > 5 ? `Entlädt ${_fmtWatts(disW)}` : 'Standby'), icon: 'mdi:battery-charging', color: '#10b981', id: soc?.entity_id },
-      { label: expW > 10 ? 'Einspeisung' : 'Netzbezug', val: _fmtWatts(expW > 10 ? expW : impW), icon: 'mdi:transmission-tower', color: '#03a9f4', id: (expW > 10 ? exp : imp)?.entity_id },
+      ...(pv ? [{ label: 'PV-Leistung', val: _fmtWatts(pvW), icon: 'mdi:solar-power', color: '#f59e0b', id: pv.entity_id }] : []),
+      ...(house ? [{ label: 'Hausverbrauch', val: _fmtWatts(houseW), icon: 'mdi:home-lightning-bolt', color: '#ef4444', id: house.entity_id }] : []),
+      ...(soc ? [{ label: 'Batterie', val: socVal, sub: chgW > 5 ? `Lädt ${_fmtWatts(chgW)}` : (disW > 5 ? `Entlädt ${_fmtWatts(disW)}` : 'Standby'), icon: 'mdi:battery-charging', color: '#10b981', id: soc.entity_id }] : []),
+      ...((exp || imp) ? [{ label: expW > 10 ? 'Einspeisung' : 'Netzbezug', val: _fmtWatts(expW > 10 ? expW : impW), icon: 'mdi:transmission-tower', color: '#03a9f4', id: (expW > 10 ? exp : imp)?.entity_id }] : []),
       ...(dy ? [{ label: 'Tagesertrag', val: `${_num(dy).toFixed(1)} kWh`, icon: 'mdi:counter', color: '#f59e0b', id: dy.entity_id }] : []),
       ...(dh ? [{ label: 'Tagesverbrauch', val: `${_num(dh).toFixed(1)} kWh`, icon: 'mdi:home-analytics', color: '#fb7185', id: dh.entity_id }] : []),
       ...(inc ? [{ label: 'Tagesersparnis', val: `${_num(inc).toFixed(2)} €`, icon: 'mdi:cash-multiple', color: '#22c55e', id: inc.entity_id }] : []),
       ...(sch ? [{ label: 'Schimmeldry', val: `${_num(sch).toFixed(2)} ${sch.attributes?.unit_of_measurement || 'kWh'}`, icon: 'mdi:fan', color: '#38bdf8', id: sch.entity_id }] : []),
     ];
 
-    this._kpiWrap.replaceChildren(...kpis.map((k) => h('div', {
-      class: 'kpi-card',
-      style: { '--kpi-color': k.color },
-      onClick: () => { if (k.id) moreInfo(this.el, k.id); },
-    },
-    h('div', { class: 'kpi-top' }, icon(k.icon), h('span', {}, k.label)),
-    h('div', { class: 'kpi-val' }, k.val),
-    k.sub ? h('div', { class: 'kpi-sub' }, k.sub) : null)));
+    this._kpiWrap.replaceChildren(...(kpis.length
+      ? kpis.map((k) => h('div', {
+          class: 'kpi-card',
+          style: { '--kpi-color': k.color },
+          onClick: (e) => {
+            if (editMode) return;
+            e.stopPropagation();
+            if (k.id) moreInfo(this.el, k.id);
+          },
+        },
+        h('div', { class: 'kpi-top' }, icon(k.icon), h('span', {}, k.label)),
+        h('div', { class: 'kpi-val' }, k.val),
+        k.sub ? h('div', { class: 'kpi-sub' }, k.sub) : null))
+      : [h('div', { class: 'empty-hint' }, '• Keine Solar-Sensoren konfiguriert\n• Sensoren in Einstellungen → Solar hinterlegen')]));
 
     const totalNow = _num(wNow) + _num(eNow);
     const totalToday = _num(wToday) + _num(eToday);
@@ -330,25 +338,29 @@ export class SolarView {
       fCards.push(
         h('div', {
           class: 'kpi-card', style: { '--kpi-color': '#f59e0b' },
-          onClick: () => { if (primForecastId) moreInfo(this.el, primForecastId); },
+          onClick: (e) => {
+            if (editMode) return;
+            e.stopPropagation();
+            if (primForecastId) moreInfo(this.el, primForecastId);
+          },
         },
           h('div', { class: 'kpi-top' }, icon('mdi:solar-power'), h('span', {}, 'Gesamt Prognose')),
           h('div', { class: 'kpi-val' }, _fmtWatts(totalNow)),
           h('div', { class: 'kpi-sub' }, `Heute ca. ${totalToday.toFixed(1)} kWh`)),
-        h('div', { class: 'kpi-card', style: { '--kpi-color': '#fb923c' }, onClick: () => wNow && moreInfo(this.el, wNow.entity_id) },
+        ...(wNow ? [h('div', { class: 'kpi-card', style: { '--kpi-color': '#fb923c' }, onClick: (e) => { if (editMode) return; e.stopPropagation(); moreInfo(this.el, wNow.entity_id); } },
           h('div', { class: 'kpi-top' }, icon('mdi:weather-sunset-down'), h('span', {}, 'Westen')),
           h('div', { class: 'kpi-val' }, _fmtWatts(_num(wNow))),
-          h('div', { class: 'kpi-sub' }, `Heute ${_num(wToday).toFixed(1)} kWh${wPeak ? ` · Peak ${wPeak.state}` : ''}`)),
-        h('div', { class: 'kpi-card', style: { '--kpi-color': '#38bdf8' }, onClick: () => eNow && moreInfo(this.el, eNow.entity_id) },
+          h('div', { class: 'kpi-sub' }, `Heute ${_num(wToday).toFixed(1)} kWh${wPeak ? ` · Peak ${wPeak.state}` : ''}`))] : []),
+        ...(eNow ? [h('div', { class: 'kpi-card', style: { '--kpi-color': '#38bdf8' }, onClick: (e) => { if (editMode) return; e.stopPropagation(); moreInfo(this.el, eNow.entity_id); } },
           h('div', { class: 'kpi-top' }, icon('mdi:weather-sunset-up'), h('span', {}, 'Osten')),
           h('div', { class: 'kpi-val' }, _fmtWatts(_num(eNow))),
-          h('div', { class: 'kpi-sub' }, `Heute ${_num(eToday).toFixed(1)} kWh${ePeak ? ` · Peak ${ePeak.state}` : ''}`)),
+          h('div', { class: 'kpi-sub' }, `Heute ${_num(eToday).toFixed(1)} kWh${ePeak ? ` · Peak ${ePeak.state}` : ''}`))] : []),
       );
     } else {
       fCards.push(h('div', { class: 'hint' }, '• Keine Solarprognose-Sensoren konfiguriert'));
     }
     this._forecastWrap.replaceChildren(...fCards);
 
-    if (!this._statsCache) this._loadHistory(false);
+    if (!this._statsCache && (pv || house)) this._loadHistory(false);
   }
 }

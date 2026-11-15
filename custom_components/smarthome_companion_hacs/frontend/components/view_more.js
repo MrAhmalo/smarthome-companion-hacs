@@ -1,22 +1,7 @@
-// More View: Unified Navigation Hub (Topics & Settings), Persons & iPhone Batteries, Exterior Temp, Trash Preview & Helpers.
+// More View: Unified Navigation Hub, Configured Weather/Temp/Router & Trash, Configured Batteries & Helpers.
 import {
   h, icon, isUnavailable, numeric, moreInfo, formatState, BUILTIN_VIEWS, resolveColor,
 } from '../lib/util.js';
-
-const _MORE_PEOPLE_TRACKERS = [
-  { tracker: 'device_tracker.iphonevonbrigitte', name: 'Gitte', battery: 'sensor.gitte_battery_level' },
-  { tracker: 'device_tracker.iphonevonjulian', name: 'Julian', battery: 'sensor.ahmalo_battery_level' },
-  { tracker: 'device_tracker.iphonevonmatilda', name: 'Matilda', battery: 'sensor.matilda_battery_level' },
-  { tracker: 'device_tracker.iphonevonsven', name: 'Sven', battery: 'sensor.ios_mphcv50qjl_battery_level' },
-];
-
-const _MORE_SCHIMMELDRY = [
-  { id: 'switch.schimmeldry', name: 'Schimmeldry', icon: 'mdi:fan', toggle: true },
-  { id: 'sensor.schimmeldry_tageslaufzeit', name: 'Tageslaufzeit', icon: 'mdi:timer-outline', toggle: false },
-  { id: 'automation.schimmeldry_um_9_an', name: 'Schimmeldry um 9 Uhr an', icon: 'mdi:clock-start', toggle: true },
-  { id: 'automation.batterie_leer_schimmeldry_aus', name: 'Batterie leer → Aus', icon: 'mdi:battery-alert', toggle: true },
-  { id: 'automation.kein_ertrag_solar_aus', name: 'Kein Solar-Ertrag → Aus', icon: 'mdi:solar-power', toggle: true },
-];
 
 function _moreBatColor(pct) {
   if (pct == null) return '#64748b';
@@ -59,14 +44,15 @@ const _WEATHER_DE = {
 };
 
 export class MoreView {
-  constructor({ hass, config, user, isAdmin, onNavigate, onOpenSettings, onBack }) {
+  constructor({ hass, layout, config, user, isAdmin, ctx, onNavigate, onOpenSettings } = {}) {
     this.hass = hass;
+    this.layout = layout || null;
     this.config = config;
-    this.user = user;
-    this.isAdmin = Boolean(isAdmin);
-    this.onNavigate = onNavigate;
-    this.onOpenSettings = onOpenSettings;
-    this.onBack = onBack;
+    this.user = user || ctx?.user;
+    this.isAdmin = Boolean(isAdmin ?? ctx?.isAdmin);
+    this.ctx = ctx || {};
+    this.onNavigate = onNavigate || ((v) => this.ctx?.onNavigate?.(v));
+    this.onOpenSettings = onOpenSettings || (() => this.ctx?.onOpenSettings?.('more'));
     this._destroyed = false;
     this._lastSig = '';
     this._hubSig = '';
@@ -77,7 +63,7 @@ export class MoreView {
 
     this.el = h('div', { class: 'subview-page', style: { '--view-color': '#03a9f4' } });
     this._buildShell();
-    if (hass) this.update(hass, config, user, isAdmin);
+    if (hass) this.update(hass, layout, config, ctx);
   }
 
   destroy() {
@@ -90,9 +76,7 @@ export class MoreView {
         h('div', { class: 'subview-hero-icon' }, icon('mdi:view-grid-plus-outline')),
         h('div', { style: { minWidth: '0' } },
           h('h2', { class: 'subview-title' }, 'Mehr & Bereiche'),
-          h('div', { class: 'subview-sub' }, 'Themen, Batterien, Wetter & Müllplan'))),
-      h('div', { class: 'subview-actions' },
-        this.onBack ? h('button', { type: 'button', class: 'btn', onClick: this.onBack }, icon('mdi:arrow-left'), 'Zurück') : null));
+          h('div', { class: 'subview-sub' }, 'Themen, Wetter, Müllplan & konfigurierte Geräte'))));
 
     // Topic Hub Grid
     this._hubGrid = h('div', { class: 'more-grid' });
@@ -101,39 +85,41 @@ export class MoreView {
         h('div', { class: 'subview-section-title' }, icon('mdi:compass-outline'), 'Bereiche')),
       this._hubGrid);
 
-    // Persons + iPhone Battery Grid
-    this._peopleGrid = h('div', { class: 'kpi-grid' });
-    this._peopleSec = h('section', { class: 'subview-section' },
-      h('div', { class: 'subview-section-head' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:account-group-outline'), 'Personen & Smartphones')),
-      this._peopleGrid);
-
     // Climate, System Status & Trash Preview
     this._tempCard = h('div', { class: 'kpi-grid' });
     this._trashList = h('div', { class: 'log-list' });
-    const infoSec = h('section', { class: 'subview-section' },
+    this._infoSec = h('section', {
+      class: 'subview-section',
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('more'); },
+    },
       h('div', { class: 'subview-section-head' },
         h('div', { class: 'subview-section-title' }, icon('mdi:calendar-month-outline'), 'Wetter, System & Müllplan')),
       this._tempCard,
       this._trashList);
 
-    // Full Battery Overview with filter chips & low-first sorting
+    // Full Battery Overview (strictly configured devices)
     this._batFilters = h('div', { class: 'filter-chips' });
     this._batList = h('div', { class: 'log-list' });
-    this._batSec = h('section', { class: 'subview-section', hidden: true },
+    this._batSec = h('section', {
+      class: 'subview-section', hidden: true,
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('more'); },
+    },
       h('div', { class: 'subview-section-head' },
         h('div', { class: 'subview-section-title' }, icon('mdi:battery-charging-80'), 'Batterie-Übersicht'),
         this._batFilters),
       this._batList);
 
-    // Schimmeldry & Helpers
+    // Configured Helpers
     this._helpersWrap = h('div', { class: 'log-list' });
-    this._helpersSec = h('section', { class: 'subview-section', hidden: true },
+    this._helpersSec = h('section', {
+      class: 'subview-section', hidden: true,
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('more'); },
+    },
       h('div', { class: 'subview-section-head' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:fan'), 'Schimmeldry & Automationen')),
+        h('div', { class: 'subview-section-title' }, icon('mdi:tune-variant'), 'Konfigurierte Helfer')),
       this._helpersWrap);
 
-    this.el.append(head, hubSec, this._peopleSec, infoSec, this._batSec, this._helpersSec);
+    this.el.append(head, hubSec, this._infoSec, this._batSec, this._helpersSec);
   }
 
   _viewVisible(viewId) {
@@ -193,43 +179,65 @@ export class MoreView {
   }
 
   _trashCalendars(states) {
-    const configured = (this.config?.trash?.calendar_entities || []).filter((id) => id && states[id]);
-    if (configured.length) return configured;
-    if (states['calendar.muellplan']) return ['calendar.muellplan'];
-    return Object.keys(states).filter((id) => id.startsWith('calendar.') && /m[uü]ll|abfall|trash/i.test(id));
+    return (this.config?.trash?.calendar_entities || []).filter((id) => id && states[id]);
   }
 
   _weatherEntity(states) {
     const cfgId = this.config?.views?.more?.weather_entity || this.config?.weather_entity;
-    if (cfgId && states[cfgId]) return cfgId;
-    if (states['weather.forecast_home']) return 'weather.forecast_home';
-    return Object.keys(states).find((id) => id.startsWith('weather.')) || '';
+    return (cfgId && states[cfgId]) ? cfgId : '';
   }
 
   _tempEntity(states) {
     const cfgId = this.config?.views?.more?.temp_entity;
-    if (cfgId && states[cfgId]) return cfgId;
-    if (states['sensor.aussentemperatur_fallback']) return 'sensor.aussentemperatur_fallback';
-    return Object.keys(states).find((id) => (
-      id.startsWith('sensor.')
-      && states[id]?.attributes?.device_class === 'temperature'
-      && /aussen|außen|outdoor|exterior/i.test(`${id} ${states[id]?.attributes?.friendly_name || ''}`)
-    )) || '';
+    return (cfgId && states[cfgId]) ? cfgId : '';
   }
 
   _routerEntity(states) {
     const cfgId = this.config?.views?.more?.router_entity || this.config?.views?.security?.router_entity;
-    if (cfgId && states[cfgId]) return cfgId;
-    if (states['binary_sensor.fritz_box_7590_ax_verbindung']) return 'binary_sensor.fritz_box_7590_ax_verbindung';
-    return Object.keys(states).find((id) => /fritz.*verbindung|router.*online/i.test(id)) || '';
+    return (cfgId && states[cfgId]) ? cfgId : '';
   }
 
-  update(hass, config, user, isAdmin) {
+  _configuredBatteryIds(states) {
+    const cfgDevs = new Set([
+      ...(this.layout?.configured?.device_ids || []),
+      ...Object.keys(this.config?.devices || {}),
+    ]);
+    const cfgEnts = new Set(this.layout?.configured?.entity_ids || []);
+    const entToDev = this.layout?.configured?.entity_to_device || {};
+    const haEnts = this.hass?.entities || {};
+
+    return Object.keys(states)
+      .filter((id) => {
+        if (!id.startsWith('sensor.') || states[id]?.attributes?.device_class !== 'battery') return false;
+        const devId = entToDev[id] || haEnts[id]?.device_id;
+        return cfgEnts.has(id) || (devId && cfgDevs.has(devId));
+      })
+      .sort();
+  }
+
+  update(hass, arg1, arg2, arg3) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
-    if (config !== undefined) this.config = config;
-    if (user !== undefined) this.user = user;
-    if (isAdmin !== undefined) this.isAdmin = Boolean(isAdmin);
+    if (arg1 && (Array.isArray(arg1.rooms) || 'configured' in arg1)) {
+      this.layout = arg1;
+      if (arg2 !== undefined) this.config = arg2;
+      if (arg3 !== undefined) this.ctx = arg3;
+    } else {
+      if (arg1 !== undefined) this.config = arg1;
+      if (arg2 && typeof arg2 === 'object' && ('editMode' in arg2 || 'onOpenSettings' in arg2)) {
+        this.ctx = arg2;
+      } else {
+        if (arg2 !== undefined) this.user = arg2;
+        if (arg3 !== undefined) this.isAdmin = Boolean(arg3);
+      }
+    }
+    if (this.ctx?.user !== undefined) this.user = this.ctx.user;
+    if (this.ctx?.isAdmin !== undefined) this.isAdmin = Boolean(this.ctx.isAdmin);
+
+    const editMode = Boolean(this.ctx?.editMode);
+    this._infoSec?.toggleAttribute('data-edit-mode', editMode);
+    this._batSec?.toggleAttribute('data-edit-mode', editMode);
+    this._helpersSec?.toggleAttribute('data-edit-mode', editMode);
 
     this._renderHub();
 
@@ -238,25 +246,22 @@ export class MoreView {
     const weatherId = this._weatherEntity(states);
     const tempId = this._tempEntity(states);
     const routerId = this._routerEntity(states);
-    const batIds = Object.keys(states)
-      .filter((id) => id.startsWith('sensor.') && states[id]?.attributes?.device_class === 'battery')
-      .sort();
+    const batIds = this._configuredBatteryIds(states);
+    const helperIds = (Array.isArray(this.config?.views?.more?.helpers) ? this.config.views.more.helpers : [])
+      .map((s) => s?.id).filter(Boolean);
 
     const trackedIds = [
-      ..._MORE_PEOPLE_TRACKERS.flatMap((p) => [p.tracker, p.battery]),
-      ...((this.config?.persons || []).map((p) => p.entity_id).filter(Boolean)),
       weatherId,
       tempId,
       routerId,
       ...cals,
       ...batIds,
-      ..._MORE_SCHIMMELDRY.map((s) => s.id),
+      ...helperIds,
     ].filter(Boolean);
 
-    const sig = trackedIds.map((id) => `${id}:${states[id]?.state}`).join('|') + `|bf:${this._batFilter}`;
+    const sig = trackedIds.map((id) => `${id}:${states[id]?.state}`).join('|') + `|bf:${this._batFilter}|em:${editMode ? 1 : 0}`;
     if (sig !== this._lastSig) {
       this._lastSig = sig;
-      this._renderPeople(states);
       this._renderTempAndTrash(states);
       this._renderBatteries(states, batIds);
       this._renderHelpers(states);
@@ -272,55 +277,9 @@ export class MoreView {
     }
   }
 
-  _renderPeople(states) {
-    const cards = [];
-    for (const p of _MORE_PEOPLE_TRACKERS) {
-      const tr = states[p.tracker];
-      const bat = states[p.battery];
-      if (!tr && !bat) continue;
-      const isHome = tr?.state === 'home';
-      const batPct = numeric(bat);
-      const batColor = _moreBatColor(batPct);
-
-      cards.push(h('div', {
-        class: 'kpi-card',
-        style: { '--kpi-color': isHome ? '#10b981' : '#64748b' },
-        onClick: () => moreInfo(this.el, (tr || bat).entity_id),
-      },
-        h('div', { class: 'kpi-top' }, icon(isHome ? 'mdi:home-account' : 'mdi:account-arrow-right'), h('span', {}, p.name)),
-        h('div', { class: 'kpi-val', style: { fontSize: '16px' } },
-          tr ? (isHome ? 'Zuhause' : tr.state === 'not_home' ? 'Abwesend' : tr.state) : '—'),
-        h('div', {
-          class: 'kpi-sub',
-          style: { color: batPct != null ? batColor : 'var(--cd-secondary)', fontWeight: '600' },
-          onClick: (e) => { if (bat) { e.stopPropagation(); moreInfo(this.el, bat.entity_id); } },
-        }, bat ? `Akku: ${formatState(bat)}` : 'Kein Akku-Sensor')));
-    }
-
-    if (!cards.length) {
-      const configuredPersons = (this.config?.persons || [])
-        .map((p) => states[p.entity_id])
-        .filter(Boolean);
-      const fallbackPersons = configuredPersons.length
-        ? configuredPersons
-        : Object.values(states).filter((s) => s.entity_id.startsWith('person.')).slice(0, 6);
-      for (const s of fallbackPersons) {
-        const isHome = s.state === 'home';
-        cards.push(h('div', {
-          class: 'kpi-card', style: { '--kpi-color': isHome ? '#10b981' : '#64748b' },
-          onClick: () => moreInfo(this.el, s.entity_id),
-        },
-          h('div', { class: 'kpi-top' }, icon('mdi:account'), h('span', {}, s.attributes?.friendly_name || s.entity_id)),
-          h('div', { class: 'kpi-val', style: { fontSize: '16px' } }, isHome ? 'Zuhause' : s.state === 'not_home' ? 'Abwesend' : s.state)));
-      }
-    }
-
-    this._peopleSec.hidden = cards.length === 0;
-    this._peopleGrid.replaceChildren(...cards);
-  }
-
   _renderTempAndTrash(states) {
     const cards = [];
+    const editMode = Boolean(this.ctx?.editMode);
     const wId = this._weatherEntity(states);
     const wst = wId ? states[wId] : null;
     if (wst) {
@@ -329,7 +288,11 @@ export class MoreView {
       const unit = this.hass?.config?.unit_system?.temperature || '°C';
       cards.push(h('div', {
         class: 'kpi-card', style: { '--kpi-color': '#38bdf8' },
-        onClick: () => moreInfo(this.el, wst.entity_id),
+        onClick: (e) => {
+          if (editMode) return;
+          e.stopPropagation();
+          moreInfo(this.el, wst.entity_id);
+        },
       },
         h('div', { class: 'kpi-top' }, icon('mdi:weather-partly-cloudy'), h('span', {}, wst.attributes?.friendly_name || 'Wetter')),
         h('div', { class: 'kpi-val' }, wTemp != null ? `${wTemp}${unit}` : cond),
@@ -341,16 +304,15 @@ export class MoreView {
     if (ext) {
       cards.push(h('div', {
         class: 'kpi-card', style: { '--kpi-color': '#4dd0e1' },
-        onClick: () => moreInfo(this.el, ext.entity_id),
+        onClick: (e) => {
+          if (editMode) return;
+          e.stopPropagation();
+          moreInfo(this.el, ext.entity_id);
+        },
       },
         h('div', { class: 'kpi-top' }, icon('mdi:thermometer'), h('span', {}, 'Außentemperatur')),
         h('div', { class: 'kpi-val' }, formatState(ext)),
         h('div', { class: 'kpi-sub' }, 'Tippen für Verlauf')));
-    } else if (!wst) {
-      cards.push(h('div', { class: 'kpi-card' },
-        h('div', { class: 'kpi-top' }, icon('mdi:thermometer'), h('span', {}, 'Außentemperatur')),
-        h('div', { class: 'kpi-val' }, '—'),
-        h('div', { class: 'kpi-sub' }, 'Kein Sensor')));
     }
 
     const rId = this._routerEntity(states);
@@ -359,11 +321,21 @@ export class MoreView {
       const online = fritz.state === 'on';
       cards.push(h('div', {
         class: 'kpi-card', style: { '--kpi-color': online ? '#10b981' : '#ef4444' },
-        onClick: () => moreInfo(this.el, fritz.entity_id),
+        onClick: (e) => {
+          if (editMode) return;
+          e.stopPropagation();
+          moreInfo(this.el, fritz.entity_id);
+        },
       },
         h('div', { class: 'kpi-top' }, icon(online ? 'mdi:router-wireless' : 'mdi:router-wireless-off'), h('span', {}, 'Router')),
         h('div', { class: 'kpi-val', style: { fontSize: '16px', color: online ? '#10b981' : '#ef4444' } }, online ? 'Online' : 'Offline'),
         h('div', { class: 'kpi-sub' }, fritz.attributes?.friendly_name || fritz.entity_id)));
+    }
+
+    if (!cards.length) {
+      cards.push(h('div', { class: 'kpi-card' },
+        h('div', { class: 'kpi-top' }, icon('mdi:cog-outline'), h('span', {}, 'Info-Kacheln')),
+        h('div', { class: 'kpi-sub' }, '• Wetter, Außentemperatur oder Router in Einstellungen wählen')));
     }
 
     this._tempCard.replaceChildren(...cards);
@@ -412,12 +384,16 @@ export class MoreView {
       return;
     }
     this._trashList.replaceChildren(...this._trashEvents.slice(0, 8).map((ev) => {
-      const targetCal = ev._entityId || cals[0] || 'calendar.muellplan';
+      const targetCal = ev._entityId || cals[0] || '';
       const title = ev.summary || ev.title || 'Abholung';
       const match = this._matchTrashPattern(title);
       return h('div', {
-        class: 'log-row', style: { cursor: 'pointer' },
-        onClick: () => moreInfo(this.el, targetCal),
+        class: 'log-row', style: targetCal ? { cursor: 'pointer' } : {},
+        onClick: (e) => {
+          if (this.ctx?.editMode || !targetCal) return;
+          e.stopPropagation();
+          moreInfo(this.el, targetCal);
+        },
       },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1' } },
           h('span', { style: { color: match.color || 'var(--cd-secondary)', display: 'inline-flex', flex: 'none' } }, icon(match.icon)),
@@ -552,7 +528,8 @@ export class MoreView {
 
   _renderHelpers(states) {
     const customHelpers = this.config?.views?.more?.helpers;
-    const items = Array.isArray(customHelpers) && customHelpers.length ? customHelpers : _MORE_SCHIMMELDRY;
+    const items = Array.isArray(customHelpers) ? customHelpers : [];
+    const editMode = Boolean(this.ctx?.editMode);
     const rows = [];
     for (const item of items) {
       const st = states[item.id];
@@ -561,16 +538,30 @@ export class MoreView {
         const isOn = st.state === 'on';
         const dom = item.id.split('.')[0];
         rows.push(h('div', { class: 'log-row', style: { padding: '8px 12px' } },
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1', cursor: 'pointer' }, onClick: () => moreInfo(this.el, item.id) },
+          h('div', {
+            style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1', cursor: 'pointer' },
+            onClick: (e) => {
+              if (editMode) return;
+              e.stopPropagation();
+              moreInfo(this.el, item.id);
+            },
+          },
             icon(item.icon || 'mdi:toggle-switch'),
             h('span', { class: 'log-row-main' }, st.attributes?.friendly_name || item.name || item.id)),
           h('button', {
             type: 'button', class: `btn sm${isOn ? ' primary' : ''}`,
             disabled: isUnavailable(st),
-            onClick: () => this.hass?.callService(dom, 'toggle', { entity_id: item.id }),
+            onClick: (e) => { e.stopPropagation(); this.hass?.callService(dom, 'toggle', { entity_id: item.id }); },
           }, isOn ? 'Ein' : 'Aus')));
       } else {
-        rows.push(h('div', { class: 'log-row', style: { cursor: 'pointer' }, onClick: () => moreInfo(this.el, item.id) },
+        rows.push(h('div', {
+          class: 'log-row', style: { cursor: 'pointer' },
+          onClick: (e) => {
+            if (editMode) return;
+            e.stopPropagation();
+            moreInfo(this.el, item.id);
+          },
+        },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1' } },
             icon(item.icon || 'mdi:information-outline'),
             h('span', { class: 'log-row-main' }, st.attributes?.friendly_name || item.name || item.id)),

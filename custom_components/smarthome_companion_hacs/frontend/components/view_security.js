@@ -106,20 +106,20 @@ class AlarmPinModal {
     const showModeBar = this.service !== 'alarm_disarm' && this.modes.length > 1;
     this._modeBar = showModeBar
       ? h('div', { class: 'pin-mode-bar', role: 'group', 'aria-label': 'Alarm-Modus wählen' },
-          ...this.modes.map((m) => h('button', {
-            type: 'button',
-            class: 'pin-mode-chip',
-            'data-service': m.service,
-            ...(m.service === this.service ? { 'data-selected': '' } : {}),
-            disabled: m.state === this.currentState,
-            onClick: () => this._selectMode(m),
-          }, icon(m.icon), m.label)))
+        ...this.modes.map((m) => h('button', {
+          type: 'button',
+          class: 'pin-mode-chip',
+          'data-service': m.service,
+          ...(m.service === this.service ? { 'data-selected': '' } : {}),
+          disabled: m.state === this.currentState,
+          onClick: () => this._selectMode(m),
+        }, icon(m.icon), m.label)))
       : null;
 
     const openHint = this.openSensors.length
       ? h('div', { class: 'inline-notice', style: { marginBottom: '2px' } },
-          icon('mdi:window-open-variant'),
-          h('span', {}, `Offen: ${this.openSensors.join(', ')}`))
+        icon('mdi:window-open-variant'),
+        h('span', {}, `Offen: ${this.openSensors.join(', ')}`))
       : null;
 
     const mkKey = (lbl, onClick, ic = null, aria = lbl) => h('button', {
@@ -238,13 +238,13 @@ class AlarmPinModal {
 }
 
 export class SecurityView {
-  constructor({ hass, config, onBack }) {
+  constructor({ hass, layout, config, ctx }) {
     this.hass = hass;
+    this.layout = layout || null;
     this.config = config || {};
-    this.onBack = onBack;
+    this.ctx = ctx || null;
     this._destroyed = false;
     this._pinModal = null;
-    this._countdownInterval = null;
     this._camInterval = null;
     this._camTick = 0;
     this._camObserver = null;
@@ -257,28 +257,99 @@ export class SecurityView {
     };
     document.addEventListener('visibilitychange', this._onVisibility);
     this._camInterval = setInterval(() => this._refreshCameras(), 8000);
-    if (hass) this.update(hass);
+    if (hass) this.update(hass, layout, config);
   }
 
   destroy() {
     this._destroyed = true;
-    clearInterval(this._countdownInterval);
     clearInterval(this._camInterval);
     document.removeEventListener('visibilitychange', this._onVisibility);
     this._camObserver?.disconnect?.();
     this._pinModal?.destroy?.();
     this._pinModal = null;
-    // Drop open image requests on destroy
     this.el?.querySelectorAll('img[data-cam-img]').forEach((img) => {
       img.removeAttribute('src');
     });
   }
 
-  _findAlarmEntity(hass) {
+  _configuredSmoke(states) {
+    const out = new Map();
+    const rooms = this.layout?.rooms || [];
+    const roomById = new Map(rooms.map((r) => [r.area_id, r]));
+    const e2d = this.layout?.configured?.entity_to_device || {};
+
+    for (const item of (this.layout?.configured?.smoke || [])) {
+      if (!item?.entity_id || !states[item.entity_id]) continue;
+      out.set(item.entity_id, {
+        entity_id: item.entity_id,
+        device_id: item.device_id || e2d[item.entity_id] || null,
+        name: item.name || states[item.entity_id]?.attributes?.friendly_name || item.entity_id,
+        area_name: item.area_name || roomById.get(item.area_id)?.name || '',
+        area_icon: item.area_icon || roomById.get(item.area_id)?.icon || '',
+      });
+    }
+    for (const r of rooms) {
+      for (const eid of (r.sensors?.smoke || [])) {
+        if (!eid || !states[eid] || out.has(eid)) continue;
+        out.set(eid, {
+          entity_id: eid,
+          device_id: e2d[eid] || null,
+          name: states[eid]?.attributes?.friendly_name || eid,
+          area_name: r.name || '',
+          area_icon: r.icon || '',
+        });
+      }
+      for (const t of (r.tiles || [])) {
+        if ((t.category === 'rauchmelder' || t.category === 'smoke') && t.entity_id && states[t.entity_id] && !out.has(t.entity_id)) {
+          out.set(t.entity_id, {
+            entity_id: t.entity_id,
+            device_id: t.device_id || e2d[t.entity_id] || null,
+            name: t.name || states[t.entity_id]?.attributes?.friendly_name || t.entity_id,
+            area_name: r.name || '',
+            area_icon: r.icon || '',
+          });
+        }
+      }
+    }
+    return Array.from(out.values());
+  }
+
+  _configuredCameras(states) {
+    const out = new Map();
+    const e2d = this.layout?.configured?.entity_to_device || {};
+    for (const item of (this.layout?.configured?.cameras || [])) {
+      if (!item?.entity_id || !states[item.entity_id]) continue;
+      out.set(item.entity_id, {
+        entity_id: item.entity_id,
+        device_id: item.device_id || e2d[item.entity_id] || null,
+        name: item.name || states[item.entity_id]?.attributes?.friendly_name || item.entity_id,
+      });
+    }
+    const cfgList = this.config?.views?.security?.camera_entities;
+    if (Array.isArray(cfgList)) {
+      for (const cid of cfgList) {
+        if (!cid || !states[cid] || out.has(cid)) continue;
+        out.set(cid, {
+          entity_id: cid,
+          device_id: e2d[cid] || null,
+          name: states[cid]?.attributes?.friendly_name || cid,
+        });
+      }
+    }
+    return Array.from(out.values());
+  }
+
+  _findConfiguredAlarm(states) {
+    const e2d = this.layout?.configured?.entity_to_device || {};
     const cfgId = this.config?.views?.security?.alarm_entity;
-    if (cfgId && hass.states[cfgId]) return cfgId;
-    if (hass.states['alarm_control_panel.alarmo']) return 'alarm_control_panel.alarmo';
-    return Object.keys(hass.states).find((id) => id.startsWith('alarm_control_panel.')) || null;
+    if (cfgId && states[cfgId]) {
+      return { entity_id: cfgId, device_id: e2d[cfgId] || null };
+    }
+    const cfgAlarm = (this.layout?.configured?.alarms || []).find((a) => a?.entity_id && states[a.entity_id]);
+    if (cfgAlarm) {
+      return { entity_id: cfgAlarm.entity_id, device_id: cfgAlarm.device_id || e2d[cfgAlarm.entity_id] || null };
+    }
+    return null;
   }
 
   _refreshCameras() {
@@ -322,112 +393,140 @@ export class SecurityView {
     (root?.append ? root : this.el).append(this._pinModal.el);
   }
 
-  update(hass) {
+  update(hass, layout, config) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
+    if (layout !== undefined) this.layout = layout;
+    if (config !== undefined) this.config = config;
     const states = hass.states || {};
-
     const secCfg = this.config?.views?.security || {};
-    const alarmId = this._findAlarmEntity(hass);
-    const timerId = secCfg.timer_entity && states[secCfg.timer_entity] ? secCfg.timer_entity : 'timer.rauchalarm_countdown';
-    const timerSt = states[timerId];
-    const abortId = secCfg.abort_entity && states[secCfg.abort_entity] ? secCfg.abort_entity : 'input_boolean.rauchalarm_abbrechen';
-    const smokeSensors = Object.keys(states).filter((id) => id.startsWith('binary_sensor.') && states[id]?.attributes?.device_class === 'smoke');
-    const sirens = Object.keys(states).filter((id) => (id.startsWith('switch.') || id.startsWith('siren.')) && /sirene|siren/i.test(id));
-    const camIds = Object.keys(states).filter((id) => id.startsWith('camera.'));
-    const windowDoors = Object.keys(states).filter((id) => id.startsWith('binary_sensor.') && ['window', 'door', 'garage_door', 'opening'].includes(states[id]?.attributes?.device_class));
-    const coverAutos = Object.keys(states).filter((id) => id.startsWith('automation.') && /rollladen|jalousie/i.test(id));
-    const batteries = Object.keys(states).filter((id) => id.startsWith('sensor.') && states[id]?.attributes?.device_class === 'battery' && !/iphone|ipad|handy|phone|pixel|galaxy|watch|macbook|ios_/i.test(`${id} ${states[id]?.attributes?.friendly_name || ''}`));
-    const fritz = (secCfg.router_entity && states[secCfg.router_entity])
-      || states['binary_sensor.fritz_box_7590_ax_verbindung']
-      || Object.values(states).find((s) => /fritz.*verbindung|router.*online/i.test(s.entity_id));
-    const presenceId = secCfg.presence_entity && states[secCfg.presence_entity] ? secCfg.presence_entity : 'switch.anwesenheitssimulation';
-    const pumpId = secCfg.water_pump_entity && states[secCfg.water_pump_entity] ? secCfg.water_pump_entity : 'switch.garten_wasserpumpe_fenster';
+    const editMode = !!this.ctx?.isEditMode?.();
+
+    const smokeList = this._configuredSmoke(states);
+    const camList = this._configuredCameras(states);
+    const alarmEntry = this._findConfiguredAlarm(states);
+    const alarmId = alarmEntry?.entity_id || null;
+    const batteries = Object.keys(states).filter(
+      (id) => id.startsWith('sensor.') && states[id]?.attributes?.device_class === 'battery'
+        && !/iphone|ipad|handy|phone|pixel|galaxy|watch|macbook|ios_/i.test(`${id} ${states[id]?.attributes?.friendly_name || ''}`),
+    );
 
     const trackedIds = [
       alarmId,
-      timerId,
-      abortId,
-      presenceId,
-      pumpId,
-      fritz?.entity_id,
-      ...smokeSensors,
-      ...sirens,
-      ...camIds,
-      ...windowDoors,
-      ...coverAutos,
+      ...smokeList.map((s) => s.entity_id),
+      ...camList.map((c) => c.entity_id),
       ...batteries,
     ].filter(Boolean);
 
     const aSig = alarmId && states[alarmId]
       ? (() => {
-          const a = states[alarmId].attributes || {};
-          const openKey = a.open_sensors ? Object.keys(a.open_sensors).length : 0;
-          const bypKey = Array.isArray(a.bypassed_sensors) ? a.bypassed_sensors.length : 0;
-          return `|af=${a.supported_features ?? ''}:${a.arm_mode ?? ''}:${a.next_state ?? ''}:${a.code_arm_required ?? ''}:${openKey}:${bypKey}:${a.changed_by ?? ''}`;
-        })()
+        const a = states[alarmId].attributes || {};
+        const openKey = a.open_sensors ? Object.keys(a.open_sensors).length : 0;
+        const bypKey = Array.isArray(a.bypassed_sensors) ? a.bypassed_sensors.length : 0;
+        return `|af=${a.supported_features ?? ''}:${a.arm_mode ?? ''}:${a.next_state ?? ''}:${a.code_arm_required ?? ''}:${openKey}:${bypKey}:${a.changed_by ?? ''}`;
+      })()
       : '';
-    const sig = trackedIds.map((id) => `${id}=${states[id]?.state}:${states[id]?.attributes?.finishes_at || ''}`).join('|') + aSig;
+    const sig = trackedIds.map((id) => `${id}=${states[id]?.state}`).join('|') + aSig + `|em=${editMode ? 1 : 0}`;
     if (sig === this._lastSig) return;
     this._lastSig = sig;
 
     const children = [];
 
-    // 1. Header (clean — no isolated floating status chip)
-    const fritzOffline = fritz && (fritz.state === 'off' || isUnavailable(fritz));
+    // Header (no redundant back button; Bottom NavBar navigates)
     children.push(h('div', { class: 'subview-head' },
       h('div', { class: 'subview-head-left' },
-        h('button', { type: 'button', class: 'room-detail-back', onClick: () => this.onBack?.() }, icon('mdi:arrow-left'), 'Zurück'),
         h('div', { class: 'subview-hero-icon' }, icon('mdi:shield-home')),
         h('div', { style: { minWidth: '0' } },
           h('h2', { class: 'subview-title' }, 'Sicherheit'),
-          h('div', { class: 'subview-sub' }, 'Alarmanlage, Rauchmelder, Kameras & Sensoren')))));
+          h('div', { class: 'subview-sub' }, 'Rauchmelder, Kameras, Alarmanlage & Batterien')))));
 
-    // 2. Active Smoke Alarm or Timer Banner
-    const activeSmokes = smokeSensors.filter((id) => ['on', 'detected', 'smoke'].includes(states[id]?.state));
-    const timerActive = timerSt && (timerSt.state === 'active' || timerSt.state === 'paused');
-    clearInterval(this._countdownInterval);
-    this._countdownInterval = null;
+    // 1. Rauchmelderübersicht (#security-smoke target for alert banner click)
+    const activeSmokes = smokeList.filter((s) => ['on', 'detected', 'smoke', 'alarm', 'true'].includes(String(states[s.entity_id]?.state || '').toLowerCase()));
+    children.push(h('section', { id: 'security-smoke', class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:smoke-detector-variant'), `Rauchmelderübersicht (${smokeList.length})`),
+        activeSmokes.length
+          ? h('span', { class: 'badge-tag', style: { background: '#dc2626', color: '#fff', fontWeight: '700' } }, `${activeSmokes.length} ausgelöst`)
+          : (smokeList.length ? h('span', { class: 'badge-tag', style: { color: '#22c55e' } }, 'Alle OK') : null)),
+      smokeList.length
+        ? h('div', { class: 'kpi-grid' },
+          ...smokeList.map((s) => {
+            const st = states[s.entity_id];
+            const alarm = ['on', 'detected', 'smoke', 'alarm', 'true'].includes(String(st?.state || '').toLowerCase());
+            const unav = isUnavailable(st);
+            return h('div', {
+              class: 'kpi-card',
+              ...(editMode ? { 'data-edit-mode': '' } : {}),
+              style: alarm ? { borderColor: '#ef4444', background: 'rgba(239,68,68,.22)' } : {},
+              onClick: () => {
+                if (editMode && s.device_id) { this.ctx?.onOpenDevice?.(s.device_id); return; }
+                moreInfo(this.el, s.entity_id);
+              },
+            },
+              h('div', { class: 'kpi-top' },
+                icon(alarm ? 'mdi:fire-alert' : 'mdi:smoke-detector'),
+                h('span', {}, s.name)),
+              h('div', { class: 'kpi-val', style: { fontSize: '15px', color: alarm ? '#ef4444' : (unav ? 'var(--cd-secondary)' : '#4caf50') } },
+                unav ? 'Nicht verfügbar' : (alarm ? 'Rauch erkannt!' : 'OK · Kein Rauch')),
+              s.area_name ? h('div', { class: 'kpi-sub' }, s.area_name) : null);
+          }))
+        : h('div', { class: 'hint' }, '• Keine Rauchmelder eingerichtet\n• Im Assistenten hinzufügen')));
 
-    if (activeSmokes.length || timerActive) {
-      const timerDigits = h('div', { class: 'timer-digits' }, '00:00');
-      const tickTimer = () => {
-        if (!timerSt) return;
-        if (timerSt.state === 'active' && timerSt.attributes?.finishes_at) {
-          const rem = Date.parse(timerSt.attributes.finishes_at) - Date.now();
-          timerDigits.textContent = formatCountdownMs(rem);
-        } else if (timerSt.attributes?.remaining) {
-          timerDigits.textContent = String(timerSt.attributes.remaining);
+    // 2. Kameraübersicht (configured cameras only)
+    this._camObserver?.disconnect?.();
+    this._visibleCams.clear();
+    if (camList.length && typeof IntersectionObserver !== 'undefined') {
+      this._camObserver = new IntersectionObserver((entries) => {
+        for (const ent of entries) {
+          const cid = ent.target.getAttribute('data-cam-id');
+          if (!cid) continue;
+          if (ent.isIntersecting) this._visibleCams.add(cid);
+          else this._visibleCams.delete(cid);
         }
-      };
-      if (timerActive) {
-        tickTimer();
-        if (timerSt.state === 'active') {
-          this._countdownInterval = setInterval(tickTimer, 1000);
-        }
-      }
-
-      const abortEntity = states[abortId] ? abortId : null;
-      children.push(h('div', { class: 'smoke-alert-banner' },
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
-          icon('mdi:fire-alert'),
-          h('div', {},
-            h('div', { style: { fontWeight: '800', fontSize: '15px', color: '#fecaca' } },
-              activeSmokes.length ? `Rauch erkannt (${activeSmokes.map((id) => states[id]?.attributes?.friendly_name || id).join(', ')})` : 'Rauchalarm-Countdown aktiv'),
-            h('div', { class: 'hint', style: { color: '#fee2e2' } }, '• Sirenen-Auslösung prüfen\n• Abbruch über Button'))),
-        timerActive ? timerDigits : null,
-        h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-          abortEntity ? h('button', {
-            type: 'button', class: 'btn danger',
-            onClick: () => hass.callService('input_boolean', 'turn_on', { entity_id: abortEntity }),
-          }, icon('mdi:smoke-detector-variant-off'), 'Rauchalarm abbrechen') : null,
-          timerActive ? h('button', {
-            type: 'button', class: 'btn secondary',
-            onClick: () => hass.callService('timer', 'cancel', { entity_id: timerId }),
-          }, 'Timer stoppen') : null)));
+      }, { threshold: 0.05 });
     }
+    const tick = Date.now();
+    children.push(h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:cctv'), `Kameraübersicht (${camList.length})`)),
+      camList.length
+        ? h('div', { class: 'camera-grid' },
+          ...camList.map((cam) => {
+            const st = states[cam.entity_id];
+            const pic = st?.attributes?.entity_picture || '';
+            const unav = isUnavailable(st);
+            const img = pic ? h('img', {
+              alt: cam.name,
+              'data-cam-img': '',
+              'data-cam-id': cam.entity_id,
+              'data-cam-base': pic,
+              src: `${pic}${pic.includes('?') ? '&' : '?'}_t=${tick}`,
+              loading: 'lazy',
+            }) : h('div', { class: 'empty', style: { padding: '24px' } }, icon('mdi:video-off'));
+            const card = h('div', {
+              class: 'camera-card',
+              'data-cam-id': cam.entity_id,
+              ...(editMode ? { 'data-edit-mode': '' } : {}),
+              onClick: () => {
+                if (editMode) {
+                  if (cam.device_id) { this.ctx?.onOpenDevice?.(cam.device_id); return; }
+                  this.ctx?.onOpenSettings?.();
+                  return;
+                }
+                moreInfo(this.el, cam.entity_id);
+              },
+            },
+              h('div', { class: 'camera-frame' }, unav ? h('div', { class: 'hint' }, 'Kamera offline') : img),
+              h('div', { class: 'camera-foot' },
+                h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, cam.name),
+                h('span', { class: 'badge-tag' }, unav ? 'Offline' : 'Live')));
+            this._camObserver?.observe?.(card);
+            return card;
+          }))
+        : h('div', { class: 'hint' }, '• Keine Kameras eingerichtet\n• Über Assistent oder Einstellungen konfigurieren')));
 
-    // 3. Alarmo / Alarm Control Panel
+    // 3. Alarmanlagenübersicht (configured alarm only, with PIN modal & modes)
+    let alarmBody;
     if (alarmId && states[alarmId]) {
       const aSt = states[alarmId];
       const meta = ALARM_STATE_META[aSt.state] || ALARM_STATE_META.unavailable;
@@ -444,16 +543,16 @@ export class SecurityView {
       const bypassedSensors = extractSensorNames(aSt.attributes?.bypassed_sensors, hass);
 
       const actionButtons = [];
-      if (!isUnavail) {
+      if (!isUnavail && !editMode) {
         if (isDisarmed) {
           modes.forEach((m) => actionButtons.push(h('button', {
             type: 'button', class: 'btn primary small',
-            onClick: () => this._triggerAlarmAction(alarmId, m.service, `${m.label} aktivieren`, modes),
+            onClick: (e) => { e.stopPropagation(); this._triggerAlarmAction(alarmId, m.service, `${m.label} aktivieren`, modes); },
           }, icon(m.icon), m.label)));
         } else {
           actionButtons.push(h('button', {
             type: 'button', class: `btn danger${isArmed ? ' small' : ''}`,
-            onClick: () => this._triggerAlarmAction(alarmId, 'alarm_disarm', 'Alarmanlage entschärfen', modes),
+            onClick: (e) => { e.stopPropagation(); this._triggerAlarmAction(alarmId, 'alarm_disarm', 'Alarmanlage entschärfen', modes); },
           }, icon('mdi:shield-off'), 'Entschärfen'));
           if (isArmed && modes.length > 1) {
             modes.forEach((m) => {
@@ -462,167 +561,48 @@ export class SecurityView {
                 type: 'button',
                 class: `btn small${isCurrent ? ' alarm-mode-active' : ' secondary'}`,
                 disabled: isCurrent,
-                onClick: () => this._triggerAlarmAction(alarmId, m.service, `${m.label} aktivieren`, modes),
+                onClick: (e) => { e.stopPropagation(); this._triggerAlarmAction(alarmId, m.service, `${m.label} aktivieren`, modes); },
               }, icon(isCurrent ? 'mdi:check-circle' : m.icon), m.label));
             });
           }
         }
       }
 
-      children.push(h('div', { class: 'alarm-hero', style: { '--alarm-color': meta.color } },
+      alarmBody = h('div', {
+        class: 'alarm-hero',
+        ...(editMode ? { 'data-edit-mode': '' } : {}),
+        style: { '--alarm-color': meta.color },
+        onClick: () => {
+          if (!editMode) return;
+          if (alarmEntry?.device_id) { this.ctx?.onOpenDevice?.(alarmEntry.device_id); return; }
+          this.ctx?.onOpenSettings?.();
+        },
+      },
         h('div', { style: { display: 'grid', gap: '6px' } },
-          h('div', { class: 'alarm-status-pill', onClick: () => moreInfo(this.el, alarmId) },
-            icon(meta.icon),
-            h('span', {}, statusText)),
+          h('div', {
+            class: 'alarm-status-pill',
+            onClick: (e) => {
+              if (editMode) return;
+              e.stopPropagation();
+              moreInfo(this.el, alarmId);
+            },
+          }, icon(meta.icon), h('span', {}, statusText)),
           aSt.attributes?.changed_by ? h('div', { class: 'hint' }, `Zuletzt: ${aSt.attributes.changed_by}`) : null,
           openSensors.length ? h('div', { class: 'hint', style: { color: '#f59e0b' } }, `Offene Sensoren: ${openSensors.join(', ')}`) : null,
           bypassedSensors.length ? h('div', { class: 'hint' }, `Umgehung aktiv: ${bypassedSensors.join(', ')}`) : null),
-        h('div', { class: 'alarm-modes' }, ...actionButtons)));
+        h('div', { class: 'alarm-modes' }, ...actionButtons));
+    } else {
+      alarmBody = h('div', {
+        class: 'hint',
+        ...(editMode ? { 'data-edit-mode': '', onClick: () => this.ctx?.onOpenSettings?.() } : {}),
+      }, '• Keine Alarmanlage eingerichtet\n• In Einstellungen oder Assistent festlegen');
     }
+    children.push(h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:shield-lock-outline'), 'Alarmanlagenübersicht')),
+      alarmBody));
 
-    // 4. Quick Security Toggles (Presence Sim, Water Pump, Sirens)
-    const quickEntities = [
-      { id: presenceId, name: 'Anwesenheitssimulation', icon: 'mdi:home-clock', color: '#8b5cf6' },
-      { id: pumpId, name: 'Garten Wasserpumpe', icon: 'mdi:water-pump', color: '#0ea5e9' },
-      ...sirens.map((id) => ({
-        id,
-        name: states[id]?.attributes?.friendly_name || id,
-        icon: 'mdi:bullhorn-variant',
-        color: '#ef4444',
-      })),
-    ].filter((q) => states[q.id]);
-
-    if (quickEntities.length) {
-      children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon('mdi:shield-check'), 'Schutz & Aktoren')),
-        h('div', { class: 'tile-grid', style: { padding: '0' } },
-          ...quickEntities.map((q) => {
-            const st = states[q.id];
-            const active = st.state === 'on';
-            const unav = isUnavailable(st);
-            return h('div', {
-              class: 'tile',
-              'data-active': active ? 'true' : 'false',
-              ...(unav ? { 'data-unavailable': '' } : {}),
-              style: { '--tile-color': active ? q.color : 'var(--cd-secondary)' },
-            },
-            h('div', { class: 'tile-main' },
-              h('button', {
-                type: 'button', class: 'tile-icon',
-                onClick: () => hass.callService(q.id.split('.')[0], 'toggle', { entity_id: q.id }),
-              }, icon(q.icon)),
-              h('div', { class: 'tile-info', onClick: () => moreInfo(this.el, q.id) },
-                h('div', { class: 'tile-name' }, q.name),
-                h('div', { class: 'tile-state' }, unav ? 'Nicht verfügbar' : (active ? 'Ein' : 'Aus')))));
-          }))));
-    }
-
-    // 5. Cameras (each camera reads its own entity_picture — never hardcoded cross-camera ID)
-    if (camIds.length) {
-      this._camObserver?.disconnect?.();
-      this._visibleCams.clear();
-      if (typeof IntersectionObserver !== 'undefined') {
-        this._camObserver = new IntersectionObserver((entries) => {
-          for (const ent of entries) {
-            const cid = ent.target.getAttribute('data-cam-id');
-            if (!cid) continue;
-            if (ent.isIntersecting) this._visibleCams.add(cid);
-            else this._visibleCams.delete(cid);
-          }
-        }, { threshold: 0.05 });
-      }
-      const tick = Date.now();
-      children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon('mdi:cctv'), `Kameras (${camIds.length})`)),
-        h('div', { class: 'camera-grid' },
-          ...camIds.map((cid) => {
-            const st = states[cid];
-            const name = st?.attributes?.friendly_name || cid;
-            const pic = st?.attributes?.entity_picture || '';
-            const unav = isUnavailable(st);
-            const img = pic ? h('img', {
-              alt: name,
-              'data-cam-img': '',
-              'data-cam-id': cid,
-              'data-cam-base': pic,
-              src: `${pic}${pic.includes('?') ? '&' : '?'}_t=${tick}`,
-              loading: 'lazy',
-            }) : h('div', { class: 'empty', style: { padding: '24px' } }, icon('mdi:video-off'));
-            const card = h('div', {
-              class: 'camera-card',
-              'data-cam-id': cid,
-              onClick: () => moreInfo(this.el, cid),
-            },
-            h('div', { class: 'camera-frame' }, unav ? h('div', { class: 'hint' }, 'Kamera offline') : img),
-            h('div', { class: 'camera-foot' },
-              h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, name),
-              h('span', { class: 'badge-tag' }, unav ? 'Offline' : 'Live')));
-            this._camObserver?.observe?.(card);
-            return card;
-          }))));
-    }
-
-    // 6. Smoke Detectors + Windows/Doors + Rolladen Automations
-    if (smokeSensors.length) {
-      children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon('mdi:smoke-detector-variant'), `Rauchmelder (${smokeSensors.length})`)),
-        h('div', { class: 'kpi-grid' },
-          ...smokeSensors.map((id) => {
-            const st = states[id];
-            const alarm = ['on', 'detected', 'smoke'].includes(st?.state);
-            const unav = isUnavailable(st);
-            return h('div', {
-              class: 'kpi-card',
-              style: alarm ? { borderColor: '#ef4444', background: 'rgba(239,68,68,.16)' } : {},
-              onClick: () => moreInfo(this.el, id),
-            },
-            h('div', { class: 'kpi-top' },
-              icon(alarm ? 'mdi:fire-alert' : 'mdi:smoke-detector'),
-              h('span', {}, st?.attributes?.friendly_name || id)),
-            h('div', { class: 'kpi-val', style: { fontSize: '15px', color: alarm ? '#ef4444' : (unav ? 'var(--cd-secondary)' : '#4caf50') } },
-              unav ? 'Nicht verfügbar' : (alarm ? 'Rauchalarm' : 'OK · Kein Rauch')));
-          }))));
-    }
-
-    if (windowDoors.length) {
-      const openCount = windowDoors.filter((id) => states[id]?.state === 'on').length;
-      children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon('mdi:window-open-variant'), `Fenster & Türen`),
-          h('span', { class: 'badge-tag', style: openCount ? { color: '#ff9800' } : { color: '#4caf50' } },
-            openCount ? `${openCount} geöffnet` : 'Alle geschlossen')),
-        h('div', { class: 'log-list' },
-          ...windowDoors.slice(0, 12).map((id) => {
-            const st = states[id];
-            const open = st?.state === 'on';
-            return h('div', { class: 'log-row', style: { cursor: 'pointer' }, onClick: () => moreInfo(this.el, id) },
-              h('div', { class: 'log-row-main' }, st?.attributes?.friendly_name || id),
-              h('span', { class: 'badge-tag', style: open ? { color: '#ff9800' } : { color: '#4caf50' } }, open ? 'Offen' : 'Geschlossen'));
-          }))));
-    }
-
-    if (coverAutos.length) {
-      children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:window-shutter-auto'), 'Rollladen-Automationen'),
-        h('div', { class: 'tile-grid', style: { padding: '0' } },
-          ...coverAutos.map((id) => {
-            const st = states[id];
-            const on = st?.state === 'on';
-            return h('div', { class: 'tile', 'data-active': on ? 'true' : 'false' },
-              h('div', { class: 'tile-main' },
-                h('button', {
-                  type: 'button', class: 'tile-icon',
-                  onClick: () => hass.callService('automation', 'toggle', { entity_id: id }),
-                }, icon('mdi:robot')),
-                h('div', { class: 'tile-info', onClick: () => moreInfo(this.el, id) },
-                  h('div', { class: 'tile-name' }, st?.attributes?.friendly_name || id),
-                  h('div', { class: 'tile-state' }, on ? 'Aktiv' : 'Deaktiviert'))));
-          }))));
-    }
-
+    // 4. Kritische Batterien (only allowed section that scans unconfigured HA batteries <= threshold)
     const batThreshold = Number(secCfg.battery_threshold ?? 20);
     const critBat = batteries
       .map((id) => {
@@ -634,35 +614,18 @@ export class SecurityView {
       .filter((b) => Number.isFinite(b.val) && b.val <= batThreshold)
       .sort((a, b) => a.val - b.val || a.name.localeCompare(b.name, 'de'));
 
-    if (critBat.length) {
-      children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon('mdi:battery-alert'), `Kritische Geräte-Batterien (≤ ${batThreshold} %)`),
-          h('span', { class: 'badge-tag', style: { color: '#ef4444' } }, `${critBat.length} schwach`)),
-        h('div', { class: 'kpi-grid' },
+    children.push(h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:battery-alert'), `Kritische Batterien (≤ ${batThreshold} %)`),
+        critBat.length
+          ? h('span', { class: 'badge-tag', style: { color: '#ef4444' } }, `${critBat.length} schwach`)
+          : h('span', { class: 'badge-tag', style: { color: '#22c55e' } }, 'Alle OK')),
+      critBat.length
+        ? h('div', { class: 'kpi-grid' },
           ...critBat.map((b) => h('div', { class: 'kpi-card', onClick: () => moreInfo(this.el, b.id) },
             h('div', { class: 'kpi-top' }, icon('mdi:battery-alert'), h('span', {}, b.name)),
-            h('div', { class: 'kpi-val', style: { fontSize: '16px', color: '#ef4444' } }, formatState(b.st)))))));
-    }
-
-    if (fritz) {
-      children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon(fritzOffline ? 'mdi:cloud-off-outline' : 'mdi:router-wireless'), 'System & Konnektivität')),
-        h('div', { class: 'log-row', style: { cursor: 'pointer' }, onClick: () => moreInfo(this.el, fritz.entity_id) },
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1' } },
-            icon(fritzOffline ? 'mdi:router-wireless-off' : 'mdi:router-wireless'),
-            h('span', { class: 'log-row-main' }, fritz.attributes?.friendly_name || 'Router / Internet')),
-          h('span', { class: 'badge-tag', style: fritzOffline ? { color: '#ef4444' } : { color: '#4caf50' } },
-            fritzOffline ? 'Offline' : 'Online'))));
-    }
-
-    if (!alarmId && !smokeSensors.length && !camIds.length && !quickEntities.length) {
-      children.push(h('div', { class: 'card empty' },
-        icon('mdi:shield-outline'),
-        h('div', { style: { fontWeight: '600', margin: '8px 0 4px' } }, 'Keine Sicherheits-Entitäten gefunden'),
-        h('div', { class: 'hint' }, '• Alarmanlage, Rauchmelder oder Kameras in HA einrichten')));
-    }
+            h('div', { class: 'kpi-val', style: { fontSize: '16px', color: '#ef4444' } }, formatState(b.st)))))
+        : h('div', { class: 'hint' }, `• Keine Batterien unter oder gleich ${batThreshold} %`)));
 
     this.el.replaceChildren(...children);
   }

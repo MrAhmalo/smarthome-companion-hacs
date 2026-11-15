@@ -6,6 +6,8 @@ import { SensorConflictModal } from './room_modals.js';
 import {
   DEVICE_CATEGORIES, isControllableActuator, isOwnIntegrationEntity, isOwnIntegrationDevice,
   getPendingChannelsForDevice, createGroupCard, createWizardDeviceElements, createDeviceRoomSection,
+  IGNORED_PLATFORMS, ROOM_SENSOR_DEVICE_CLASSES, classifyDeviceProtocol, isBridgeOrCoordinator,
+  isIrrelevantDeviceOrIntegration,
 } from './device_list.js';
 
 export class DeviceWizard {
@@ -43,10 +45,14 @@ export class DeviceWizard {
     this.energyEntityId = '';
 
     this.searchQuery = '';
+    this.preFilterMode = null; // null | 'room' | 'protocol' | 'all'
+    this.selectedAreaFilter = '__all__';
+    this.protocolFilter = 'all'; // 'all' | 'zigbee' | 'wifi_other'
     this.statusFilter = 'unconfigured'; // 'unconfigured' | 'all' | 'configured'
     this.selectedDevices = new Set();
     this._expandedDeviceChannels = new Set();
     this.groups = {};
+    this._deviceMap = new Map();
 
     this.isCelebration = false;
     this._dropdowns = [];
@@ -84,7 +90,7 @@ export class DeviceWizard {
     this.el = h('div', { class: 'overlay', onClick: (e) => { if (e.target === this.el) this._closeWizard(); } }, this.dialog);
   }
 
-  async _load() {
+  async _load({ preserveStep0 = false } = {}) {
     this.body.replaceChildren(h('div', { class: 'empty' }, icon('mdi:loading'), h('div', { style: { marginTop: '8px' } }, 'Lade Geräte')));
     try {
       const [devs, ents, areas, setup, dash] = await Promise.all([
@@ -97,13 +103,14 @@ export class DeviceWizard {
       this.devices = devs || [];
       this.entities = ents || [];
       this.areas = areas || [];
+      this._deviceMap = new Map(this.devices.map((d) => [d.id, d]));
       this.configuredDevices = setup.devices || {};
       this.categories = setup.categories || {};
       this.groups = setup.groups || {};
       this._dashboardRooms = dash?.layout?.rooms || [];
       this._dashboardConfig = dash?.config || {};
 
-      if (this.initialDeviceId) {
+      if (!preserveStep0 && this.initialDeviceId) {
         const parsed = parseChannelKey(this.initialDeviceId);
         const lookupId = parsed.deviceId || parsed.entityId || this.initialDeviceId;
         const candidates = this._getSelectableCandidates();
@@ -133,7 +140,7 @@ export class DeviceWizard {
         }
       }
 
-      if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
+      if (!preserveStep0 && this.initialGroupId && this.groups?.[this.initialGroupId]) {
         this.dialog.hidden = true;
         this._openGroupModal(this.groups[this.initialGroupId], true);
         return;
@@ -278,79 +285,261 @@ export class DeviceWizard {
     return null;
   }
 
+  _getDeviceProtocol(d) {
+    if (!d) return 'wifi_other';
+    if (d._protocol) return d._protocol;
+    const devEnts = d.isVirtualEntity
+      ? (this.entities || []).filter((e) => e.entity_id === d.entity_id)
+      : (this.entities || []).filter((e) => e.device_id === d.id);
+    d._protocol = classifyDeviceProtocol(d, devEnts, this._deviceMap);
+    return d._protocol;
+  }
+
   _getSelectableCandidates() {
+    const devMap = this._deviceMap || new Map((this.devices || []).map((d) => [d.id, d]));
     const realDevices = (this.devices || []).filter((d) => this._isCandidateDevice(d));
+    const realDeviceIds = new Set(realDevices.map((d) => d.id));
+    const bridgeDeviceIds = new Set(
+      (this.devices || [])
+        .filter((d) => isBridgeOrCoordinator(d, (this.entities || []).filter((e) => e.device_id === d.id)))
+        .map((d) => d.id),
+    );
+
     const virtualLightGroups = [];
     const seenVirtual = new Set();
+    const seenEntityIds = new Set();
+
     for (const e of (this.entities || [])) {
-      if (!e || e.device_id || e.disabled_by || e.hidden_by) continue;
+      if (!e || !e.entity_id || e.disabled_by) continue;
       if (isOwnIntegrationEntity(e)) continue;
       if (e.entity_category === 'config' || e.entity_category === 'diagnostic') continue;
+      if (IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase())) continue;
       if (domainOf(e.entity_id) !== 'light') continue;
+
+      const parentDev = e.device_id ? devMap.get(e.device_id) : null;
+      const st = this.hass?.states?.[e.entity_id];
+      const hasMemberAttr = Array.isArray(st?.attributes?.entity_id) && st.attributes.entity_id.length > 0;
+      const isAttachedToBridge = !!e.device_id && bridgeDeviceIds.has(e.device_id);
+      const isZ2mGroupDevice = !!parentDev && (
+        /zigbee2mqtt/i.test(`${parentDev.manufacturer || ''} ${parentDev.model || ''}`)
+        && /\bgroup\b/i.test(`${parentDev.model || ''} ${parentDev.name || ''}`)
+      );
+      const isUnattachedGroup = !e.device_id || e.platform === 'group' || hasMemberAttr;
+      if (!isUnattachedGroup && !isAttachedToBridge && !isZ2mGroupDevice) continue;
+      // Avoid duplicate if its parent non-bridge device is already listed
+      if (e.device_id && realDeviceIds.has(e.device_id) && !isZ2mGroupDevice) continue;
+
       const vid = `entity:${e.entity_id}`;
       if (seenVirtual.has(vid)) continue;
       seenVirtual.add(vid);
-      const stName = this.hass?.states?.[e.entity_id]?.attributes?.friendly_name;
+      seenEntityIds.add(e.entity_id);
+
+      const stName = st?.attributes?.friendly_name;
+      const plat = String(e.platform || '').toLowerCase();
+      const parentHay = parentDev ? `${parentDev.manufacturer || ''} ${parentDev.model || ''} ${parentDev.name || ''}`.toLowerCase() : '';
+      const isZha = plat === 'zha' || /zha/.test(parentHay);
+      const isZ2m = (plat === 'mqtt' && (/zigbee|z2m/.test(parentHay) || isZ2mGroupDevice)) || /zigbee2mqtt/.test(parentHay);
+      const isDeconz = plat === 'deconz' || /deconz/.test(parentHay);
+      const isHue = plat === 'hue' || /hue/.test(parentHay);
+      const isZigbeeGroup = isZha || isZ2m || isDeconz || isHue || /zigbee/i.test(String(stName || ''));
+      const mfgLabel = isZha ? 'ZHA Gruppe' : (isZ2m ? 'Zigbee2MQTT Gruppe' : (e.platform ? `${String(e.platform).toUpperCase()} Gruppe` : 'Lichtgruppe'));
+
       virtualLightGroups.push({
         id: vid,
         isVirtualEntity: true,
         entity_id: e.entity_id,
+        platform: e.platform || '',
         name: e.name || e.original_name || stName || e.entity_id,
         name_by_user: e.name || null,
-        area_id: e.area_id || null,
-        manufacturer: e.platform ? `${String(e.platform).toUpperCase()} Gruppe` : 'Lichtgruppe',
-        model: 'Zigbee / Lichtgruppe',
+        area_id: e.area_id || parentDev?.area_id || null,
+        manufacturer: mfgLabel,
+        model: isZigbeeGroup ? 'Zigbee Gruppe' : 'Lichtgruppe',
         identifiers: [],
+        _protocol: isZigbeeGroup ? 'zigbee' : 'wifi_other',
       });
     }
+
+    // Fallback: runtime light.* groups in hass.states without entity registry entry
+    if (this.hass?.states) {
+      for (const [eid, st] of Object.entries(this.hass.states)) {
+        if (!eid.startsWith('light.') || seenEntityIds.has(eid)) continue;
+        if (!Array.isArray(st?.attributes?.entity_id) || !st.attributes.entity_id.length) continue;
+        const vid = `entity:${eid}`;
+        if (seenVirtual.has(vid)) continue;
+        seenVirtual.add(vid);
+        virtualLightGroups.push({
+          id: vid,
+          isVirtualEntity: true,
+          entity_id: eid,
+          platform: 'group',
+          name: st.attributes?.friendly_name || eid,
+          name_by_user: null,
+          area_id: null,
+          manufacturer: 'Lichtgruppe',
+          model: 'Lichtgruppe',
+          identifiers: [],
+          _protocol: 'wifi_other',
+        });
+      }
+    }
+
     return [...realDevices, ...virtualLightGroups];
   }
 
   _isCandidateDevice(d) {
-    if (d.disabled_by || d.entry_type === 'service') return false;
-    if (isOwnIntegrationDevice(d, this.entities)) return false;
-    const devEntities = this.entities.filter(
-      (e) => e.device_id === d.id
-        && !e.disabled_by
-        && !e.hidden_by
+    if (!d || d.disabled_by) return false;
+    const devAllEnts = (this.entities || []).filter((e) => e.device_id === d.id && !e.disabled_by);
+    if (isBridgeOrCoordinator(d, devAllEnts)) return false;
+    if (d.entry_type === 'service') return false;
+    if (isIrrelevantDeviceOrIntegration(d, devAllEnts)) return false;
+
+    const devEntities = devAllEnts.filter(
+      (e) => !e.hidden_by
         && !isOwnIntegrationEntity(e)
         && e.entity_category !== 'config'
-        && e.entity_category !== 'diagnostic',
+        && e.entity_category !== 'diagnostic'
+        && !IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase()),
     );
     const controllable = devEntities.filter(isControllableActuator);
-    const sensors = devEntities.filter((e) => ['sensor', 'binary_sensor'].includes(domainOf(e.entity_id)));
-    if (!controllable.length && !sensors.length) return false;
-    const name = (d.name_by_user || d.name || '').toLowerCase();
-    const mfg = (d.manufacturer || '').toLowerCase();
-    const model = (d.model || '').toLowerCase();
-    const isSystem = (
-      name.includes('hacs') || mfg.includes('hacs') ||
-      name.includes('forecast') || mfg.includes('met.no') ||
-      name.includes('bluetooth') || mfg.includes('bluetooth') || name.startsWith('hci') ||
-      name.includes('plugin') || model.includes('plugin') ||
-      mfg.includes('integration') || model.includes('integration') ||
-      name === 'sun'
-    );
-    if (isSystem && !controllable.length) return false;
+    const relevantSensors = devEntities.filter((e) => {
+      const dom = domainOf(e.entity_id);
+      if (dom !== 'sensor' && dom !== 'binary_sensor') return false;
+      const st = this.hass?.states?.[e.entity_id];
+      const dc = String(st?.attributes?.device_class || '').toLowerCase();
+      const hay = `${e.entity_id} ${e.name || e.original_name || ''}`.toLowerCase();
+      if (/(?:cpu|processor|memory|ram_usage|disk_|swap_|load_1m|load_5m|load_15m|container_|docker|uptime|ip_address|external_ip|bytes_received|bytes_sent|link_status)/.test(hay)) {
+        return false;
+      }
+      if (ROOM_SENSOR_DEVICE_CLASSES.has(dc)) return true;
+      return true;
+    });
+    if (!controllable.length && !relevantSensors.length) return false;
     return true;
   }
 
   // ═══════════════ STEP 0: Gerät auswählen ═══════════════
   _renderStep0() {
     const candidates = this._getSelectableCandidates();
-    const configuredCount = candidates.filter((d) => !!this._getConfiguredConfigForCandidate(d)).length;
-    const unconfiguredCount = candidates.filter((d) => {
+    const areaMap = new Map(this.areas.map((a) => [a.area_id, a.name]));
+
+    const searchInput = h('input', {
+      type: 'text', placeholder: 'Gerät, Raum oder Funkstandard suchen', value: this.searchQuery,
+      onInput: (e) => {
+        this.searchQuery = e.target.value.toLowerCase().trim();
+        if (this.searchQuery && this.preFilterMode === null) {
+          this.preFilterMode = 'all';
+          this._renderStep0();
+          // Restore focus cleanly after DOM replacement
+          setTimeout(() => this.body.querySelector('.search-bar input')?.focus(), 0);
+        } else {
+          this._updateDeviceList();
+        }
+      },
+    });
+    const searchWrap = h('div', { class: 'search-bar' }, icon('mdi:magnify'), searchInput);
+
+    if (this.preFilterMode === null && !this.searchQuery) {
+      const zigbeeCount = candidates.filter((d) => this._getDeviceProtocol(d) === 'zigbee').length;
+      const wifiCount = candidates.length - zigbeeCount;
+      const roomIds = new Set(candidates.map((d) => d.area_id || '__none__'));
+
+      const mkPrefilterCard = (mode, ic, title, sub, meta) => h('button', {
+        type: 'button',
+        class: 'wizard-prefilter-card',
+        onClick: () => {
+          this.preFilterMode = mode;
+          if (mode === 'room') this.selectedAreaFilter = '__all__';
+          if (mode === 'protocol') this.protocolFilter = 'all';
+          this._renderStep0();
+        },
+      },
+      h('div', { class: 'wizard-prefilter-icon' }, icon(ic)),
+      h('div', { class: 'wizard-prefilter-title' }, title),
+      h('div', { class: 'wizard-prefilter-sub' }, sub),
+      meta ? h('span', { class: 'badge-tag' }, meta) : null);
+
+      const grid = h('div', { class: 'wizard-prefilter-grid' },
+        mkPrefilterCard('room', 'mdi:floor-plan', 'Nach Raum', 'Nach Home-Assistant-Bereichen filtern', `${roomIds.size} ${roomIds.size === 1 ? 'Raum' : 'Räume'}`),
+        mkPrefilterCard('protocol', 'mdi:zigbee', 'Nach Funkstandard', 'Zigbee vs. WLAN / Sonstige', `${zigbeeCount} Zigbee · ${wifiCount} WLAN/Sonst.`),
+        mkPrefilterCard('all', 'mdi:devices', 'Alle unterstützten Geräte', 'Komplette bereinigte Geräteliste', `${candidates.length} Geräte`));
+
+      this.deviceListEl = h('div', { class: 'device-list' });
+      this.selectionSlot.replaceChildren();
+      this.body.replaceChildren(
+        searchWrap,
+        h('div', { class: 'section-title', style: { marginTop: '14px' } }, 'Geräteauswahl eingrenzen'),
+        h('div', { class: 'hint' }, '• Vorfilter wählen oder direkt suchen\n• System- & Kalender-Dienste ausgeblendet'),
+        grid,
+      );
+      return;
+    }
+
+    // Mode sub-navigation & sub-filters
+    const modeBar = h('div', { class: 'wizard-filter-subbar' },
+      h('button', {
+        type: 'button',
+        class: 'filter-chip',
+        onClick: () => {
+          this.preFilterMode = null;
+          this.searchQuery = '';
+          this._renderStep0();
+        },
+      }, icon('mdi:arrow-left'), ' Vorfilter'),
+      ...[
+        ['room', 'Nach Raum', 'mdi:floor-plan'],
+        ['protocol', 'Funkstandard', 'mdi:zigbee'],
+        ['all', 'Alle Geräte', 'mdi:devices'],
+      ].map(([mId, mLabel, mIcon]) => h('button', {
+        type: 'button',
+        class: 'filter-chip',
+        ...(this.preFilterMode === mId ? { 'data-active': '' } : {}),
+        onClick: () => { this.preFilterMode = mId; this._renderStep0(); },
+      }, icon(mIcon), ' ', mLabel)));
+
+    let subFilterRow = null;
+    if (this.preFilterMode === 'room') {
+      const counts = new Map();
+      for (const d of candidates) {
+        const key = d.area_id || '__none__';
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+      const areaEntries = this.areas
+        .filter((a) => counts.has(a.area_id))
+        .map((a) => [a.area_id, `${a.name} (${counts.get(a.area_id)})`]);
+      if (counts.has('__none__')) {
+        areaEntries.push(['__none__', `Ohne Raum (${counts.get('__none__')})`]);
+      }
+      subFilterRow = h('div', { class: 'filter-chips', style: { marginBottom: '8px' } },
+        ...[['__all__', `Alle Räume (${candidates.length})`], ...areaEntries].map(([aid, alabel]) => h('button', {
+          type: 'button',
+          class: 'filter-chip',
+          ...(this.selectedAreaFilter === aid ? { 'data-active': '' } : {}),
+          onClick: () => { this.selectedAreaFilter = aid; this._renderStep0(); },
+        }, alabel)));
+    } else if (this.preFilterMode === 'protocol') {
+      const zigbeeCount = candidates.filter((d) => this._getDeviceProtocol(d) === 'zigbee').length;
+      const wifiCount = candidates.length - zigbeeCount;
+      subFilterRow = h('div', { class: 'filter-chips', style: { marginBottom: '8px' } },
+        ...[
+          ['all', `Alle (${candidates.length})`],
+          ['zigbee', `Zigbee (${zigbeeCount})`],
+          ['wifi_other', `WLAN / Sonstige (${wifiCount})`],
+        ].map(([pid, plabel]) => h('button', {
+          type: 'button',
+          class: 'filter-chip',
+          ...(this.protocolFilter === pid ? { 'data-active': '' } : {}),
+          onClick: () => { this.protocolFilter = pid; this._renderStep0(); },
+        }, plabel)));
+    }
+
+    const baseFiltered = this._getModeFilteredCandidates(candidates);
+    const configuredCount = baseFiltered.filter((d) => !!this._getConfiguredConfigForCandidate(d)).length;
+    const unconfiguredCount = baseFiltered.filter((d) => {
       const cfg = this._getConfiguredConfigForCandidate(d);
       if (!cfg) return true;
       return getPendingChannelsForDevice(d, this.entities, cfg).length > 0;
     }).length;
-    const allCount = candidates.length;
-
-    const searchInput = h('input', {
-      type: 'text', placeholder: 'Gerät oder Raum suchen', value: this.searchQuery,
-      onInput: (e) => { this.searchQuery = e.target.value.toLowerCase().trim(); this._updateDeviceList(); },
-    });
-    const searchWrap = h('div', { class: 'search-bar' }, icon('mdi:magnify'), searchInput);
+    const allCount = baseFiltered.length;
 
     const filterChips = h('div', { class: 'filter-chips' },
       ...[
@@ -366,16 +555,28 @@ export class DeviceWizard {
     this._updateDeviceList();
 
     this.body.replaceChildren(
-      searchWrap,
-      filterChips,
-      this.deviceListEl);
+      ...[searchWrap, modeBar, subFilterRow, filterChips, this.deviceListEl].filter(Boolean),
+    );
+  }
+
+  _getModeFilteredCandidates(candidates) {
+    return candidates.filter((d) => {
+      if (this.preFilterMode === 'room' && this.selectedAreaFilter && this.selectedAreaFilter !== '__all__') {
+        const key = d.area_id || '__none__';
+        if (key !== this.selectedAreaFilter) return false;
+      }
+      if (this.preFilterMode === 'protocol' && this.protocolFilter && this.protocolFilter !== 'all') {
+        if (this._getDeviceProtocol(d) !== this.protocolFilter) return false;
+      }
+      return true;
+    });
   }
 
   _updateDeviceList() {
     const areaMap = new Map(this.areas.map((a) => [a.area_id, a.name]));
     const q = this.searchQuery;
 
-    const filtered = this._getSelectableCandidates().filter((d) => {
+    const filtered = this._getModeFilteredCandidates(this._getSelectableCandidates()).filter((d) => {
       const cfg = this._getConfiguredConfigForCandidate(d);
       const isConfigured = !!cfg;
       const pending = isConfigured ? getPendingChannelsForDevice(d, this.entities, cfg) : [];
@@ -388,7 +589,8 @@ export class DeviceWizard {
       const model = (d.model || '').toLowerCase();
       const area = (areaMap.get(d.area_id) || '').toLowerCase();
       const entId = (d.entity_id || '').toLowerCase();
-      return name.includes(q) || mfg.includes(q) || model.includes(q) || area.includes(q) || entId.includes(q);
+      const proto = this._getDeviceProtocol(d) === 'zigbee' ? 'zigbee' : 'wlan';
+      return name.includes(q) || mfg.includes(q) || model.includes(q) || area.includes(q) || entId.includes(q) || proto.includes(q);
     });
 
     const hasAnyGroups = this.statusFilter !== 'unconfigured' && Object.values(this.groups).some((g) => {
@@ -1219,6 +1421,8 @@ export class DeviceWizard {
     const devHay = `${d.name_by_user || d.name || ''} ${d.model || ''}`.toLowerCase();
     let autoCat = 'schalter';
     if (smokeEntities.length > 0 && !controllable.length) autoCat = 'rauchmelder';
+    else if (controllable.some((e) => domainOf(e.entity_id) === 'alarm_control_panel')) autoCat = 'alarmanlage';
+    else if (controllable.some((e) => domainOf(e.entity_id) === 'camera')) autoCat = 'kamera';
     else if (controllable.some((e) => domainOf(e.entity_id) === 'cover')) autoCat = 'jalousie';
     else if (/(?:wasserventil|ventil|valve|bewaesser|bewässer|irrigation|sprinkler)/.test(devHay) || controllable.some((e) => domainOf(e.entity_id) === 'valve')) autoCat = 'wasserventil';
     else if (/(?:pumpe|pump)/.test(devHay)) autoCat = 'pumpe';
@@ -1415,12 +1619,14 @@ export class DeviceWizard {
     h('div', { class: 'switch-ui' }));
 
     let soilPlacementBlock = null;
-    if (this.selectedCategory === 'bodenmessgeraet') {
+    if (this.selectedCategory === 'bodenmessgeraet' || this.selectedCategory === 'rauchmelder') {
+      const isSmoke = this.selectedCategory === 'rauchmelder';
+      const accent = isSmoke ? '#ef4444' : '#4caf50';
       const mkPlaceOption = (val, ic, title, desc) => {
         const active = this.sensorPlacement === val;
         return h('div', {
           class: `cat-card${active ? ' active' : ''}`,
-          style: { '--cat-color': '#4caf50', flex: '1 1 160px', minWidth: '0', textAlign: 'left', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '10px' },
+          style: { '--cat-color': accent, flex: '1 1 160px', minWidth: '0', textAlign: 'left', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '10px' },
           ...(active ? { 'data-selected': '' } : {}),
           onClick: () => {
             this.sensorPlacement = val;
@@ -1435,8 +1641,12 @@ export class DeviceWizard {
       soilPlacementBlock = h('div', { style: { marginTop: '12px' } },
         h('div', { class: 'section-title' }, 'Anzeige im Raum'),
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-          mkPlaceOption('tile', 'mdi:sprout', 'Eigene Gerätekachel', 'Feuchtigkeit & Temperatur als Kachel'),
-          mkPlaceOption('room', 'mdi:home-thermometer-outline', 'Oben in Raumkachel', 'Messwerte in Raumkopfzeile')));
+          isSmoke
+            ? mkPlaceOption('tile', 'mdi:smoke-detector', 'Eigene Gerätekachel', 'Als Kachel oben im Raum')
+            : mkPlaceOption('tile', 'mdi:sprout', 'Eigene Gerätekachel', 'Feuchtigkeit & Temperatur als Kachel'),
+          isSmoke
+            ? mkPlaceOption('room', 'mdi:home-alert-outline', 'Oben in Raumkachel', 'Icon im Header · Alarm färbt Raum rot')
+            : mkPlaceOption('room', 'mdi:home-thermometer-outline', 'Oben in Raumkachel', 'Messwerte in Raumkopfzeile')));
     }
 
     this.body.replaceChildren(
@@ -1924,11 +2134,13 @@ export class DeviceWizard {
       h('div', { style: { display: 'flex', gap: '10px', marginTop: '14px', flexWrap: 'wrap', justifyContent: 'center' } },
         this.directMode ? null : h('button', {
           class: 'btn secondary',
-          onClick: () => {
+          onClick: async () => {
             this.isCelebration = false;
             this.step = 0;
             this.selectedDevice = null;
-            this._render();
+            this.selectedDevices.clear();
+            this._expandedDeviceChannels.clear();
+            await this._load({ preserveStep0: true });
           },
         }, icon('mdi:plus'), 'Weiteres Gerät'),
         h('button', {
@@ -2076,8 +2288,20 @@ export class DeviceWizard {
       if (isMultiDevice) {
         nextOptions.display_mode = this.displayMode;
       }
-      if (this.selectedCategory === 'bodenmessgeraet') {
+      if (this.selectedCategory === 'bodenmessgeraet' || this.selectedCategory === 'rauchmelder') {
         nextOptions.sensor_placement = this.sensorPlacement || 'tile';
+      }
+
+      if (this.selectedCategory === 'rauchmelder' && (this.smokeEntityId || entitiesConfig.primary)) {
+        const smokeId = this.smokeEntityId || entitiesConfig.primary;
+        const smokeEnt = this.entities.find((e) => e.entity_id === smokeId);
+        entitiesConfig.room_sensors[smokeId] = {
+          entity_id: smokeId,
+          unique_id: smokeEnt?.unique_id || undefined,
+          original_id: smokeId,
+          type: 'smoke',
+          enabled: true,
+        };
       }
 
       const res = await this.hass.callWS({
@@ -2092,6 +2316,17 @@ export class DeviceWizard {
       });
 
       if (res?.save_failed) throw new Error('Speichern im Backend fehlgeschlagen');
+
+      // Optimistic cache update so returning to Step 0 immediately reflects the configured device
+      this.configuredDevices[d.id] = {
+        device_id: d.id,
+        category: this.selectedCategory,
+        custom_name: this.customName,
+        area_id: this.selectedAreaId || '',
+        icon: this.customIcon || undefined,
+        options: nextOptions,
+        entities: entitiesConfig,
+      };
 
       // Save room icon for newly populated room if selected
       if (this.selectedAreaId && this.roomIcon && this._isNewRoomForDevice(this.selectedAreaId)) {

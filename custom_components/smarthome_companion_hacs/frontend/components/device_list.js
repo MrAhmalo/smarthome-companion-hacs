@@ -13,11 +13,125 @@ export const DEVICE_CATEGORIES = [
   { id: 'rauchmelder', name: 'Rauchmelder', icon: 'mdi:smoke-detector', color: '#ef4444', desc: 'Rauch & Brandmelder' },
   { id: 'bodenmessgeraet', name: 'Bodenmessgerät', icon: 'mdi:sprout', color: '#4caf50', desc: 'Bodenfeuchte & Pflanzen' },
   { id: 'raummessgeraet', name: 'Raummessgerät', icon: 'mdi:thermometer-lines', color: '#ff5722', desc: 'Temperatur & Klima' },
+  { id: 'kamera', name: 'Kamera', icon: 'mdi:cctv', color: '#03a9f4', desc: 'Überwachungskameras' },
+  { id: 'alarmanlage', name: 'Alarmanlage', icon: 'mdi:shield-home', color: '#4caf50', desc: 'Alarm-Zentrale' },
 ];
 
 const CONTROLLABLE_DOMAINS = new Set([
-  'light', 'switch', 'cover', 'valve', 'climate', 'media_player', 'fan',
+  'light', 'switch', 'cover', 'valve', 'climate', 'media_player', 'fan', 'camera', 'alarm_control_panel',
 ]);
+
+export const IGNORED_PLATFORMS = new Set([
+  'portainer', 'systemmonitor', 'glances', 'hassio', 'supervisor', 'version',
+  'webuntis', 'caldav', 'google', 'local_calendar', 'ical', 'ics_calendar',
+  'waste_collection_schedule', 'garbage_collection', 'sun', 'met',
+  'openweathermap', 'hacs', 'bluetooth', 'uptime', 'backup', 'analytics',
+  'diagnostics', 'speedtestdotnet', 'dwd_weather_warnings',
+]);
+
+export const ROOM_SENSOR_DEVICE_CLASSES = new Set([
+  'temperature', 'humidity', 'illuminance', 'pressure', 'co2', 'pm25', 'pm10', 'voc',
+  'moisture', 'motion', 'occupancy', 'presence', 'smoke', 'gas', 'water',
+]);
+
+const ROUTER_DIAG_PATTERN = /(?:port_forward|deflection|guest_?wifi|wi_?fi_?2|wi_?fi_?5|wps|device_access|stealth|wan_|dsl_|external_ip|bytes_received|bytes_sent|kb_s|link_status|reconnect|reboot|internet_access|fritz_?box.*(?:wi_?fi|wlan|guest|gast|telefon|call|fon))/i;
+
+function _hasIdentifierPrefix(d, prefixes) {
+  if (!Array.isArray(d?.identifiers)) return false;
+  return d.identifiers.some((pair) => {
+    const p0 = String(Array.isArray(pair) ? pair[0] : pair || '').toLowerCase();
+    const p1 = String(Array.isArray(pair) ? (pair[1] || '') : '').toLowerCase();
+    return prefixes.some((pre) => p0 === pre || p0.includes(pre) || p1.includes(pre));
+  });
+}
+
+/** Returns true if a device is a Zigbee coordinator/bridge rather than a normal end device. */
+export function isBridgeOrCoordinator(d, devEntities = []) {
+  if (!d) return false;
+  const hay = `${d.name_by_user || ''} ${d.name || ''} ${d.manufacturer || ''} ${d.model || ''}`.toLowerCase();
+  if (/(?:zigbee2mqtt\s*bridge|zha\s*coordinator|coordinator|zigbee.*bridge|hue\s*bridge|conbee|raspbee|sonoff\s*zigbee.*dongle)/i.test(hay)) {
+    return true;
+  }
+  if (_hasIdentifierPrefix(d, ['zigbee2mqtt_bridge', 'bridge_0x'])) return true;
+  if (d.entry_type === 'service' && devEntities.some((e) => ['zha', 'mqtt', 'deconz', 'hue'].includes(e.platform))) {
+    return true;
+  }
+  return false;
+}
+
+/** Classify device radio standard as 'zigbee' or 'wifi_other'. */
+export function classifyDeviceProtocol(d, devEntities = [], deviceMap = null) {
+  if (!d) return 'wifi_other';
+  if (d.isVirtualEntity) {
+    const plat = String(d.platform || '').toLowerCase();
+    const hay = `${d.manufacturer || ''} ${d.model || ''}`.toLowerCase();
+    if (['zha', 'deconz', 'hue'].includes(plat) || /zigbee|zha|z2m|zigbee2mqtt/.test(hay)) {
+      return 'zigbee';
+    }
+    return 'wifi_other';
+  }
+  if (_hasIdentifierPrefix(d, ['zha', 'deconz', 'hue', 'zigbee2mqtt', 'z2m', 'zigbee'])) {
+    return 'zigbee';
+  }
+  const bridge = d.via_device_id && deviceMap ? deviceMap.get(d.via_device_id) : null;
+  if (bridge && _hasIdentifierPrefix(bridge, ['zha', 'deconz', 'hue', 'zigbee2mqtt', 'z2m', 'zigbee'])) {
+    return 'zigbee';
+  }
+  const hay = `${d.manufacturer || ''} ${d.model || ''}`.toLowerCase();
+  if (/zigbee2mqtt|zigbee|\bzha\b|deconz/.test(hay)) return 'zigbee';
+  if (devEntities.some((e) => ['zha', 'deconz', 'hue'].includes(String(e.platform || '').toLowerCase()))) {
+    return 'zigbee';
+  }
+  if (devEntities.some((e) => e.platform === 'mqtt')) {
+    const bHay = bridge ? `${bridge.name || ''} ${bridge.manufacturer || ''} ${bridge.model || ''}`.toLowerCase() : '';
+    if (/zigbee|z2m/.test(bHay) || devEntities.some((e) => /zigbee|0x[0-9a-f]{8,}/i.test(`${e.entity_id} ${e.unique_id || ''}`))) {
+      return 'zigbee';
+    }
+  }
+  return 'wifi_other';
+}
+
+/** Strictly reject Portainer, host/system monitors, Webuntis/calendars, and Fritz!Box router internals. */
+export function isIrrelevantDeviceOrIntegration(d, devEntities = []) {
+  if (!d) return true;
+  if (isOwnIntegrationDevice(d, devEntities)) return true;
+
+  const name = (d.name_by_user || d.name || '').toLowerCase();
+  const mfg = (d.manufacturer || '').toLowerCase();
+  const model = (d.model || '').toLowerCase();
+  const hay = `${name} ${mfg} ${model}`;
+
+  if (/(?:portainer|webuntis|systemmonitor|hassio|home assistant supervisor|home assistant operating system|raspberry\s*pi|glances|waste_collection_schedule)/.test(hay)) {
+    return true;
+  }
+  if (_hasIdentifierPrefix(d, ['portainer', 'webuntis', 'hassio', 'supervisor', 'systemmonitor', 'caldav', 'ical', 'ics_calendar', 'local_calendar'])) {
+    return true;
+  }
+
+  // Filter out pure Fritz!Box router / repeater internal devices (while keeping FRITZ!DECT smart plugs/thermostats)
+  const isFritzRouter = (_hasIdentifierPrefix(d, ['fritz', 'fritzbox']) || mfg.includes('avm'))
+    && /fritz!box|fritz!repeater|fritz!powerline|router/i.test(hay)
+    && !/fritz!dect|comet\s*dect|smart\s*plug|thermostat/i.test(hay);
+  if (isFritzRouter) return true;
+
+  // Check if all active entities belong to ignored platforms
+  if (devEntities.length > 0 && devEntities.every((e) => IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase()))) {
+    return true;
+  }
+
+  // Host/container CPU, RAM, Disk & system stats (when device carries no smart-home actuators)
+  const isSystemText = (
+    name.includes('hacs') || mfg.includes('hacs') ||
+    name.includes('forecast') || mfg.includes('met.no') ||
+    name.includes('bluetooth') || mfg.includes('bluetooth') || name.startsWith('hci') ||
+    name.includes('plugin') || model.includes('plugin') ||
+    mfg.includes('integration') || model.includes('integration') ||
+    name === 'sun'
+  );
+  if (isSystemText) return true;
+
+  return false;
+}
 
 /** Returns true if an entity belongs to SmartHome Companion's own internal integration. */
 export function isOwnIntegrationEntity(e) {
@@ -75,14 +189,22 @@ export function isControllableActuator(e) {
   if (e.disabled_by || e.hidden_by) return false;
   if (isOwnIntegrationEntity(e)) return false;
   if (e.entity_category === 'config' || e.entity_category === 'diagnostic') return false;
+  if (IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase())) return false;
 
   const domain = domainOf(e.entity_id);
   if (!CONTROLLABLE_DOMAINS.has(domain)) return false;
 
   const id = (e.entity_id || '').toLowerCase();
   const name = (e.name || e.original_name || '').toLowerCase();
-  const configPattern = /(?:overcharge|protection|kindersicherung|child_?lock|indicator|led_?mode|backlight|status_?led|restart|reboot|update|firmware|start_?zustand|start_?state|auto_?off|inching|pairing|identify|interlock|relay_mode|power_on_state)/;
-  if (configPattern.test(id) || configPattern.test(name)) return false;
+  const basePattern = /(?:overcharge|protection|kindersicherung|child_?lock|restart|reboot|update|firmware|start_?zustand|start_?state|auto_?off|inching|pairing|identify|interlock|relay_mode|power_on_state)/;
+  if (basePattern.test(id) || basePattern.test(name)) return false;
+
+  // Allow real lights named "Backlight" or "Status LED", only strip diagnostic LED switches/relays
+  if (domain !== 'light') {
+    const switchOnlyPattern = /(?:indicator|led_?mode|backlight|status_?led)/;
+    if (switchOnlyPattern.test(id) || switchOnlyPattern.test(name)) return false;
+  }
+  if (domain === 'switch' && ROUTER_DIAG_PATTERN.test(`${id} ${name}`)) return false;
 
   return true;
 }

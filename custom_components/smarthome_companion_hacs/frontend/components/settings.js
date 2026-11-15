@@ -19,7 +19,6 @@ const VISIBLE_OPTIONS = [
   ['state_in', 'Status ist (Liste)'], ['state_not_in', 'Status ist nicht (Liste)'],
 ];
 const VIEW_NAV_CHOICES = [
-  ['', 'Benutzerdefinierter Pfad'],
   ...BUILTIN_VIEWS.map((v) => [`companion:${v.id}`, `Ansicht: ${v.label}`]),
 ];
 
@@ -306,36 +305,20 @@ export class Settings {
       v.startsWith('companion:') ? `/lovelace/${v.slice('companion:'.length)}` : v,
       l,
     ]);
-    const isKnown = known.some(([p]) => p === cur);
-    const mode = { sel: !cur ? '' : (isKnown ? cur : '__custom__') };
-    const wrap = h('div', { style: { display: 'grid', gap: '6px', minWidth: '0' } });
-    const customInput = h('input', {
-      type: 'text',
-      value: isKnown ? '' : cur,
-      placeholder: '/lovelace/... oder /todo?entity_id=...',
-      hidden: mode.sel !== '__custom__',
-      onInput: (e) => {
-        const v = e.target.value;
-        if (v) obj[key] = v; else delete obj[key];
-      },
-    });
+    const normalized = cur.startsWith('companion:') ? `/lovelace/${cur.slice('companion:'.length)}` : cur;
+    const isKnown = known.some(([p]) => p === normalized);
     const cdd = this._track(new CustomDropdown({
       options: [
         { value: '', label: 'Kein Ziel' },
         ...known.map(([v, l]) => ({ value: v, label: l })),
-        { value: '__custom__', label: 'Benutzerdefinierter Pfad...' },
       ],
-      value: mode.sel,
+      value: isKnown ? normalized : '',
       onChange: (v) => {
-        mode.sel = v;
-        customInput.hidden = v !== '__custom__';
-        if (v && v !== '__custom__') obj[key] = v;
-        else if (!v) delete obj[key];
-        else obj[key] = customInput.value || '';
+        if (v) obj[key] = v;
+        else delete obj[key];
       },
     }));
-    wrap.append(cdd.el, customInput);
-    return this._field(label, wrap);
+    return this._field(label, cdd.el);
   }
 
   _serviceField(obj, key, label) {
@@ -685,57 +668,92 @@ export class Settings {
   }
 
   // ═══════════ TAB 2: Startseite ═══════════
+  _badgePreviewEl(b) {
+    const chip = h('span', { class: 'badge-preview-chip' });
+    const refresh = () => {
+      const st = b.entity_id ? this.hass?.states?.[b.entity_id] : null;
+      const col = resolveColor(b.color) || 'var(--cd-accent)';
+      const ic = b.icon || st?.attributes?.icon || 'mdi:tag-outline';
+      const label = b.name || st?.attributes?.friendly_name || b.entity_id || 'Status-Badge';
+      const showName = b.show_name !== false;
+      const showState = b.show_state !== false;
+      const valText = st ? `${st.state}${st.attributes?.unit_of_measurement ? ` ${st.attributes.unit_of_measurement}` : ''}` : 'Aktiv';
+      const parts = [];
+      if (showName) parts.push(label);
+      if (showState) parts.push(valText);
+      chip.style.setProperty('--badge-color', col);
+      chip.style.borderColor = `color-mix(in srgb, ${col} 35%, transparent)`;
+      chip.replaceChildren(
+        h('span', { style: { color: col, display: 'inline-flex' } }, icon(ic)),
+        h('span', {}, parts.join(' · ') || label),
+      );
+    };
+    refresh();
+    return { el: chip, refresh };
+  }
+
   _tabHome() {
     const d = this.draft;
     d.badges ||= [];
-    d.persons ||= [];
+    d.greetings ||= {};
+    if (d.greetings.morning === undefined) d.greetings.morning = 'Guten Morgen';
+    if (d.greetings.day === undefined) d.greetings.day = 'Guten Tag';
+    if (d.greetings.evening === undefined) d.greetings.evening = 'Guten Abend';
 
     return [
       this._title('Begrüßung'),
-      h('div', { class: 'fields' }, this._entity(d, 'greeting_entity', 'Begrüßungs-Sensor (optional)', { domain: 'sensor' })),
-      this._hint('• Leer = automatische Tageszeit-Begrüßung\n• Sensorwert ersetzt Text'),
+      this._hint('• Tageszeitabhängiger Titel auf Startseite\n• Texte frei anpassbar'),
+      h('div', { class: 'fields' },
+        this._text(d.greetings, 'morning', 'Morgens (05:00 – 11:00)', { placeholder: 'Guten Morgen' }),
+        this._text(d.greetings, 'day', 'Tagsüber (11:00 – 18:00)', { placeholder: 'Guten Tag' }),
+        this._text(d.greetings, 'evening', 'Abends (18:00 – 05:00)', { placeholder: 'Guten Abend' })),
 
       this._title('Status-Badges'),
-      this._hint('• Kompakte Status-Chips unter Begrüßung\n• Tippen zum Aufklappen & Bearbeiten'),
+      this._hint('• Kompakte Status-Chips unter Begrüßung\n• Tippen zum Bearbeiten & Sortieren'),
       this._list(d.badges, {
         groupKey: 'badge',
-        rowTitle: (b) => b.name || b.entity_id || 'Neues Badge',
-        rowSub: (b) => `${b.entity_id || 'Entität fehlt'} · ${b.tap || 'more-info'}`,
-        make: () => ({ entity_id: '', show_state: true, tap: 'more-info', visible_when: 'always' }),
+        rowTitle: (b) => b.name || this.hass?.states?.[b.entity_id]?.attributes?.friendly_name || b.entity_id || 'Neues Badge',
+        rowSub: (b) => {
+          const tapLabels = { 'more-info': 'Details', navigate: 'Ansicht', service: 'Dienst', none: 'Keine Aktion' };
+          return `${b.entity_id || 'Keine Entität'} · ${tapLabels[b.tap || 'more-info'] || 'Details'}`;
+        },
+        make: () => ({ entity_id: '', show_name: true, show_state: true, tap: 'more-info', visible_when: 'always' }),
         fields: (b, rerender) => {
           const tapMode = b.tap || 'more-info';
           const visMode = b.visible_when || 'always';
+          const prev = this._badgePreviewEl(b);
+          const previewBox = h('div', {
+            style: {
+              gridColumn: '1 / -1',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '10px',
+              padding: '8px 12px',
+              borderRadius: '10px',
+              background: 'rgba(128,128,128,0.08)',
+            },
+          },
+            h('span', { class: 'acc-sub', style: { fontWeight: '600' } }, 'Live-Vorschau'),
+            prev.el);
+          const nameField = this._text(b, 'name', 'Anzeigename');
+          nameField.querySelector('input')?.addEventListener('input', () => prev.refresh());
           return [
+            previewBox,
             this._entity(b, 'entity_id', 'Entität'),
-            this._text(b, 'name', 'Anzeigename'),
+            nameField,
             this._icon(b, 'icon', 'Icon'),
-            this._color(b, 'color', 'Farbe'),
-            this._check(b, 'show_name', 'Name anzeigen'),
-            this._check(b, 'show_state', 'Status anzeigen'),
+            this._color(b, 'color', 'Akzentfarbe'),
+            this._check(b, 'show_name', 'Name anzeigen', () => prev.refresh()),
+            this._check(b, 'show_state', 'Status anzeigen', () => prev.refresh()),
             this._select(b, 'tap', 'Bei Tipp', TAP_OPTIONS, 'more-info', () => rerender()),
-            ...(tapMode === 'navigate' ? [this._navPathField(b, 'path', 'Ziel-Ansicht / Pfad')] : []),
+            ...(tapMode === 'navigate' ? [this._navPathField(b, 'path', 'Ziel-Ansicht')] : []),
             ...(tapMode === 'service' ? [this._serviceField(b, 'service', 'Dienst')] : []),
             this._select(b, 'visible_when', 'Sichtbarkeit', VISIBLE_OPTIONS, 'always', () => rerender()),
             ...(visMode !== 'always' ? [this._text(b, 'visible_value', 'Vergleichswert', { placeholder: '0 / unavailable, off' })] : []),
           ];
         },
         addLabel: 'Badge hinzufügen',
-      }),
-
-      this._title('Personen'),
-      this._hint('• Anzeige nur „Zuhause“\n• Pro Benutzer filterbar'),
-      this._list(d.persons, {
-        groupKey: 'person',
-        rowTitle: (p) => this.hass?.states?.[p.entity_id]?.attributes?.friendly_name || p.entity_id || 'Person',
-        make: () => ({ entity_id: '', users: [] }),
-        fields: (p) => {
-          p.users ||= [];
-          return [
-            this._entity(p, 'entity_id', 'Person / Tracker', { domain: ['person', 'device_tracker'] }),
-            this._usersField(p.users, 'Sichtbar für'),
-          ];
-        },
-        addLabel: 'Person hinzufügen',
       }),
     ];
   }
@@ -845,14 +863,20 @@ export class Settings {
           ] : []),
           ...(v.id === 'security' ? [
             this._entity(vc, 'alarm_entity', 'Alarmanlage (optional)', { domain: 'alarm_control_panel' }),
-            this._entity(vc, 'router_entity', 'Router-Status (optional)', { domain: 'binary_sensor' }),
-            this._entity(vc, 'timer_entity', 'Rauchalarm-Timer (optional)', { domain: 'timer' }),
-            this._entity(vc, 'abort_entity', 'Alarm-Abbruch Schalter (optional)', { domain: 'input_boolean' }),
+            this._multiEntity(vc, 'camera_entities', 'Kameras (optional)', { domain: 'camera' }),
+            this._text(vc, 'battery_threshold', 'Batteriewarnung Schwellwert (%)', { placeholder: '20' }),
           ] : []),
           ...(v.id === 'solar' ? [
             this._entity(vc, 'pv_entity', 'PV-Leistung (optional)', { domain: 'sensor' }),
             this._entity(vc, 'house_entity', 'Hausverbrauch (optional)', { domain: 'sensor' }),
             this._entity(vc, 'soc_entity', 'Batterie-Ladestand (optional)', { domain: 'sensor' }),
+            this._entity(vc, 'grid_import_entity', 'Netzbezug (optional)', { domain: 'sensor' }),
+            this._entity(vc, 'grid_export_entity', 'Einspeisung (optional)', { domain: 'sensor' }),
+          ] : []),
+          ...(v.id === 'blinds' ? [
+            this._entity(vc, 'facade_east_entity', 'Fassade Ost (optional)', { domain: 'sensor' }),
+            this._entity(vc, 'facade_south_entity', 'Fassade Süd (optional)', { domain: 'sensor' }),
+            this._entity(vc, 'facade_west_entity', 'Fassade West (optional)', { domain: 'sensor' }),
           ] : []),
           ...(v.id === 'printer3d' ? [
             this._entity(vc, 'light_entity', 'Drucker-Licht (optional)', { domain: 'light' }),
@@ -881,14 +905,19 @@ export class Settings {
 
     return [
       this._title('Untere Navigationsleiste'),
-      this._hint('• Direktsprung zu eingebauten Ansichten oder HA-Pfaden\n• Übersicht & Mehr automatisch erreichbar'),
+      this._hint('• Direktsprung zu eingebauten Ansichten\n• Reihenfolge per Drag & Drop oder Pfeile'),
       this._list(this.draft.nav, {
         groupKey: 'nav',
-        rowTitle: (n) => n.name || n.view || n.path || 'Button',
-        rowSub: (n) => n.view ? `Ansicht: ${n.view}` : (n.path || 'Kein Ziel'),
-        make: () => ({ name: '', icon: 'mdi:shield-home', path: '' }),
+        rowTitle: (n) => n.name || n.view || 'Button',
+        rowSub: (n) => {
+          const def = BUILTIN_VIEWS.find((v) => v.id === n.view);
+          return def ? `Ansicht: ${def.label}` : (n.view || 'Ansicht wählen');
+        },
+        make: () => ({ name: '', icon: 'mdi:shield-home', view: 'security', path: 'companion:security' }),
         fields: (n, rerender) => {
-          const targetObj = { sel: n.view ? `companion:${n.view}` : (n.path?.startsWith('companion:') ? n.path : '') };
+          const legacyMatch = typeof n.path === 'string' ? n.path.match(/^\/lovelace\/([a-z0-9_]+)/i) : null;
+          const curView = n.view || (n.path?.startsWith('companion:') ? n.path.slice('companion:'.length) : legacyMatch?.[1]) || VIEW_NAV_CHOICES[0]?.[0]?.slice('companion:'.length) || 'security';
+          const targetObj = { sel: `companion:${curView}` };
           const viewSel = this._track(new CustomDropdown({
             options: VIEW_NAV_CHOICES.map(([v, l]) => ({ value: v, label: l })),
             value: targetObj.sel,
@@ -896,8 +925,6 @@ export class Settings {
               if (val.startsWith('companion:')) {
                 n.view = val.slice('companion:'.length);
                 n.path = val;
-              } else {
-                delete n.view;
               }
               rerender();
             },
@@ -906,7 +933,6 @@ export class Settings {
             this._text(n, 'name', 'Beschriftung (leer = Nur Icon)'),
             this._icon(n, 'icon', 'Icon'),
             this._field('Ziel-Ansicht', viewSel.el),
-            ...(!targetObj.sel ? [this._text(n, 'path', 'Benutzerdefinierter Pfad', { placeholder: '/lovelace/solar oder /todo?...' })] : []),
           ];
         },
         addLabel: 'Navigations-Button hinzufügen',

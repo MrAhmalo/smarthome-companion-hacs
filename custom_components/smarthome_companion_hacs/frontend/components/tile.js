@@ -572,7 +572,19 @@ export class GroupTile {
     const until = Date.now() + 4000;
 
     this._applyOptimistic(desiredOn, until);
-    this.hass.callService('homeassistant', service, { entity_id: this.entityIds });
+
+    const lightIds = this.entityIds.filter((eid) => domainOf(eid) === 'light');
+    const otherIds = this.entityIds.filter((eid) => domainOf(eid) !== 'light');
+    if (this.spec.entity_id && !otherIds.length && this.spec.entity_id.startsWith('light.')) {
+      this.hass.callService('light', service, { entity_id: this.spec.entity_id });
+    } else {
+      if (lightIds.length) {
+        this.hass.callService('light', service, { entity_id: lightIds });
+      }
+      if (otherIds.length) {
+        this.hass.callService('homeassistant', service, { entity_id: otherIds });
+      }
+    }
 
     if (this._stragglerTimer) clearTimeout(this._stragglerTimer);
     this._stragglerTimer = setTimeout(() => {
@@ -584,7 +596,10 @@ export class GroupTile {
         return !st || st.state !== targetState;
       });
       if (stragglers.length > 0 && Date.now() < this._optimisticUntil) {
-        this.hass.callService('homeassistant', service, { entity_id: stragglers });
+        const sLights = stragglers.filter((eid) => domainOf(eid) === 'light');
+        const sOthers = stragglers.filter((eid) => domainOf(eid) !== 'light');
+        if (sLights.length) this.hass.callService('light', service, { entity_id: sLights });
+        if (sOthers.length) this.hass.callService('homeassistant', service, { entity_id: sOthers });
       }
       setTimeout(() => {
         if (this.hass && Date.now() >= this._optimisticUntil) {
@@ -598,11 +613,12 @@ export class GroupTile {
 
   _setMasterBrightness(pct) {
     if (!this.hass) return;
-    for (const eid of this.entityIds) {
-      if (domainOf(eid) === 'light') {
-        this.hass.callService('light', 'turn_on', { entity_id: eid, brightness_pct: pct });
-      }
-    }
+    const lightIds = this.entityIds.filter((eid) => domainOf(eid) === 'light');
+    const target = (this.spec.entity_id && this.spec.entity_id.startsWith('light.') && lightIds.length === this.entityIds.length)
+      ? this.spec.entity_id
+      : lightIds;
+    if (!target || (Array.isArray(target) && !target.length)) return;
+    this.hass.callService('light', 'turn_on', { entity_id: target, brightness_pct: pct, transition: 0.2 });
   }
 
   update(hass) {

@@ -4,19 +4,10 @@ import {
 } from '../lib/util.js';
 import { createCoverRow, updateCoverRow } from './cover_row.js';
 
-const _BL_FACADES = [
-  { key: 'ost', label: 'Osten', intensity: 'sensor.geschatzte_sonnenintensitat_hauswand_osten', peak: 'sensor.sonneneinstrahlung_hoehepunkt_hauswand_osten' },
-  { key: 'sued', label: 'Süden', intensity: 'sensor.geschatzte_sonnenintensitat_hauswand_suden', peak: 'sensor.power_highest_peak_time_today_3' },
-  { key: 'west', label: 'Westen', intensity: 'sensor.geschatzte_sonnenintensitat_hauswand_westen', peak: 'sensor.power_highest_peak_time_today_2' },
-];
-
-function _blCoverSignature(states, rooms) {
-  const covers = Object.keys(states)
-    .filter((id) => id.startsWith('cover.'))
-    .sort();
-  const avail = covers.map((id) => `${id}:${isUnavailable(states[id]) ? '0' : '1'}`).join(',');
+function _blCoverSignature(states, rooms, coverIds, editMode) {
+  const avail = (coverIds || []).map((id) => `${id}:${isUnavailable(states[id]) ? '0' : '1'}`).join(',');
   const roomSig = (rooms || []).map((r) => `${r.area_id}:${r.name}:${r.expanded ? 1 : 0}`).join('|');
-  return `${avail}##${roomSig}`;
+  return `${editMode ? 1 : 0}##${avail}##${roomSig}`;
 }
 
 function _blFmtTime(raw) {
@@ -32,9 +23,11 @@ function _blFmtTime(raw) {
 }
 
 export class BlindsView {
-  constructor({ hass, layout, onBack }) {
+  constructor({ hass, layout, config, ctx, onBack } = {}) {
     this.hass = hass;
     this.layout = layout;
+    this.config = config;
+    this.ctx = ctx || {};
     this.onBack = onBack;
     this._destroyed = false;
     this._structSig = '';
@@ -47,7 +40,7 @@ export class BlindsView {
 
     this.el = h('div', { class: 'subview-page', style: { '--view-color': '#9c27b0' } });
     this._buildShell();
-    if (hass) this.update(hass, layout);
+    if (hass) this.update(hass, layout, config, ctx);
   }
 
   destroy() {
@@ -86,13 +79,15 @@ export class BlindsView {
       h('div', { class: 'subview-actions' },
         allOpenBtn,
         allCloseBtn,
-        openIntegrationBtn,
-        this.onBack ? h('button', { type: 'button', class: 'btn', onClick: this.onBack }, icon('mdi:arrow-left'), 'Zurück') : null));
+        openIntegrationBtn));
 
     // Sun & Facades
     this._sunSummaryEl = h('span', { class: 'badge-chip' });
     this._facadeGrid = h('div', { class: 'kpi-grid' });
-    const facadeSec = h('section', { class: 'subview-section' },
+    this._facadeSec = h('section', {
+      class: 'subview-section',
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('blinds'); },
+    },
       h('div', { class: 'subview-section-head' },
         h('div', { class: 'subview-section-title' }, icon('mdi:weather-sunny'), 'Sonnenstand & Fassaden'),
         this._sunSummaryEl),
@@ -129,36 +124,70 @@ export class BlindsView {
         }, icon('mdi:refresh'), 'Aktualisieren')),
       this._logWrap);
 
-    this.el.append(head, facadeSec, this._offlineSec, this._groupsWrap, this._setupSec, logSec);
+    this.el.append(head, this._facadeSec, this._offlineSec, this._groupsWrap, this._setupSec, logSec);
+  }
+
+  _configuredCoverIds(states) {
+    const ids = new Set(
+      (this.layout?.configured?.covers || [])
+        .map((c) => (typeof c === 'string' ? c : c?.entity_id))
+        .filter(Boolean)
+    );
+    for (const r of this.layout?.rooms || []) {
+      for (const t of r.tiles || []) {
+        if (t.entity_id?.startsWith('cover.')) ids.add(t.entity_id);
+        for (const m of t.members || []) {
+          const eid = typeof m === 'string' ? m : m?.entity_id;
+          if (eid?.startsWith('cover.')) ids.add(eid);
+        }
+      }
+    }
+    return [...ids].filter((id) => Boolean(states[id])).sort();
+  }
+
+  _facadesList() {
+    const bCfg = this.config?.views?.blinds || {};
+    return [
+      { key: 'ost', label: 'Osten', intensity: bCfg.facade_east_entity || '', peak: bCfg.facade_east_peak_entity || '' },
+      { key: 'sued', label: 'Süden', intensity: bCfg.facade_south_entity || '', peak: bCfg.facade_south_peak_entity || '' },
+      { key: 'west', label: 'Westen', intensity: bCfg.facade_west_entity || '', peak: bCfg.facade_west_peak_entity || '' },
+    ].filter((f) => f.intensity || f.peak);
   }
 
   _allAction(svc) {
     if (!this.hass) return;
-    const ids = Object.keys(this.hass.states || {})
-      .filter((id) => id.startsWith('cover.') && !isUnavailable(this.hass.states[id]));
+    const states = this.hass.states || {};
+    const ids = this._configuredCoverIds(states).filter((id) => !isUnavailable(states[id]));
     if (!ids.length) return;
     this.hass.callService('cover', svc, { entity_id: ids });
   }
 
-  update(hass, layout) {
+  update(hass, layout, config, ctx) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
     if (layout) this.layout = layout;
+    if (config !== undefined) this.config = config;
+    if (ctx !== undefined) this.ctx = ctx;
     const states = hass.states || {};
     const rooms = this.layout?.rooms || [];
+    const editMode = Boolean(this.ctx?.editMode);
+    this._facadeSec.toggleAttribute('data-edit-mode', editMode);
 
     this._updateSunAndFacades(states);
     this._updateSetupStatus(states);
-    this._syncCoverGroups(states, rooms);
+    this._syncCoverGroups(states, rooms, editMode);
 
     // Refresh existing persistent cover rows without DOM rebuild
     for (const ctrl of this._rowCtrls.values()) {
       updateCoverRow(ctrl, hass);
     }
 
-    const activeCovers = Object.keys(states).filter((id) => id.startsWith('cover.') && !isUnavailable(states[id]));
+    const coverIds = this._configuredCoverIds(states);
+    const activeCovers = coverIds.filter((id) => !isUnavailable(states[id]));
     const openCount = activeCovers.filter((id) => states[id].state === 'open').length;
-    this._subEl.textContent = `${openCount} von ${activeCovers.length} geöffnet`;
+    this._subEl.textContent = coverIds.length
+      ? `${openCount} von ${activeCovers.length} geöffnet`
+      : 'Noch keine Rollläden eingerichtet';
 
     if (Date.now() - this._logFetchedAt > 60000) {
       this._fetchLogbook();
@@ -167,7 +196,8 @@ export class BlindsView {
 
   _updateSunAndFacades(states) {
     const sun = states['sun.sun'];
-    const sig = `${sun?.state || ''}:${sun?.attributes?.elevation ?? ''}|` + _BL_FACADES.map((f) => `${states[f.intensity]?.state || ''}:${states[f.peak]?.state || ''}`).join('|');
+    const facades = this._facadesList();
+    const sig = `${sun?.state || ''}:${sun?.attributes?.elevation ?? ''}|` + facades.map((f) => `${states[f.intensity]?.state || ''}:${states[f.peak]?.state || ''}`).join('|');
     if (sig === this._sunFacadeSig) return;
     this._sunFacadeSig = sig;
 
@@ -181,9 +211,9 @@ export class BlindsView {
     }
 
     const cards = [];
-    for (const fac of _BL_FACADES) {
-      const stInt = states[fac.intensity];
-      const stPeak = states[fac.peak];
+    for (const fac of facades) {
+      const stInt = fac.intensity ? states[fac.intensity] : null;
+      const stPeak = fac.peak ? states[fac.peak] : null;
       if (!stInt && !stPeak) continue;
       const valText = stInt ? formatState(stInt) : '—';
       let peakText = 'Höhepunkt: —';
@@ -193,17 +223,26 @@ export class BlindsView {
       }
       cards.push(h('div', {
         class: 'kpi-card', style: { '--kpi-color': '#f59e0b' },
-        onClick: () => moreInfo(this.el, (stInt || stPeak).entity_id),
+        onClick: (e) => {
+          if (this.ctx?.editMode) return;
+          e.stopPropagation();
+          moreInfo(this.el, (stInt || stPeak).entity_id);
+        },
       },
         h('div', { class: 'kpi-top' }, icon('mdi:white-balance-sunny'), fac.label),
         h('div', { class: 'kpi-val' }, valText),
         h('div', { class: 'kpi-sub' }, peakText)));
     }
-    if (!cards.length) {
-      cards.push(h('div', { class: 'kpi-card' },
-        h('div', { class: 'kpi-top' }, icon('mdi:weather-sunny'), 'Sonneneinstrahlung'),
-        h('div', { class: 'kpi-val' }, '—'),
-        h('div', { class: 'kpi-sub' }, 'Keine Fassaden-Sensoren')));
+    if (!cards.length && !sun) {
+      this._facadeSec.hidden = true;
+    } else {
+      this._facadeSec.hidden = false;
+      if (!cards.length) {
+        cards.push(h('div', { class: 'kpi-card' },
+          h('div', { class: 'kpi-top' }, icon('mdi:weather-sunny'), 'Sonnenstand'),
+          h('div', { class: 'kpi-val' }, sun.state === 'above_horizon' ? 'Tag' : 'Nacht'),
+          h('div', { class: 'kpi-sub' }, '• Keine Fassaden-Sensoren konfiguriert')));
+      }
     }
     this._facadeGrid.replaceChildren(...cards);
   }
@@ -251,13 +290,13 @@ export class BlindsView {
     this._setupLists.replaceChildren(...blocks);
   }
 
-  _syncCoverGroups(states, rooms) {
-    const sig = _blCoverSignature(states, rooms);
+  _syncCoverGroups(states, rooms, editMode = false) {
+    const allCovers = this._configuredCoverIds(states);
+    const sig = _blCoverSignature(states, rooms, allCovers, editMode);
     if (sig === this._structSig) return;
     this._structSig = sig;
     this._rowCtrls.clear();
 
-    const allCovers = Object.keys(states).filter((id) => id.startsWith('cover.')).sort();
     const offline = allCovers.filter((id) => isUnavailable(states[id]));
     const active = allCovers.filter((id) => !isUnavailable(states[id]));
 
@@ -378,8 +417,13 @@ export class BlindsView {
     }
 
     if (!sections.length) {
-      sections.push(h('section', { class: 'subview-section' },
-        h('div', { class: 'empty-hint' }, 'Keine Rollläden gefunden.')));
+      const emptyCard = h('section', {
+        class: 'subview-section',
+        onClick: () => { if (editMode) this.ctx?.onAddDevice?.() || this.ctx?.onOpenSettings?.('blinds'); },
+      },
+        h('div', { class: 'empty-hint' }, '• Noch keine Rollläden im Assistenten eingerichtet\n• Geräte über „+ Gerät“ hinzufügen'));
+      emptyCard.toggleAttribute('data-edit-mode', editMode);
+      sections.push(emptyCard);
     }
 
     this._groupsWrap.replaceChildren(...sections);
@@ -389,9 +433,9 @@ export class BlindsView {
     if (!this.hass || this._destroyed) return;
     const seq = ++this._logSeq;
     this._logFetchedAt = Date.now();
-    const coverIds = Object.keys(this.hass.states || {}).filter((id) => id.startsWith('cover.'));
+    const coverIds = this._configuredCoverIds(this.hass.states || {});
     if (!coverIds.length) {
-      this._logWrap.replaceChildren(h('div', { class: 'empty-hint' }, 'Keine Rollläden vorhanden.'));
+      this._logWrap.replaceChildren(h('div', { class: 'empty-hint' }, 'Keine eingerichteten Rollläden vorhanden.'));
       return;
     }
 

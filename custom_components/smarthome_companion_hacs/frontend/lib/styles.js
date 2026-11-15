@@ -22,7 +22,15 @@ export const STYLES = `
   --safe-left: env(safe-area-inset-left, 0px);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-ha-icon { --mdc-icon-size: 22px; display: inline-flex; }
+ha-icon { --mdc-icon-size: 22px; display: inline-flex; align-items: center; justify-content: center; }
+@keyframes cdSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+ha-icon[icon="mdi:loading"], .spin {
+  animation: cdSpin 0.9s linear infinite;
+  transform-origin: center;
+}
 button { font: inherit; color: inherit; touch-action: manipulation; }
 
 .page {
@@ -2148,5 +2156,104 @@ details.adv-options summary {
 @media (max-width: 520px) {
   .nav-btn:not([data-active]) { padding: 0 10px; min-width: 44px; }
   .nav-btn:not([data-active]) span { display: none; }
+}
+
+/* ── Smoke Detector Room & Home Alerts ── */
+.smoke-header-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  color: var(--cd-secondary); opacity: .82;
+}
+.smoke-header-chip ha-icon { --mdc-icon-size: 14px; }
+.smoke-header-chip.alert {
+  opacity: 1; color: #fff; background: #dc2626;
+  padding: 2px 8px; border-radius: 999px; font-weight: 700;
+}
+.card.room[data-smoke-alarm],
+.room-detail-page[data-smoke-alarm] .room-detail-head {
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.34), rgba(153, 27, 27, 0.24)) !important;
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.38);
+  animation: cdSmokePulse 1.3s ease-in-out infinite alternate;
+}
+.card.room[data-smoke-alarm] .room-name {
+  color: #fecaca;
+}
+.smoke-home-banner {
+  width: 100%; display: flex; flex-direction: column; gap: 10px;
+  padding: 16px 18px; margin-bottom: 14px; border-radius: var(--cd-radius, 18px);
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  border: 2px solid #fca5a5; color: #ffffff;
+  box-shadow: 0 10px 28px rgba(220, 38, 38, 0.38);
+  cursor: pointer; text-align: left;
+  transition: transform .14s ease, filter .14s ease;
+  animation: cdSmokePulse 1.3s ease-in-out infinite alternate;
+}
+.smoke-home-banner:active { transform: scale(0.99); }
+@media (hover: hover) {
+  .smoke-home-banner:hover { filter: brightness(1.06); }
+}
+.smoke-home-banner-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
+}
+.smoke-home-banner-title {
+  display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 800; color: #ffffff;
+}
+.smoke-home-banner-title ha-icon { --mdc-icon-size: 24px; color: #ffffff; }
+.smoke-home-banner-sub {
+  font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.92);
+}
+.smoke-home-rooms {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.smoke-home-room-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18); border: 1px solid rgba(255, 255, 255, 0.32);
+  color: #ffffff; font-size: 13px; font-weight: 700;
+}
+.smoke-home-room-pill ha-icon { --mdc-icon-size: 17px; color: #ffffff; }
+
+/* ── Wizard Pre-Filter Cards ── */
+.wizard-prefilter-grid {
+  display: grid; gap: 12px; margin-top: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+}
+.wizard-prefilter-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  padding: 18px 16px; border-radius: 16px; text-align: left; cursor: pointer;
+  background: var(--cd-tile-bg); border: 1.5px solid rgba(128,128,128,.2);
+  transition: border-color .15s, background .15s, transform .12s;
+}
+.wizard-prefilter-card:active { transform: scale(0.98); }
+@media (hover: hover) {
+  .wizard-prefilter-card:hover {
+    border-color: var(--cd-accent);
+    background: color-mix(in srgb, var(--cd-accent) 10%, var(--cd-tile-bg));
+  }
+}
+.wizard-prefilter-icon {
+  width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--cd-accent) 16%, transparent);
+  color: var(--cd-accent);
+}
+.wizard-prefilter-title { font-size: 15px; font-weight: 700; color: var(--cd-text); }
+.wizard-prefilter-sub { font-size: 12.5px; color: var(--cd-secondary); line-height: 1.35; }
+.wizard-filter-subbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;
+}
+
+/* ── Settings Badge Preview & Subview Edit Mode ── */
+.badge-preview-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px;
+  border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  background: color-mix(in srgb, var(--badge-color, var(--cd-accent)) 18%, var(--cd-tile-bg));
+  border: 1px solid color-mix(in srgb, var(--badge-color, var(--cd-accent)) 45%, transparent);
+  color: var(--cd-text);
+}
+.badge-preview-chip ha-icon { --mdc-icon-size: 15px; color: var(--badge-color, var(--cd-accent)); }
+[data-edit-mode] {
+  outline: 1.5px dashed color-mix(in srgb, var(--cd-accent) 70%, transparent);
+  outline-offset: 2px;
+  cursor: pointer !important;
 }
 `;

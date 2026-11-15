@@ -27,7 +27,15 @@ const STYLES = `
   --safe-left: env(safe-area-inset-left, 0px);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-ha-icon { --mdc-icon-size: 22px; display: inline-flex; }
+ha-icon { --mdc-icon-size: 22px; display: inline-flex; align-items: center; justify-content: center; }
+@keyframes cdSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+ha-icon[icon="mdi:loading"], .spin {
+  animation: cdSpin 0.9s linear infinite;
+  transform-origin: center;
+}
 button { font: inherit; color: inherit; touch-action: manipulation; }
 
 .page {
@@ -2154,6 +2162,105 @@ details.adv-options summary {
   .nav-btn:not([data-active]) { padding: 0 10px; min-width: 44px; }
   .nav-btn:not([data-active]) span { display: none; }
 }
+
+/* ── Smoke Detector Room & Home Alerts ── */
+.smoke-header-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  color: var(--cd-secondary); opacity: .82;
+}
+.smoke-header-chip ha-icon { --mdc-icon-size: 14px; }
+.smoke-header-chip.alert {
+  opacity: 1; color: #fff; background: #dc2626;
+  padding: 2px 8px; border-radius: 999px; font-weight: 700;
+}
+.card.room[data-smoke-alarm],
+.room-detail-page[data-smoke-alarm] .room-detail-head {
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.34), rgba(153, 27, 27, 0.24)) !important;
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.38);
+  animation: cdSmokePulse 1.3s ease-in-out infinite alternate;
+}
+.card.room[data-smoke-alarm] .room-name {
+  color: #fecaca;
+}
+.smoke-home-banner {
+  width: 100%; display: flex; flex-direction: column; gap: 10px;
+  padding: 16px 18px; margin-bottom: 14px; border-radius: var(--cd-radius, 18px);
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  border: 2px solid #fca5a5; color: #ffffff;
+  box-shadow: 0 10px 28px rgba(220, 38, 38, 0.38);
+  cursor: pointer; text-align: left;
+  transition: transform .14s ease, filter .14s ease;
+  animation: cdSmokePulse 1.3s ease-in-out infinite alternate;
+}
+.smoke-home-banner:active { transform: scale(0.99); }
+@media (hover: hover) {
+  .smoke-home-banner:hover { filter: brightness(1.06); }
+}
+.smoke-home-banner-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
+}
+.smoke-home-banner-title {
+  display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 800; color: #ffffff;
+}
+.smoke-home-banner-title ha-icon { --mdc-icon-size: 24px; color: #ffffff; }
+.smoke-home-banner-sub {
+  font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.92);
+}
+.smoke-home-rooms {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.smoke-home-room-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18); border: 1px solid rgba(255, 255, 255, 0.32);
+  color: #ffffff; font-size: 13px; font-weight: 700;
+}
+.smoke-home-room-pill ha-icon { --mdc-icon-size: 17px; color: #ffffff; }
+
+/* ── Wizard Pre-Filter Cards ── */
+.wizard-prefilter-grid {
+  display: grid; gap: 12px; margin-top: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+}
+.wizard-prefilter-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  padding: 18px 16px; border-radius: 16px; text-align: left; cursor: pointer;
+  background: var(--cd-tile-bg); border: 1.5px solid rgba(128,128,128,.2);
+  transition: border-color .15s, background .15s, transform .12s;
+}
+.wizard-prefilter-card:active { transform: scale(0.98); }
+@media (hover: hover) {
+  .wizard-prefilter-card:hover {
+    border-color: var(--cd-accent);
+    background: color-mix(in srgb, var(--cd-accent) 10%, var(--cd-tile-bg));
+  }
+}
+.wizard-prefilter-icon {
+  width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--cd-accent) 16%, transparent);
+  color: var(--cd-accent);
+}
+.wizard-prefilter-title { font-size: 15px; font-weight: 700; color: var(--cd-text); }
+.wizard-prefilter-sub { font-size: 12.5px; color: var(--cd-secondary); line-height: 1.35; }
+.wizard-filter-subbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;
+}
+
+/* ── Settings Badge Preview & Subview Edit Mode ── */
+.badge-preview-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px;
+  border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  background: color-mix(in srgb, var(--badge-color, var(--cd-accent)) 18%, var(--cd-tile-bg));
+  border: 1px solid color-mix(in srgb, var(--badge-color, var(--cd-accent)) 45%, transparent);
+  color: var(--cd-text);
+}
+.badge-preview-chip ha-icon { --mdc-icon-size: 15px; color: var(--badge-color, var(--cd-accent)); }
+[data-edit-mode] {
+  outline: 1.5px dashed color-mix(in srgb, var(--cd-accent) 70%, transparent);
+  outline-offset: 2px;
+  cursor: pointer !important;
+}
 `;
 // ─── END: lib/styles.js ───
 
@@ -4048,11 +4155,123 @@ const DEVICE_CATEGORIES = [
   { id: 'rauchmelder', name: 'Rauchmelder', icon: 'mdi:smoke-detector', color: '#ef4444', desc: 'Rauch & Brandmelder' },
   { id: 'bodenmessgeraet', name: 'Bodenmessgerät', icon: 'mdi:sprout', color: '#4caf50', desc: 'Bodenfeuchte & Pflanzen' },
   { id: 'raummessgeraet', name: 'Raummessgerät', icon: 'mdi:thermometer-lines', color: '#ff5722', desc: 'Temperatur & Klima' },
+  { id: 'kamera', name: 'Kamera', icon: 'mdi:cctv', color: '#03a9f4', desc: 'Überwachungskameras' },
+  { id: 'alarmanlage', name: 'Alarmanlage', icon: 'mdi:shield-home', color: '#4caf50', desc: 'Alarm-Zentrale' },
 ];
 
 const CONTROLLABLE_DOMAINS = new Set([
-  'light', 'switch', 'cover', 'valve', 'climate', 'media_player', 'fan',
+  'light', 'switch', 'cover', 'valve', 'climate', 'media_player', 'fan', 'camera', 'alarm_control_panel',
 ]);
+const IGNORED_PLATFORMS = new Set([
+  'portainer', 'systemmonitor', 'glances', 'hassio', 'supervisor', 'version',
+  'webuntis', 'caldav', 'google', 'local_calendar', 'ical', 'ics_calendar',
+  'waste_collection_schedule', 'garbage_collection', 'sun', 'met',
+  'openweathermap', 'hacs', 'bluetooth', 'uptime', 'backup', 'analytics',
+  'diagnostics', 'speedtestdotnet', 'dwd_weather_warnings',
+]);
+const ROOM_SENSOR_DEVICE_CLASSES = new Set([
+  'temperature', 'humidity', 'illuminance', 'pressure', 'co2', 'pm25', 'pm10', 'voc',
+  'moisture', 'motion', 'occupancy', 'presence', 'smoke', 'gas', 'water',
+]);
+
+const ROUTER_DIAG_PATTERN = /(?:port_forward|deflection|guest_?wifi|wi_?fi_?2|wi_?fi_?5|wps|device_access|stealth|wan_|dsl_|external_ip|bytes_received|bytes_sent|kb_s|link_status|reconnect|reboot|internet_access|fritz_?box.*(?:wi_?fi|wlan|guest|gast|telefon|call|fon))/i;
+
+function _hasIdentifierPrefix(d, prefixes) {
+  if (!Array.isArray(d?.identifiers)) return false;
+  return d.identifiers.some((pair) => {
+    const p0 = String(Array.isArray(pair) ? pair[0] : pair || '').toLowerCase();
+    const p1 = String(Array.isArray(pair) ? (pair[1] || '') : '').toLowerCase();
+    return prefixes.some((pre) => p0 === pre || p0.includes(pre) || p1.includes(pre));
+  });
+}
+
+/** Returns true if a device is a Zigbee coordinator/bridge rather than a normal end device. */
+function isBridgeOrCoordinator(d, devEntities = []) {
+  if (!d) return false;
+  const hay = `${d.name_by_user || ''} ${d.name || ''} ${d.manufacturer || ''} ${d.model || ''}`.toLowerCase();
+  if (/(?:zigbee2mqtt\s*bridge|zha\s*coordinator|coordinator|zigbee.*bridge|hue\s*bridge|conbee|raspbee|sonoff\s*zigbee.*dongle)/i.test(hay)) {
+    return true;
+  }
+  if (_hasIdentifierPrefix(d, ['zigbee2mqtt_bridge', 'bridge_0x'])) return true;
+  if (d.entry_type === 'service' && devEntities.some((e) => ['zha', 'mqtt', 'deconz', 'hue'].includes(e.platform))) {
+    return true;
+  }
+  return false;
+}
+
+/** Classify device radio standard as 'zigbee' or 'wifi_other'. */
+function classifyDeviceProtocol(d, devEntities = [], deviceMap = null) {
+  if (!d) return 'wifi_other';
+  if (d.isVirtualEntity) {
+    const plat = String(d.platform || '').toLowerCase();
+    const hay = `${d.manufacturer || ''} ${d.model || ''}`.toLowerCase();
+    if (['zha', 'deconz', 'hue'].includes(plat) || /zigbee|zha|z2m|zigbee2mqtt/.test(hay)) {
+      return 'zigbee';
+    }
+    return 'wifi_other';
+  }
+  if (_hasIdentifierPrefix(d, ['zha', 'deconz', 'hue', 'zigbee2mqtt', 'z2m', 'zigbee'])) {
+    return 'zigbee';
+  }
+  const bridge = d.via_device_id && deviceMap ? deviceMap.get(d.via_device_id) : null;
+  if (bridge && _hasIdentifierPrefix(bridge, ['zha', 'deconz', 'hue', 'zigbee2mqtt', 'z2m', 'zigbee'])) {
+    return 'zigbee';
+  }
+  const hay = `${d.manufacturer || ''} ${d.model || ''}`.toLowerCase();
+  if (/zigbee2mqtt|zigbee|\bzha\b|deconz/.test(hay)) return 'zigbee';
+  if (devEntities.some((e) => ['zha', 'deconz', 'hue'].includes(String(e.platform || '').toLowerCase()))) {
+    return 'zigbee';
+  }
+  if (devEntities.some((e) => e.platform === 'mqtt')) {
+    const bHay = bridge ? `${bridge.name || ''} ${bridge.manufacturer || ''} ${bridge.model || ''}`.toLowerCase() : '';
+    if (/zigbee|z2m/.test(bHay) || devEntities.some((e) => /zigbee|0x[0-9a-f]{8,}/i.test(`${e.entity_id} ${e.unique_id || ''}`))) {
+      return 'zigbee';
+    }
+  }
+  return 'wifi_other';
+}
+
+/** Strictly reject Portainer, host/system monitors, Webuntis/calendars, and Fritz!Box router internals. */
+function isIrrelevantDeviceOrIntegration(d, devEntities = []) {
+  if (!d) return true;
+  if (isOwnIntegrationDevice(d, devEntities)) return true;
+
+  const name = (d.name_by_user || d.name || '').toLowerCase();
+  const mfg = (d.manufacturer || '').toLowerCase();
+  const model = (d.model || '').toLowerCase();
+  const hay = `${name} ${mfg} ${model}`;
+
+  if (/(?:portainer|webuntis|systemmonitor|hassio|home assistant supervisor|home assistant operating system|raspberry\s*pi|glances|waste_collection_schedule)/.test(hay)) {
+    return true;
+  }
+  if (_hasIdentifierPrefix(d, ['portainer', 'webuntis', 'hassio', 'supervisor', 'systemmonitor', 'caldav', 'ical', 'ics_calendar', 'local_calendar'])) {
+    return true;
+  }
+
+  // Filter out pure Fritz!Box router / repeater internal devices (while keeping FRITZ!DECT smart plugs/thermostats)
+  const isFritzRouter = (_hasIdentifierPrefix(d, ['fritz', 'fritzbox']) || mfg.includes('avm'))
+    && /fritz!box|fritz!repeater|fritz!powerline|router/i.test(hay)
+    && !/fritz!dect|comet\s*dect|smart\s*plug|thermostat/i.test(hay);
+  if (isFritzRouter) return true;
+
+  // Check if all active entities belong to ignored platforms
+  if (devEntities.length > 0 && devEntities.every((e) => IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase()))) {
+    return true;
+  }
+
+  // Host/container CPU, RAM, Disk & system stats (when device carries no smart-home actuators)
+  const isSystemText = (
+    name.includes('hacs') || mfg.includes('hacs') ||
+    name.includes('forecast') || mfg.includes('met.no') ||
+    name.includes('bluetooth') || mfg.includes('bluetooth') || name.startsWith('hci') ||
+    name.includes('plugin') || model.includes('plugin') ||
+    mfg.includes('integration') || model.includes('integration') ||
+    name === 'sun'
+  );
+  if (isSystemText) return true;
+
+  return false;
+}
 
 /** Returns true if an entity belongs to SmartHome Companion's own internal integration. */
 function isOwnIntegrationEntity(e) {
@@ -4110,14 +4329,22 @@ function isControllableActuator(e) {
   if (e.disabled_by || e.hidden_by) return false;
   if (isOwnIntegrationEntity(e)) return false;
   if (e.entity_category === 'config' || e.entity_category === 'diagnostic') return false;
+  if (IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase())) return false;
 
   const domain = domainOf(e.entity_id);
   if (!CONTROLLABLE_DOMAINS.has(domain)) return false;
 
   const id = (e.entity_id || '').toLowerCase();
   const name = (e.name || e.original_name || '').toLowerCase();
-  const configPattern = /(?:overcharge|protection|kindersicherung|child_?lock|indicator|led_?mode|backlight|status_?led|restart|reboot|update|firmware|start_?zustand|start_?state|auto_?off|inching|pairing|identify|interlock|relay_mode|power_on_state)/;
-  if (configPattern.test(id) || configPattern.test(name)) return false;
+  const basePattern = /(?:overcharge|protection|kindersicherung|child_?lock|restart|reboot|update|firmware|start_?zustand|start_?state|auto_?off|inching|pairing|identify|interlock|relay_mode|power_on_state)/;
+  if (basePattern.test(id) || basePattern.test(name)) return false;
+
+  // Allow real lights named "Backlight" or "Status LED", only strip diagnostic LED switches/relays
+  if (domain !== 'light') {
+    const switchOnlyPattern = /(?:indicator|led_?mode|backlight|status_?led)/;
+    if (switchOnlyPattern.test(id) || switchOnlyPattern.test(name)) return false;
+  }
+  if (domain === 'switch' && ROUTER_DIAG_PATTERN.test(`${id} ${name}`)) return false;
 
   return true;
 }
@@ -4888,7 +5115,19 @@ class GroupTile {
     const until = Date.now() + 4000;
 
     this._applyOptimistic(desiredOn, until);
-    this.hass.callService('homeassistant', service, { entity_id: this.entityIds });
+
+    const lightIds = this.entityIds.filter((eid) => domainOf(eid) === 'light');
+    const otherIds = this.entityIds.filter((eid) => domainOf(eid) !== 'light');
+    if (this.spec.entity_id && !otherIds.length && this.spec.entity_id.startsWith('light.')) {
+      this.hass.callService('light', service, { entity_id: this.spec.entity_id });
+    } else {
+      if (lightIds.length) {
+        this.hass.callService('light', service, { entity_id: lightIds });
+      }
+      if (otherIds.length) {
+        this.hass.callService('homeassistant', service, { entity_id: otherIds });
+      }
+    }
 
     if (this._stragglerTimer) clearTimeout(this._stragglerTimer);
     this._stragglerTimer = setTimeout(() => {
@@ -4900,7 +5139,10 @@ class GroupTile {
         return !st || st.state !== targetState;
       });
       if (stragglers.length > 0 && Date.now() < this._optimisticUntil) {
-        this.hass.callService('homeassistant', service, { entity_id: stragglers });
+        const sLights = stragglers.filter((eid) => domainOf(eid) === 'light');
+        const sOthers = stragglers.filter((eid) => domainOf(eid) !== 'light');
+        if (sLights.length) this.hass.callService('light', service, { entity_id: sLights });
+        if (sOthers.length) this.hass.callService('homeassistant', service, { entity_id: sOthers });
       }
       setTimeout(() => {
         if (this.hass && Date.now() >= this._optimisticUntil) {
@@ -4914,11 +5156,12 @@ class GroupTile {
 
   _setMasterBrightness(pct) {
     if (!this.hass) return;
-    for (const eid of this.entityIds) {
-      if (domainOf(eid) === 'light') {
-        this.hass.callService('light', 'turn_on', { entity_id: eid, brightness_pct: pct });
-      }
-    }
+    const lightIds = this.entityIds.filter((eid) => domainOf(eid) === 'light');
+    const target = (this.spec.entity_id && this.spec.entity_id.startsWith('light.') && lightIds.length === this.entityIds.length)
+      ? this.spec.entity_id
+      : lightIds;
+    if (!target || (Array.isArray(target) && !target.length)) return;
+    this.hass.callService('light', 'turn_on', { entity_id: target, brightness_pct: pct, transition: 0.2 });
   }
 
   update(hass) {
@@ -5015,6 +5258,7 @@ function average(hass, ids) {
 function applySmartTileLayout(tiles, grid = null) {
   if (!tiles || !tiles.length) return;
 
+  const priorityTiles = [];
   const topWide = [];
   const compactTiles = [];
   const sliderTiles = [];
@@ -5022,7 +5266,10 @@ function applySmartTileLayout(tiles, grid = null) {
 
   for (const t of tiles) {
     const isGroup = t.spec?.is_group || t.is_group === true || t.constructor?.name === 'GroupTile';
-    if (isGroup) {
+    const effCat = t.spec ? effectiveCategory(t.spec) : effectiveCategory(t);
+    if (!isGroup && effCat === 'rauchmelder') {
+      priorityTiles.push(t);
+    } else if (isGroup) {
       bottomWide.push(t);
     } else if (t.isForceOwnRow) {
       sliderTiles.push(t);
@@ -5033,6 +5280,15 @@ function applySmartTileLayout(tiles, grid = null) {
     } else {
       compactTiles.push(t);
     }
+  }
+
+  if (priorityTiles.length % 2 === 1) {
+    for (let i = 0; i < priorityTiles.length - 1; i++) {
+      priorityTiles[i].setWide(false);
+    }
+    priorityTiles[priorityTiles.length - 1].setWide(true);
+  } else {
+    priorityTiles.forEach((t) => t.setWide(false));
   }
 
   topWide.forEach((t) => t.setWide(true));
@@ -5049,7 +5305,7 @@ function applySmartTileLayout(tiles, grid = null) {
   }
 
   if (grid) {
-    const ordered = [...topWide, ...compactTiles, ...sliderTiles, ...bottomWide];
+    const ordered = [...priorityTiles, ...topWide, ...compactTiles, ...sliderTiles, ...bottomWide];
     const current = Array.from(grid.children);
     const changed = current.length !== ordered.length || ordered.some((t, i) => current[i] !== t.el);
     if (changed) {
@@ -5208,16 +5464,17 @@ class Room {
       this.tiles = spec.tiles.map(makeTileInstance);
     }
 
-    // Strict priority in room: 1. Jalousien (Rollläden), 2. Medien / TV, 3. Der Rest
+    // Strict priority in room: 0. Rauchmelder, 1. Jalousien (Rollläden), 2. Medien / TV, 3. Der Rest
     const tileWeight = (t) => {
-      if (t instanceof GroupedCoverTile) return 0;
+      if (t instanceof GroupedCoverTile) return 1;
       const cat = effectiveCategory(t);
-      if (cat === 'cover') return 0;
-      if (cat === 'media_player') return 1;
-      if (cat === 'light') return 2;
-      if (cat === 'outlet') return 3;
-      if (cat === 'switch') return 4;
-      return 5;
+      if (cat === 'rauchmelder' || cat === 'smoke') return 0;
+      if (cat === 'cover') return 1;
+      if (cat === 'media_player') return 2;
+      if (cat === 'light') return 3;
+      if (cat === 'outlet') return 4;
+      if (cat === 'switch') return 5;
+      return 6;
     };
     this.tiles.sort((a, b) => tileWeight(a) - tileWeight(b));
 
@@ -5345,25 +5602,32 @@ class Room {
     if (group.key === 'cover') {
       const anyOpen = states.some((s) => s.state !== 'closed');
       const targetService = anyOpen ? 'close_cover' : 'open_cover';
+      const coverIds = [];
+      const otherIds = [];
       for (const id of group.ids) {
-        const dom = domainOf(id);
-        if (dom === 'cover') {
-          this.hass.callService('cover', targetService, { entity_id: id });
-        } else {
-          this.hass.callService(dom, targetService === 'close_cover' ? 'turn_off' : 'turn_on', { entity_id: id });
-        }
+        if (domainOf(id) === 'cover') coverIds.push(id);
+        else otherIds.push(id);
+      }
+      if (coverIds.length) {
+        this.hass.callService('cover', targetService, { entity_id: coverIds });
+      }
+      if (otherIds.length) {
+        this.hass.callService('homeassistant', targetService === 'close_cover' ? 'turn_off' : 'turn_on', { entity_id: otherIds });
       }
     } else {
       const anyOn = states.some((s) => isActive(s));
       const targetService = anyOn ? 'turn_off' : 'turn_on';
+      const lightIds = [];
       const valveIds = [];
       const genericIds = [];
       for (const id of group.ids) {
-        if (domainOf(id) === 'valve') {
-          valveIds.push(id);
-        } else {
-          genericIds.push(id);
-        }
+        const dom = domainOf(id);
+        if (dom === 'light') lightIds.push(id);
+        else if (dom === 'valve') valveIds.push(id);
+        else genericIds.push(id);
+      }
+      if (lightIds.length) {
+        this.hass.callService('light', targetService, { entity_id: lightIds });
       }
       if (genericIds.length) {
         this.hass.callService('homeassistant', targetService, { entity_id: genericIds });
@@ -5401,6 +5665,25 @@ class Room {
       const v = String(st.state || '').toLowerCase();
       return isActive(st) || ['on', 'home', 'detected', 'occupied', 'true'].includes(v);
     };
+    const isSmokeTriggered = (id) => {
+      const st = hass.states[id];
+      if (!st) return false;
+      const v = String(st.state || '').toLowerCase();
+      return ['on', 'detected', 'smoke', 'alarm', 'true'].includes(v);
+    };
+    const tileSmokeIds = (this.spec.tiles || [])
+      .filter((t) => effectiveCategory(t) === 'rauchmelder' && t.entity_id)
+      .map((t) => t.entity_id);
+    const allSmokeIds = Array.from(new Set([...(sensors.smoke || []), ...tileSmokeIds]));
+    const smokeTriggered = allSmokeIds.some(isSmokeTriggered);
+    this.el.toggleAttribute('data-smoke-alarm', smokeTriggered);
+    if (allSmokeIds.length > 0) {
+      if (smokeTriggered) {
+        chips.push(h('span', { class: 'smoke-header-chip alert', title: 'Rauchalarm!' }, icon('mdi:smoke-detector-alert'), 'Rauch!'));
+      } else {
+        chips.push(h('span', { class: 'smoke-header-chip', title: 'Rauchmelder aktiv' }, icon('mdi:smoke-detector')));
+      }
+    }
     const moistIds = sensors.moisture || [];
     const numericMoistIds = moistIds.filter((id) => numeric(hass.states[id]) !== null);
     const binaryMoistIds = moistIds.filter((id) => numeric(hass.states[id]) === null);
@@ -5412,7 +5695,7 @@ class Room {
     if (binaryMoistIds.some(isSensorOn)) {
       chips.push(h('span', { class: 'alert' }, icon('mdi:water-alert'), 'Feuchtigkeit'));
     }
-    const key = chips.map((c) => c.textContent).join('|');
+    const key = `${chips.map((c) => c.textContent || c.getAttribute('title') || '').join('|')}|${smokeTriggered ? 1 : 0}`;
     if (key !== this._metaKey) {
       this._metaKey = key;
       this.metaEl.replaceChildren(...chips);
@@ -5566,20 +5849,22 @@ class RoomDetailView {
 
     const tiles = roomSpec.tiles || [];
     // Partition by effective category (custom category takes priority!)
+    this.smokeSpecs = tiles.filter((t) => effectiveCategory(t) === 'rauchmelder');
     this.coverSpecs = tiles.filter((t) => effectiveCategory(t) === 'cover');
     this.lightSpecs = tiles.filter((t) => effectiveCategory(t) === 'light');
     this.switchSpecs = tiles.filter((t) => ['switch', 'outlet', 'valve', 'pumpe'].includes(effectiveCategory(t)));
     this.mediaSpecs = tiles.filter((t) => effectiveCategory(t) === 'media_player');
     this.otherSpecs = tiles.filter((t) =>
-      !['cover', 'light', 'switch', 'outlet', 'valve', 'pumpe', 'media_player'].includes(effectiveCategory(t)));
+      !['rauchmelder', 'cover', 'light', 'switch', 'outlet', 'valve', 'pumpe', 'media_player'].includes(effectiveCategory(t)));
 
     const makeTileInstance = (t) => {
       if (t.is_group) return new GroupTile(t, this.ctx);
       return new Tile(t, this.ctx);
     };
 
-    // Strict priority for non-cover devices: 1. Media, 2. Light, 3. Switches, 4. Other
+    // Strict priority for non-cover devices: 0. Rauchmelder, 1. Media, 2. Light, 3. Switches, 4. Other
     const otherDeviceSpecs = [
+      ...this.smokeSpecs,
       ...this.mediaSpecs,
       ...this.lightSpecs,
       ...this.switchSpecs,
@@ -5669,13 +5954,17 @@ class RoomDetailView {
     if (group.key === 'cover') {
       const anyOpen = states.some((s) => s.state !== 'closed');
       const targetService = anyOpen ? 'close_cover' : 'open_cover';
+      const coverIds = [];
+      const otherIds = [];
       for (const id of group.ids) {
-        const dom = domainOf(id);
-        if (dom === 'cover') {
-          this.hass.callService('cover', targetService, { entity_id: id });
-        } else {
-          this.hass.callService(dom, targetService === 'close_cover' ? 'turn_off' : 'turn_on', { entity_id: id });
-        }
+        if (domainOf(id) === 'cover') coverIds.push(id);
+        else otherIds.push(id);
+      }
+      if (coverIds.length) {
+        this.hass.callService('cover', targetService, { entity_id: coverIds });
+      }
+      if (otherIds.length) {
+        this.hass.callService('homeassistant', targetService === 'close_cover' ? 'turn_off' : 'turn_on', { entity_id: otherIds });
       }
     } else {
       const anyOn = states.some((s) => isActive(s));
@@ -5734,10 +6023,24 @@ class RoomDetailView {
     const hum = sensors.humidity?.length ? average(hass, sensors.humidity) : null;
     const mot = (sensors.motion || []).some((id) => hass.states[id]?.state === 'on');
     const moi = (sensors.moisture || []).some((id) => hass.states[id]?.state === 'on');
-    const chipKey = `${temp || ''}|${hum || ''}|${mot ? 1 : 0}|${moi ? 1 : 0}`;
+    const tileSmokeIds = this.smokeSpecs.map((t) => t.entity_id).filter(Boolean);
+    const allSmokeIds = Array.from(new Set([...(sensors.smoke || []), ...tileSmokeIds]));
+    const smokeTriggered = allSmokeIds.some((id) => {
+      const v = String(hass.states[id]?.state || '').toLowerCase();
+      return ['on', 'detected', 'smoke', 'alarm', 'true'].includes(v);
+    });
+    this.el.toggleAttribute('data-smoke-alarm', smokeTriggered);
+    const chipKey = `${temp || ''}|${hum || ''}|${mot ? 1 : 0}|${moi ? 1 : 0}|${allSmokeIds.length}|${smokeTriggered ? 1 : 0}`;
     if (chipKey !== this._chipKey) {
       this._chipKey = chipKey;
       const chips = [];
+      if (allSmokeIds.length > 0) {
+        if (smokeTriggered) {
+          chips.push(h('div', { class: 'room-detail-chip', style: { color: '#fff', background: '#dc2626', fontWeight: '700' } }, icon('mdi:smoke-detector-alert'), 'Rauch!'));
+        } else {
+          chips.push(h('div', { class: 'room-detail-chip', title: 'Rauchmelder aktiv' }, icon('mdi:smoke-detector')));
+        }
+      }
       if (temp) chips.push(h('div', { class: 'room-detail-chip' }, icon('mdi:thermometer'), temp));
       if (hum) chips.push(h('div', { class: 'room-detail-chip' }, icon('mdi:water-percent'), hum));
       if (mot) chips.push(h('div', { class: 'room-detail-chip', style: { color: '#ffb74d' } }, icon('mdi:motion-sensor'), 'Bewegung'));
@@ -5978,28 +6281,113 @@ class Badges {
   }
 }
 
-// ═══════════════ Smoke alerts (automatic, no config) ═══════════════
+// ═══════════════ Smoke alerts (strictly configured smoke detectors) ═══════════════
 class SmokeAlerts {
-  constructor() {
-    this.el = h('div', { class: 'side', style: { gap: '8px' } });
+  constructor({ onOpenSmoke = null } = {}) {
+    this.onOpenSmoke = onOpenSmoke;
+    this.el = h('div', { style: { display: 'grid', gap: '10px' } });
+    this._key = '';
+    this._layout = null;
+  }
+
+  setLayout(layout) {
+    this._layout = layout || null;
     this._key = '';
   }
 
+  _collectConfiguredSmokeEntries() {
+    const map = new Map();
+    const layout = this._layout;
+    if (!layout) return [];
+    const rooms = layout.rooms || [];
+    const roomById = new Map(rooms.map((r) => [r.area_id, r]));
+
+    for (const item of (layout.configured?.smoke || [])) {
+      if (!item?.entity_id) continue;
+      map.set(item.entity_id, {
+        entity_id: item.entity_id,
+        name: item.name || item.entity_id,
+        area_id: item.area_id || '__none__',
+        area_name: item.area_name || roomById.get(item.area_id)?.name || 'Nicht zugeordnet',
+        area_icon: item.area_icon || roomById.get(item.area_id)?.icon || 'mdi:home-outline',
+      });
+    }
+    for (const r of rooms) {
+      for (const eid of (r.sensors?.smoke || [])) {
+        if (!eid || map.has(eid)) continue;
+        map.set(eid, {
+          entity_id: eid,
+          name: eid,
+          area_id: r.area_id,
+          area_name: r.name || 'Raum',
+          area_icon: r.icon || 'mdi:home-outline',
+        });
+      }
+      for (const t of (r.tiles || [])) {
+        if ((t.category === 'rauchmelder' || t.category === 'smoke') && t.entity_id && !map.has(t.entity_id)) {
+          map.set(t.entity_id, {
+            entity_id: t.entity_id,
+            name: t.name || t.entity_id,
+            area_id: r.area_id,
+            area_name: r.name || 'Raum',
+            area_icon: r.icon || 'mdi:home-outline',
+          });
+        }
+      }
+    }
+    return Array.from(map.values());
+  }
+
   update(hass) {
-    const ids = Object.keys(hass.states).filter((id) => {
-      if (!id.startsWith('binary_sensor.')) return false;
-      const st = hass.states[id];
-      return st.state === 'on' && st.attributes?.device_class === 'smoke';
+    const entries = this._collectConfiguredSmokeEntries();
+    const triggered = entries.filter((entry) => {
+      const st = hass.states[entry.entity_id];
+      if (!st) return false;
+      const v = String(st.state || '').toLowerCase();
+      return ['on', 'detected', 'smoke', 'alarm', 'true'].includes(v);
     });
-    const key = ids.join(',');
+    const key = triggered.map((e) => `${e.entity_id}:${e.area_id}`).join('|');
     if (key === this._key) return;
     this._key = key;
-    this.el.replaceChildren(...ids.map((id) => h('div', { class: 'alert-card alert-smoke', onClick: () => moreInfo(this.el, id) },
-      h('div', { class: 'a-icon' }, icon('mdi:fire-alert')),
-      h('div', {},
-        h('div', { class: 'a-title' }, hass.states[id].attributes.friendly_name || id),
-        h('div', { class: 'a-sub' }, 'Rauch erkannt')))));
-    this.el.hidden = ids.length === 0;
+    if (!triggered.length) {
+      this.el.replaceChildren();
+      this.el.hidden = true;
+      return;
+    }
+
+    // Group active alarms by room so each affected room appears cleanly with its icon
+    const roomsById = new Map();
+    for (const entry of triggered) {
+      if (!roomsById.has(entry.area_id)) {
+        roomsById.set(entry.area_id, {
+          area_id: entry.area_id,
+          name: entry.area_name,
+          icon: entry.area_icon,
+          count: 1,
+        });
+      } else {
+        roomsById.get(entry.area_id).count += 1;
+      }
+    }
+
+    const banner = h('button', {
+      type: 'button',
+      class: 'smoke-home-banner',
+      onClick: () => this.onOpenSmoke?.(),
+    },
+    h('div', { class: 'smoke-home-banner-head' },
+      h('div', { class: 'smoke-home-banner-title' },
+        icon('mdi:smoke-detector-alert'),
+        h('span', {}, triggered.length === 1 ? 'Rauchalarm erkannt!' : `${triggered.length} Rauchmelder ausgelöst!`)),
+      icon('mdi:chevron-right')),
+    h('div', { class: 'smoke-home-banner-sub' }, 'Tippen für Sicherheits- & Rauchmelderübersicht'),
+    h('div', { class: 'smoke-home-rooms' },
+      ...Array.from(roomsById.values()).map((r) => h('span', { class: 'smoke-home-room-pill' },
+        icon(r.icon || 'mdi:home-outline'),
+        h('span', {}, r.count > 1 ? `${r.name} (${r.count})` : r.name)))));
+
+    this.el.replaceChildren(banner);
+    this.el.hidden = false;
   }
 }
 
@@ -6243,7 +6631,8 @@ class NavBar {
       }
     }
 
-    // Ensure core hubs Solar, Blinds, and Mehr are easily reachable if not already listed
+    // Preserve configured order strictly; seed missing core hubs only when absent
+    const hasCustomOrder = raw.length > 0;
     const defaults = [
       { view: 'security', name: 'Sicherheit', icon: 'mdi:shield-home' },
       { view: 'solar', name: 'Solar', icon: 'mdi:solar-power-variant' },
@@ -6252,8 +6641,12 @@ class NavBar {
     ];
     for (const def of defaults) {
       if (!seenViews.has(def.view) && viewAllowed(def.view)) {
-        // Place Mehr always at the end
-        if (def.view === 'more') continue;
+        if (def.view === 'more' && !hasCustomOrder) continue;
+        if (def.view === 'more') {
+          seenViews.add(def.view);
+          list.push(def);
+          continue;
+        }
         seenViews.add(def.view);
         const moreIdx = list.findIndex((i) => i.view === 'more');
         if (moreIdx >= 0) list.splice(moreIdx, 0, def);
@@ -6653,7 +7046,6 @@ const VISIBLE_OPTIONS = [
   ['state_in', 'Status ist (Liste)'], ['state_not_in', 'Status ist nicht (Liste)'],
 ];
 const VIEW_NAV_CHOICES = [
-  ['', 'Benutzerdefinierter Pfad'],
   ...BUILTIN_VIEWS.map((v) => [`companion:${v.id}`, `Ansicht: ${v.label}`]),
 ];
 class Settings {
@@ -6939,36 +7331,20 @@ class Settings {
       v.startsWith('companion:') ? `/lovelace/${v.slice('companion:'.length)}` : v,
       l,
     ]);
-    const isKnown = known.some(([p]) => p === cur);
-    const mode = { sel: !cur ? '' : (isKnown ? cur : '__custom__') };
-    const wrap = h('div', { style: { display: 'grid', gap: '6px', minWidth: '0' } });
-    const customInput = h('input', {
-      type: 'text',
-      value: isKnown ? '' : cur,
-      placeholder: '/lovelace/... oder /todo?entity_id=...',
-      hidden: mode.sel !== '__custom__',
-      onInput: (e) => {
-        const v = e.target.value;
-        if (v) obj[key] = v; else delete obj[key];
-      },
-    });
+    const normalized = cur.startsWith('companion:') ? `/lovelace/${cur.slice('companion:'.length)}` : cur;
+    const isKnown = known.some(([p]) => p === normalized);
     const cdd = this._track(new CustomDropdown({
       options: [
         { value: '', label: 'Kein Ziel' },
         ...known.map(([v, l]) => ({ value: v, label: l })),
-        { value: '__custom__', label: 'Benutzerdefinierter Pfad...' },
       ],
-      value: mode.sel,
+      value: isKnown ? normalized : '',
       onChange: (v) => {
-        mode.sel = v;
-        customInput.hidden = v !== '__custom__';
-        if (v && v !== '__custom__') obj[key] = v;
-        else if (!v) delete obj[key];
-        else obj[key] = customInput.value || '';
+        if (v) obj[key] = v;
+        else delete obj[key];
       },
     }));
-    wrap.append(cdd.el, customInput);
-    return this._field(label, wrap);
+    return this._field(label, cdd.el);
   }
 
   _serviceField(obj, key, label) {
@@ -7318,57 +7694,92 @@ class Settings {
   }
 
   // ═══════════ TAB 2: Startseite ═══════════
+  _badgePreviewEl(b) {
+    const chip = h('span', { class: 'badge-preview-chip' });
+    const refresh = () => {
+      const st = b.entity_id ? this.hass?.states?.[b.entity_id] : null;
+      const col = resolveColor(b.color) || 'var(--cd-accent)';
+      const ic = b.icon || st?.attributes?.icon || 'mdi:tag-outline';
+      const label = b.name || st?.attributes?.friendly_name || b.entity_id || 'Status-Badge';
+      const showName = b.show_name !== false;
+      const showState = b.show_state !== false;
+      const valText = st ? `${st.state}${st.attributes?.unit_of_measurement ? ` ${st.attributes.unit_of_measurement}` : ''}` : 'Aktiv';
+      const parts = [];
+      if (showName) parts.push(label);
+      if (showState) parts.push(valText);
+      chip.style.setProperty('--badge-color', col);
+      chip.style.borderColor = `color-mix(in srgb, ${col} 35%, transparent)`;
+      chip.replaceChildren(
+        h('span', { style: { color: col, display: 'inline-flex' } }, icon(ic)),
+        h('span', {}, parts.join(' · ') || label),
+      );
+    };
+    refresh();
+    return { el: chip, refresh };
+  }
+
   _tabHome() {
     const d = this.draft;
     d.badges ||= [];
-    d.persons ||= [];
+    d.greetings ||= {};
+    if (d.greetings.morning === undefined) d.greetings.morning = 'Guten Morgen';
+    if (d.greetings.day === undefined) d.greetings.day = 'Guten Tag';
+    if (d.greetings.evening === undefined) d.greetings.evening = 'Guten Abend';
 
     return [
       this._title('Begrüßung'),
-      h('div', { class: 'fields' }, this._entity(d, 'greeting_entity', 'Begrüßungs-Sensor (optional)', { domain: 'sensor' })),
-      this._hint('• Leer = automatische Tageszeit-Begrüßung\n• Sensorwert ersetzt Text'),
+      this._hint('• Tageszeitabhängiger Titel auf Startseite\n• Texte frei anpassbar'),
+      h('div', { class: 'fields' },
+        this._text(d.greetings, 'morning', 'Morgens (05:00 – 11:00)', { placeholder: 'Guten Morgen' }),
+        this._text(d.greetings, 'day', 'Tagsüber (11:00 – 18:00)', { placeholder: 'Guten Tag' }),
+        this._text(d.greetings, 'evening', 'Abends (18:00 – 05:00)', { placeholder: 'Guten Abend' })),
 
       this._title('Status-Badges'),
-      this._hint('• Kompakte Status-Chips unter Begrüßung\n• Tippen zum Aufklappen & Bearbeiten'),
+      this._hint('• Kompakte Status-Chips unter Begrüßung\n• Tippen zum Bearbeiten & Sortieren'),
       this._list(d.badges, {
         groupKey: 'badge',
-        rowTitle: (b) => b.name || b.entity_id || 'Neues Badge',
-        rowSub: (b) => `${b.entity_id || 'Entität fehlt'} · ${b.tap || 'more-info'}`,
-        make: () => ({ entity_id: '', show_state: true, tap: 'more-info', visible_when: 'always' }),
+        rowTitle: (b) => b.name || this.hass?.states?.[b.entity_id]?.attributes?.friendly_name || b.entity_id || 'Neues Badge',
+        rowSub: (b) => {
+          const tapLabels = { 'more-info': 'Details', navigate: 'Ansicht', service: 'Dienst', none: 'Keine Aktion' };
+          return `${b.entity_id || 'Keine Entität'} · ${tapLabels[b.tap || 'more-info'] || 'Details'}`;
+        },
+        make: () => ({ entity_id: '', show_name: true, show_state: true, tap: 'more-info', visible_when: 'always' }),
         fields: (b, rerender) => {
           const tapMode = b.tap || 'more-info';
           const visMode = b.visible_when || 'always';
+          const prev = this._badgePreviewEl(b);
+          const previewBox = h('div', {
+            style: {
+              gridColumn: '1 / -1',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '10px',
+              padding: '8px 12px',
+              borderRadius: '10px',
+              background: 'rgba(128,128,128,0.08)',
+            },
+          },
+            h('span', { class: 'acc-sub', style: { fontWeight: '600' } }, 'Live-Vorschau'),
+            prev.el);
+          const nameField = this._text(b, 'name', 'Anzeigename');
+          nameField.querySelector('input')?.addEventListener('input', () => prev.refresh());
           return [
+            previewBox,
             this._entity(b, 'entity_id', 'Entität'),
-            this._text(b, 'name', 'Anzeigename'),
+            nameField,
             this._icon(b, 'icon', 'Icon'),
-            this._color(b, 'color', 'Farbe'),
-            this._check(b, 'show_name', 'Name anzeigen'),
-            this._check(b, 'show_state', 'Status anzeigen'),
+            this._color(b, 'color', 'Akzentfarbe'),
+            this._check(b, 'show_name', 'Name anzeigen', () => prev.refresh()),
+            this._check(b, 'show_state', 'Status anzeigen', () => prev.refresh()),
             this._select(b, 'tap', 'Bei Tipp', TAP_OPTIONS, 'more-info', () => rerender()),
-            ...(tapMode === 'navigate' ? [this._navPathField(b, 'path', 'Ziel-Ansicht / Pfad')] : []),
+            ...(tapMode === 'navigate' ? [this._navPathField(b, 'path', 'Ziel-Ansicht')] : []),
             ...(tapMode === 'service' ? [this._serviceField(b, 'service', 'Dienst')] : []),
             this._select(b, 'visible_when', 'Sichtbarkeit', VISIBLE_OPTIONS, 'always', () => rerender()),
             ...(visMode !== 'always' ? [this._text(b, 'visible_value', 'Vergleichswert', { placeholder: '0 / unavailable, off' })] : []),
           ];
         },
         addLabel: 'Badge hinzufügen',
-      }),
-
-      this._title('Personen'),
-      this._hint('• Anzeige nur „Zuhause“\n• Pro Benutzer filterbar'),
-      this._list(d.persons, {
-        groupKey: 'person',
-        rowTitle: (p) => this.hass?.states?.[p.entity_id]?.attributes?.friendly_name || p.entity_id || 'Person',
-        make: () => ({ entity_id: '', users: [] }),
-        fields: (p) => {
-          p.users ||= [];
-          return [
-            this._entity(p, 'entity_id', 'Person / Tracker', { domain: ['person', 'device_tracker'] }),
-            this._usersField(p.users, 'Sichtbar für'),
-          ];
-        },
-        addLabel: 'Person hinzufügen',
       }),
     ];
   }
@@ -7478,14 +7889,20 @@ class Settings {
           ] : []),
           ...(v.id === 'security' ? [
             this._entity(vc, 'alarm_entity', 'Alarmanlage (optional)', { domain: 'alarm_control_panel' }),
-            this._entity(vc, 'router_entity', 'Router-Status (optional)', { domain: 'binary_sensor' }),
-            this._entity(vc, 'timer_entity', 'Rauchalarm-Timer (optional)', { domain: 'timer' }),
-            this._entity(vc, 'abort_entity', 'Alarm-Abbruch Schalter (optional)', { domain: 'input_boolean' }),
+            this._multiEntity(vc, 'camera_entities', 'Kameras (optional)', { domain: 'camera' }),
+            this._text(vc, 'battery_threshold', 'Batteriewarnung Schwellwert (%)', { placeholder: '20' }),
           ] : []),
           ...(v.id === 'solar' ? [
             this._entity(vc, 'pv_entity', 'PV-Leistung (optional)', { domain: 'sensor' }),
             this._entity(vc, 'house_entity', 'Hausverbrauch (optional)', { domain: 'sensor' }),
             this._entity(vc, 'soc_entity', 'Batterie-Ladestand (optional)', { domain: 'sensor' }),
+            this._entity(vc, 'grid_import_entity', 'Netzbezug (optional)', { domain: 'sensor' }),
+            this._entity(vc, 'grid_export_entity', 'Einspeisung (optional)', { domain: 'sensor' }),
+          ] : []),
+          ...(v.id === 'blinds' ? [
+            this._entity(vc, 'facade_east_entity', 'Fassade Ost (optional)', { domain: 'sensor' }),
+            this._entity(vc, 'facade_south_entity', 'Fassade Süd (optional)', { domain: 'sensor' }),
+            this._entity(vc, 'facade_west_entity', 'Fassade West (optional)', { domain: 'sensor' }),
           ] : []),
           ...(v.id === 'printer3d' ? [
             this._entity(vc, 'light_entity', 'Drucker-Licht (optional)', { domain: 'light' }),
@@ -7514,14 +7931,19 @@ class Settings {
 
     return [
       this._title('Untere Navigationsleiste'),
-      this._hint('• Direktsprung zu eingebauten Ansichten oder HA-Pfaden\n• Übersicht & Mehr automatisch erreichbar'),
+      this._hint('• Direktsprung zu eingebauten Ansichten\n• Reihenfolge per Drag & Drop oder Pfeile'),
       this._list(this.draft.nav, {
         groupKey: 'nav',
-        rowTitle: (n) => n.name || n.view || n.path || 'Button',
-        rowSub: (n) => n.view ? `Ansicht: ${n.view}` : (n.path || 'Kein Ziel'),
-        make: () => ({ name: '', icon: 'mdi:shield-home', path: '' }),
+        rowTitle: (n) => n.name || n.view || 'Button',
+        rowSub: (n) => {
+          const def = BUILTIN_VIEWS.find((v) => v.id === n.view);
+          return def ? `Ansicht: ${def.label}` : (n.view || 'Ansicht wählen');
+        },
+        make: () => ({ name: '', icon: 'mdi:shield-home', view: 'security', path: 'companion:security' }),
         fields: (n, rerender) => {
-          const targetObj = { sel: n.view ? `companion:${n.view}` : (n.path?.startsWith('companion:') ? n.path : '') };
+          const legacyMatch = typeof n.path === 'string' ? n.path.match(/^\/lovelace\/([a-z0-9_]+)/i) : null;
+          const curView = n.view || (n.path?.startsWith('companion:') ? n.path.slice('companion:'.length) : legacyMatch?.[1]) || VIEW_NAV_CHOICES[0]?.[0]?.slice('companion:'.length) || 'security';
+          const targetObj = { sel: `companion:${curView}` };
           const viewSel = this._track(new CustomDropdown({
             options: VIEW_NAV_CHOICES.map(([v, l]) => ({ value: v, label: l })),
             value: targetObj.sel,
@@ -7529,8 +7951,6 @@ class Settings {
               if (val.startsWith('companion:')) {
                 n.view = val.slice('companion:'.length);
                 n.path = val;
-              } else {
-                delete n.view;
               }
               rerender();
             },
@@ -7539,7 +7959,6 @@ class Settings {
             this._text(n, 'name', 'Beschriftung (leer = Nur Icon)'),
             this._icon(n, 'icon', 'Icon'),
             this._field('Ziel-Ansicht', viewSel.el),
-            ...(!targetObj.sel ? [this._text(n, 'path', 'Benutzerdefinierter Pfad', { placeholder: '/lovelace/solar oder /todo?...' })] : []),
           ];
         },
         addLabel: 'Navigations-Button hinzufügen',
@@ -8274,10 +8693,14 @@ class DeviceWizard {
     this.energyEntityId = '';
 
     this.searchQuery = '';
+    this.preFilterMode = null; // null | 'room' | 'protocol' | 'all'
+    this.selectedAreaFilter = '__all__';
+    this.protocolFilter = 'all'; // 'all' | 'zigbee' | 'wifi_other'
     this.statusFilter = 'unconfigured'; // 'unconfigured' | 'all' | 'configured'
     this.selectedDevices = new Set();
     this._expandedDeviceChannels = new Set();
     this.groups = {};
+    this._deviceMap = new Map();
 
     this.isCelebration = false;
     this._dropdowns = [];
@@ -8315,7 +8738,7 @@ class DeviceWizard {
     this.el = h('div', { class: 'overlay', onClick: (e) => { if (e.target === this.el) this._closeWizard(); } }, this.dialog);
   }
 
-  async _load() {
+  async _load({ preserveStep0 = false } = {}) {
     this.body.replaceChildren(h('div', { class: 'empty' }, icon('mdi:loading'), h('div', { style: { marginTop: '8px' } }, 'Lade Geräte')));
     try {
       const [devs, ents, areas, setup, dash] = await Promise.all([
@@ -8328,13 +8751,14 @@ class DeviceWizard {
       this.devices = devs || [];
       this.entities = ents || [];
       this.areas = areas || [];
+      this._deviceMap = new Map(this.devices.map((d) => [d.id, d]));
       this.configuredDevices = setup.devices || {};
       this.categories = setup.categories || {};
       this.groups = setup.groups || {};
       this._dashboardRooms = dash?.layout?.rooms || [];
       this._dashboardConfig = dash?.config || {};
 
-      if (this.initialDeviceId) {
+      if (!preserveStep0 && this.initialDeviceId) {
         const parsed = parseChannelKey(this.initialDeviceId);
         const lookupId = parsed.deviceId || parsed.entityId || this.initialDeviceId;
         const candidates = this._getSelectableCandidates();
@@ -8364,7 +8788,7 @@ class DeviceWizard {
         }
       }
 
-      if (this.initialGroupId && this.groups?.[this.initialGroupId]) {
+      if (!preserveStep0 && this.initialGroupId && this.groups?.[this.initialGroupId]) {
         this.dialog.hidden = true;
         this._openGroupModal(this.groups[this.initialGroupId], true);
         return;
@@ -8509,79 +8933,261 @@ class DeviceWizard {
     return null;
   }
 
+  _getDeviceProtocol(d) {
+    if (!d) return 'wifi_other';
+    if (d._protocol) return d._protocol;
+    const devEnts = d.isVirtualEntity
+      ? (this.entities || []).filter((e) => e.entity_id === d.entity_id)
+      : (this.entities || []).filter((e) => e.device_id === d.id);
+    d._protocol = classifyDeviceProtocol(d, devEnts, this._deviceMap);
+    return d._protocol;
+  }
+
   _getSelectableCandidates() {
+    const devMap = this._deviceMap || new Map((this.devices || []).map((d) => [d.id, d]));
     const realDevices = (this.devices || []).filter((d) => this._isCandidateDevice(d));
+    const realDeviceIds = new Set(realDevices.map((d) => d.id));
+    const bridgeDeviceIds = new Set(
+      (this.devices || [])
+        .filter((d) => isBridgeOrCoordinator(d, (this.entities || []).filter((e) => e.device_id === d.id)))
+        .map((d) => d.id),
+    );
+
     const virtualLightGroups = [];
     const seenVirtual = new Set();
+    const seenEntityIds = new Set();
+
     for (const e of (this.entities || [])) {
-      if (!e || e.device_id || e.disabled_by || e.hidden_by) continue;
+      if (!e || !e.entity_id || e.disabled_by) continue;
       if (isOwnIntegrationEntity(e)) continue;
       if (e.entity_category === 'config' || e.entity_category === 'diagnostic') continue;
+      if (IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase())) continue;
       if (domainOf(e.entity_id) !== 'light') continue;
+
+      const parentDev = e.device_id ? devMap.get(e.device_id) : null;
+      const st = this.hass?.states?.[e.entity_id];
+      const hasMemberAttr = Array.isArray(st?.attributes?.entity_id) && st.attributes.entity_id.length > 0;
+      const isAttachedToBridge = !!e.device_id && bridgeDeviceIds.has(e.device_id);
+      const isZ2mGroupDevice = !!parentDev && (
+        /zigbee2mqtt/i.test(`${parentDev.manufacturer || ''} ${parentDev.model || ''}`)
+        && /\bgroup\b/i.test(`${parentDev.model || ''} ${parentDev.name || ''}`)
+      );
+      const isUnattachedGroup = !e.device_id || e.platform === 'group' || hasMemberAttr;
+      if (!isUnattachedGroup && !isAttachedToBridge && !isZ2mGroupDevice) continue;
+      // Avoid duplicate if its parent non-bridge device is already listed
+      if (e.device_id && realDeviceIds.has(e.device_id) && !isZ2mGroupDevice) continue;
+
       const vid = `entity:${e.entity_id}`;
       if (seenVirtual.has(vid)) continue;
       seenVirtual.add(vid);
-      const stName = this.hass?.states?.[e.entity_id]?.attributes?.friendly_name;
+      seenEntityIds.add(e.entity_id);
+
+      const stName = st?.attributes?.friendly_name;
+      const plat = String(e.platform || '').toLowerCase();
+      const parentHay = parentDev ? `${parentDev.manufacturer || ''} ${parentDev.model || ''} ${parentDev.name || ''}`.toLowerCase() : '';
+      const isZha = plat === 'zha' || /zha/.test(parentHay);
+      const isZ2m = (plat === 'mqtt' && (/zigbee|z2m/.test(parentHay) || isZ2mGroupDevice)) || /zigbee2mqtt/.test(parentHay);
+      const isDeconz = plat === 'deconz' || /deconz/.test(parentHay);
+      const isHue = plat === 'hue' || /hue/.test(parentHay);
+      const isZigbeeGroup = isZha || isZ2m || isDeconz || isHue || /zigbee/i.test(String(stName || ''));
+      const mfgLabel = isZha ? 'ZHA Gruppe' : (isZ2m ? 'Zigbee2MQTT Gruppe' : (e.platform ? `${String(e.platform).toUpperCase()} Gruppe` : 'Lichtgruppe'));
+
       virtualLightGroups.push({
         id: vid,
         isVirtualEntity: true,
         entity_id: e.entity_id,
+        platform: e.platform || '',
         name: e.name || e.original_name || stName || e.entity_id,
         name_by_user: e.name || null,
-        area_id: e.area_id || null,
-        manufacturer: e.platform ? `${String(e.platform).toUpperCase()} Gruppe` : 'Lichtgruppe',
-        model: 'Zigbee / Lichtgruppe',
+        area_id: e.area_id || parentDev?.area_id || null,
+        manufacturer: mfgLabel,
+        model: isZigbeeGroup ? 'Zigbee Gruppe' : 'Lichtgruppe',
         identifiers: [],
+        _protocol: isZigbeeGroup ? 'zigbee' : 'wifi_other',
       });
     }
+
+    // Fallback: runtime light.* groups in hass.states without entity registry entry
+    if (this.hass?.states) {
+      for (const [eid, st] of Object.entries(this.hass.states)) {
+        if (!eid.startsWith('light.') || seenEntityIds.has(eid)) continue;
+        if (!Array.isArray(st?.attributes?.entity_id) || !st.attributes.entity_id.length) continue;
+        const vid = `entity:${eid}`;
+        if (seenVirtual.has(vid)) continue;
+        seenVirtual.add(vid);
+        virtualLightGroups.push({
+          id: vid,
+          isVirtualEntity: true,
+          entity_id: eid,
+          platform: 'group',
+          name: st.attributes?.friendly_name || eid,
+          name_by_user: null,
+          area_id: null,
+          manufacturer: 'Lichtgruppe',
+          model: 'Lichtgruppe',
+          identifiers: [],
+          _protocol: 'wifi_other',
+        });
+      }
+    }
+
     return [...realDevices, ...virtualLightGroups];
   }
 
   _isCandidateDevice(d) {
-    if (d.disabled_by || d.entry_type === 'service') return false;
-    if (isOwnIntegrationDevice(d, this.entities)) return false;
-    const devEntities = this.entities.filter(
-      (e) => e.device_id === d.id
-        && !e.disabled_by
-        && !e.hidden_by
+    if (!d || d.disabled_by) return false;
+    const devAllEnts = (this.entities || []).filter((e) => e.device_id === d.id && !e.disabled_by);
+    if (isBridgeOrCoordinator(d, devAllEnts)) return false;
+    if (d.entry_type === 'service') return false;
+    if (isIrrelevantDeviceOrIntegration(d, devAllEnts)) return false;
+
+    const devEntities = devAllEnts.filter(
+      (e) => !e.hidden_by
         && !isOwnIntegrationEntity(e)
         && e.entity_category !== 'config'
-        && e.entity_category !== 'diagnostic',
+        && e.entity_category !== 'diagnostic'
+        && !IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase()),
     );
     const controllable = devEntities.filter(isControllableActuator);
-    const sensors = devEntities.filter((e) => ['sensor', 'binary_sensor'].includes(domainOf(e.entity_id)));
-    if (!controllable.length && !sensors.length) return false;
-    const name = (d.name_by_user || d.name || '').toLowerCase();
-    const mfg = (d.manufacturer || '').toLowerCase();
-    const model = (d.model || '').toLowerCase();
-    const isSystem = (
-      name.includes('hacs') || mfg.includes('hacs') ||
-      name.includes('forecast') || mfg.includes('met.no') ||
-      name.includes('bluetooth') || mfg.includes('bluetooth') || name.startsWith('hci') ||
-      name.includes('plugin') || model.includes('plugin') ||
-      mfg.includes('integration') || model.includes('integration') ||
-      name === 'sun'
-    );
-    if (isSystem && !controllable.length) return false;
+    const relevantSensors = devEntities.filter((e) => {
+      const dom = domainOf(e.entity_id);
+      if (dom !== 'sensor' && dom !== 'binary_sensor') return false;
+      const st = this.hass?.states?.[e.entity_id];
+      const dc = String(st?.attributes?.device_class || '').toLowerCase();
+      const hay = `${e.entity_id} ${e.name || e.original_name || ''}`.toLowerCase();
+      if (/(?:cpu|processor|memory|ram_usage|disk_|swap_|load_1m|load_5m|load_15m|container_|docker|uptime|ip_address|external_ip|bytes_received|bytes_sent|link_status)/.test(hay)) {
+        return false;
+      }
+      if (ROOM_SENSOR_DEVICE_CLASSES.has(dc)) return true;
+      return true;
+    });
+    if (!controllable.length && !relevantSensors.length) return false;
     return true;
   }
 
   // ═══════════════ STEP 0: Gerät auswählen ═══════════════
   _renderStep0() {
     const candidates = this._getSelectableCandidates();
-    const configuredCount = candidates.filter((d) => !!this._getConfiguredConfigForCandidate(d)).length;
-    const unconfiguredCount = candidates.filter((d) => {
+    const areaMap = new Map(this.areas.map((a) => [a.area_id, a.name]));
+
+    const searchInput = h('input', {
+      type: 'text', placeholder: 'Gerät, Raum oder Funkstandard suchen', value: this.searchQuery,
+      onInput: (e) => {
+        this.searchQuery = e.target.value.toLowerCase().trim();
+        if (this.searchQuery && this.preFilterMode === null) {
+          this.preFilterMode = 'all';
+          this._renderStep0();
+          // Restore focus cleanly after DOM replacement
+          setTimeout(() => this.body.querySelector('.search-bar input')?.focus(), 0);
+        } else {
+          this._updateDeviceList();
+        }
+      },
+    });
+    const searchWrap = h('div', { class: 'search-bar' }, icon('mdi:magnify'), searchInput);
+
+    if (this.preFilterMode === null && !this.searchQuery) {
+      const zigbeeCount = candidates.filter((d) => this._getDeviceProtocol(d) === 'zigbee').length;
+      const wifiCount = candidates.length - zigbeeCount;
+      const roomIds = new Set(candidates.map((d) => d.area_id || '__none__'));
+
+      const mkPrefilterCard = (mode, ic, title, sub, meta) => h('button', {
+        type: 'button',
+        class: 'wizard-prefilter-card',
+        onClick: () => {
+          this.preFilterMode = mode;
+          if (mode === 'room') this.selectedAreaFilter = '__all__';
+          if (mode === 'protocol') this.protocolFilter = 'all';
+          this._renderStep0();
+        },
+      },
+      h('div', { class: 'wizard-prefilter-icon' }, icon(ic)),
+      h('div', { class: 'wizard-prefilter-title' }, title),
+      h('div', { class: 'wizard-prefilter-sub' }, sub),
+      meta ? h('span', { class: 'badge-tag' }, meta) : null);
+
+      const grid = h('div', { class: 'wizard-prefilter-grid' },
+        mkPrefilterCard('room', 'mdi:floor-plan', 'Nach Raum', 'Nach Home-Assistant-Bereichen filtern', `${roomIds.size} ${roomIds.size === 1 ? 'Raum' : 'Räume'}`),
+        mkPrefilterCard('protocol', 'mdi:zigbee', 'Nach Funkstandard', 'Zigbee vs. WLAN / Sonstige', `${zigbeeCount} Zigbee · ${wifiCount} WLAN/Sonst.`),
+        mkPrefilterCard('all', 'mdi:devices', 'Alle unterstützten Geräte', 'Komplette bereinigte Geräteliste', `${candidates.length} Geräte`));
+
+      this.deviceListEl = h('div', { class: 'device-list' });
+      this.selectionSlot.replaceChildren();
+      this.body.replaceChildren(
+        searchWrap,
+        h('div', { class: 'section-title', style: { marginTop: '14px' } }, 'Geräteauswahl eingrenzen'),
+        h('div', { class: 'hint' }, '• Vorfilter wählen oder direkt suchen\n• System- & Kalender-Dienste ausgeblendet'),
+        grid,
+      );
+      return;
+    }
+
+    // Mode sub-navigation & sub-filters
+    const modeBar = h('div', { class: 'wizard-filter-subbar' },
+      h('button', {
+        type: 'button',
+        class: 'filter-chip',
+        onClick: () => {
+          this.preFilterMode = null;
+          this.searchQuery = '';
+          this._renderStep0();
+        },
+      }, icon('mdi:arrow-left'), ' Vorfilter'),
+      ...[
+        ['room', 'Nach Raum', 'mdi:floor-plan'],
+        ['protocol', 'Funkstandard', 'mdi:zigbee'],
+        ['all', 'Alle Geräte', 'mdi:devices'],
+      ].map(([mId, mLabel, mIcon]) => h('button', {
+        type: 'button',
+        class: 'filter-chip',
+        ...(this.preFilterMode === mId ? { 'data-active': '' } : {}),
+        onClick: () => { this.preFilterMode = mId; this._renderStep0(); },
+      }, icon(mIcon), ' ', mLabel)));
+
+    let subFilterRow = null;
+    if (this.preFilterMode === 'room') {
+      const counts = new Map();
+      for (const d of candidates) {
+        const key = d.area_id || '__none__';
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+      const areaEntries = this.areas
+        .filter((a) => counts.has(a.area_id))
+        .map((a) => [a.area_id, `${a.name} (${counts.get(a.area_id)})`]);
+      if (counts.has('__none__')) {
+        areaEntries.push(['__none__', `Ohne Raum (${counts.get('__none__')})`]);
+      }
+      subFilterRow = h('div', { class: 'filter-chips', style: { marginBottom: '8px' } },
+        ...[['__all__', `Alle Räume (${candidates.length})`], ...areaEntries].map(([aid, alabel]) => h('button', {
+          type: 'button',
+          class: 'filter-chip',
+          ...(this.selectedAreaFilter === aid ? { 'data-active': '' } : {}),
+          onClick: () => { this.selectedAreaFilter = aid; this._renderStep0(); },
+        }, alabel)));
+    } else if (this.preFilterMode === 'protocol') {
+      const zigbeeCount = candidates.filter((d) => this._getDeviceProtocol(d) === 'zigbee').length;
+      const wifiCount = candidates.length - zigbeeCount;
+      subFilterRow = h('div', { class: 'filter-chips', style: { marginBottom: '8px' } },
+        ...[
+          ['all', `Alle (${candidates.length})`],
+          ['zigbee', `Zigbee (${zigbeeCount})`],
+          ['wifi_other', `WLAN / Sonstige (${wifiCount})`],
+        ].map(([pid, plabel]) => h('button', {
+          type: 'button',
+          class: 'filter-chip',
+          ...(this.protocolFilter === pid ? { 'data-active': '' } : {}),
+          onClick: () => { this.protocolFilter = pid; this._renderStep0(); },
+        }, plabel)));
+    }
+
+    const baseFiltered = this._getModeFilteredCandidates(candidates);
+    const configuredCount = baseFiltered.filter((d) => !!this._getConfiguredConfigForCandidate(d)).length;
+    const unconfiguredCount = baseFiltered.filter((d) => {
       const cfg = this._getConfiguredConfigForCandidate(d);
       if (!cfg) return true;
       return getPendingChannelsForDevice(d, this.entities, cfg).length > 0;
     }).length;
-    const allCount = candidates.length;
-
-    const searchInput = h('input', {
-      type: 'text', placeholder: 'Gerät oder Raum suchen', value: this.searchQuery,
-      onInput: (e) => { this.searchQuery = e.target.value.toLowerCase().trim(); this._updateDeviceList(); },
-    });
-    const searchWrap = h('div', { class: 'search-bar' }, icon('mdi:magnify'), searchInput);
+    const allCount = baseFiltered.length;
 
     const filterChips = h('div', { class: 'filter-chips' },
       ...[
@@ -8597,16 +9203,28 @@ class DeviceWizard {
     this._updateDeviceList();
 
     this.body.replaceChildren(
-      searchWrap,
-      filterChips,
-      this.deviceListEl);
+      ...[searchWrap, modeBar, subFilterRow, filterChips, this.deviceListEl].filter(Boolean),
+    );
+  }
+
+  _getModeFilteredCandidates(candidates) {
+    return candidates.filter((d) => {
+      if (this.preFilterMode === 'room' && this.selectedAreaFilter && this.selectedAreaFilter !== '__all__') {
+        const key = d.area_id || '__none__';
+        if (key !== this.selectedAreaFilter) return false;
+      }
+      if (this.preFilterMode === 'protocol' && this.protocolFilter && this.protocolFilter !== 'all') {
+        if (this._getDeviceProtocol(d) !== this.protocolFilter) return false;
+      }
+      return true;
+    });
   }
 
   _updateDeviceList() {
     const areaMap = new Map(this.areas.map((a) => [a.area_id, a.name]));
     const q = this.searchQuery;
 
-    const filtered = this._getSelectableCandidates().filter((d) => {
+    const filtered = this._getModeFilteredCandidates(this._getSelectableCandidates()).filter((d) => {
       const cfg = this._getConfiguredConfigForCandidate(d);
       const isConfigured = !!cfg;
       const pending = isConfigured ? getPendingChannelsForDevice(d, this.entities, cfg) : [];
@@ -8619,7 +9237,8 @@ class DeviceWizard {
       const model = (d.model || '').toLowerCase();
       const area = (areaMap.get(d.area_id) || '').toLowerCase();
       const entId = (d.entity_id || '').toLowerCase();
-      return name.includes(q) || mfg.includes(q) || model.includes(q) || area.includes(q) || entId.includes(q);
+      const proto = this._getDeviceProtocol(d) === 'zigbee' ? 'zigbee' : 'wlan';
+      return name.includes(q) || mfg.includes(q) || model.includes(q) || area.includes(q) || entId.includes(q) || proto.includes(q);
     });
 
     const hasAnyGroups = this.statusFilter !== 'unconfigured' && Object.values(this.groups).some((g) => {
@@ -9450,6 +10069,8 @@ class DeviceWizard {
     const devHay = `${d.name_by_user || d.name || ''} ${d.model || ''}`.toLowerCase();
     let autoCat = 'schalter';
     if (smokeEntities.length > 0 && !controllable.length) autoCat = 'rauchmelder';
+    else if (controllable.some((e) => domainOf(e.entity_id) === 'alarm_control_panel')) autoCat = 'alarmanlage';
+    else if (controllable.some((e) => domainOf(e.entity_id) === 'camera')) autoCat = 'kamera';
     else if (controllable.some((e) => domainOf(e.entity_id) === 'cover')) autoCat = 'jalousie';
     else if (/(?:wasserventil|ventil|valve|bewaesser|bewässer|irrigation|sprinkler)/.test(devHay) || controllable.some((e) => domainOf(e.entity_id) === 'valve')) autoCat = 'wasserventil';
     else if (/(?:pumpe|pump)/.test(devHay)) autoCat = 'pumpe';
@@ -9646,12 +10267,14 @@ class DeviceWizard {
     h('div', { class: 'switch-ui' }));
 
     let soilPlacementBlock = null;
-    if (this.selectedCategory === 'bodenmessgeraet') {
+    if (this.selectedCategory === 'bodenmessgeraet' || this.selectedCategory === 'rauchmelder') {
+      const isSmoke = this.selectedCategory === 'rauchmelder';
+      const accent = isSmoke ? '#ef4444' : '#4caf50';
       const mkPlaceOption = (val, ic, title, desc) => {
         const active = this.sensorPlacement === val;
         return h('div', {
           class: `cat-card${active ? ' active' : ''}`,
-          style: { '--cat-color': '#4caf50', flex: '1 1 160px', minWidth: '0', textAlign: 'left', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '10px' },
+          style: { '--cat-color': accent, flex: '1 1 160px', minWidth: '0', textAlign: 'left', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '10px' },
           ...(active ? { 'data-selected': '' } : {}),
           onClick: () => {
             this.sensorPlacement = val;
@@ -9666,8 +10289,12 @@ class DeviceWizard {
       soilPlacementBlock = h('div', { style: { marginTop: '12px' } },
         h('div', { class: 'section-title' }, 'Anzeige im Raum'),
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-          mkPlaceOption('tile', 'mdi:sprout', 'Eigene Gerätekachel', 'Feuchtigkeit & Temperatur als Kachel'),
-          mkPlaceOption('room', 'mdi:home-thermometer-outline', 'Oben in Raumkachel', 'Messwerte in Raumkopfzeile')));
+          isSmoke
+            ? mkPlaceOption('tile', 'mdi:smoke-detector', 'Eigene Gerätekachel', 'Als Kachel oben im Raum')
+            : mkPlaceOption('tile', 'mdi:sprout', 'Eigene Gerätekachel', 'Feuchtigkeit & Temperatur als Kachel'),
+          isSmoke
+            ? mkPlaceOption('room', 'mdi:home-alert-outline', 'Oben in Raumkachel', 'Icon im Header · Alarm färbt Raum rot')
+            : mkPlaceOption('room', 'mdi:home-thermometer-outline', 'Oben in Raumkachel', 'Messwerte in Raumkopfzeile')));
     }
 
     this.body.replaceChildren(
@@ -10155,11 +10782,13 @@ class DeviceWizard {
       h('div', { style: { display: 'flex', gap: '10px', marginTop: '14px', flexWrap: 'wrap', justifyContent: 'center' } },
         this.directMode ? null : h('button', {
           class: 'btn secondary',
-          onClick: () => {
+          onClick: async () => {
             this.isCelebration = false;
             this.step = 0;
             this.selectedDevice = null;
-            this._render();
+            this.selectedDevices.clear();
+            this._expandedDeviceChannels.clear();
+            await this._load({ preserveStep0: true });
           },
         }, icon('mdi:plus'), 'Weiteres Gerät'),
         h('button', {
@@ -10307,8 +10936,20 @@ class DeviceWizard {
       if (isMultiDevice) {
         nextOptions.display_mode = this.displayMode;
       }
-      if (this.selectedCategory === 'bodenmessgeraet') {
+      if (this.selectedCategory === 'bodenmessgeraet' || this.selectedCategory === 'rauchmelder') {
         nextOptions.sensor_placement = this.sensorPlacement || 'tile';
+      }
+
+      if (this.selectedCategory === 'rauchmelder' && (this.smokeEntityId || entitiesConfig.primary)) {
+        const smokeId = this.smokeEntityId || entitiesConfig.primary;
+        const smokeEnt = this.entities.find((e) => e.entity_id === smokeId);
+        entitiesConfig.room_sensors[smokeId] = {
+          entity_id: smokeId,
+          unique_id: smokeEnt?.unique_id || undefined,
+          original_id: smokeId,
+          type: 'smoke',
+          enabled: true,
+        };
       }
 
       const res = await this.hass.callWS({
@@ -10323,6 +10964,17 @@ class DeviceWizard {
       });
 
       if (res?.save_failed) throw new Error('Speichern im Backend fehlgeschlagen');
+
+      // Optimistic cache update so returning to Step 0 immediately reflects the configured device
+      this.configuredDevices[d.id] = {
+        device_id: d.id,
+        category: this.selectedCategory,
+        custom_name: this.customName,
+        area_id: this.selectedAreaId || '',
+        icon: this.customIcon || undefined,
+        options: nextOptions,
+        entities: entitiesConfig,
+      };
 
       // Save room icon for newly populated room if selected
       if (this.selectedAreaId && this.roomIcon && this._isNewRoomForDevice(this.selectedAreaId)) {
@@ -10652,13 +11304,13 @@ class AlarmPinModal {
   }
 }
 class SecurityView {
-  constructor({ hass, config, onBack }) {
+  constructor({ hass, layout, config, ctx }) {
     this.hass = hass;
+    this.layout = layout || null;
     this.config = config || {};
-    this.onBack = onBack;
+    this.ctx = ctx || null;
     this._destroyed = false;
     this._pinModal = null;
-    this._countdownInterval = null;
     this._camInterval = null;
     this._camTick = 0;
     this._camObserver = null;
@@ -10671,28 +11323,99 @@ class SecurityView {
     };
     document.addEventListener('visibilitychange', this._onVisibility);
     this._camInterval = setInterval(() => this._refreshCameras(), 8000);
-    if (hass) this.update(hass);
+    if (hass) this.update(hass, layout, config);
   }
 
   destroy() {
     this._destroyed = true;
-    clearInterval(this._countdownInterval);
     clearInterval(this._camInterval);
     document.removeEventListener('visibilitychange', this._onVisibility);
     this._camObserver?.disconnect?.();
     this._pinModal?.destroy?.();
     this._pinModal = null;
-    // Drop open image requests on destroy
     this.el?.querySelectorAll('img[data-cam-img]').forEach((img) => {
       img.removeAttribute('src');
     });
   }
 
-  _findAlarmEntity(hass) {
+  _configuredSmoke(states) {
+    const out = new Map();
+    const rooms = this.layout?.rooms || [];
+    const roomById = new Map(rooms.map((r) => [r.area_id, r]));
+    const e2d = this.layout?.configured?.entity_to_device || {};
+
+    for (const item of (this.layout?.configured?.smoke || [])) {
+      if (!item?.entity_id || !states[item.entity_id]) continue;
+      out.set(item.entity_id, {
+        entity_id: item.entity_id,
+        device_id: item.device_id || e2d[item.entity_id] || null,
+        name: item.name || states[item.entity_id]?.attributes?.friendly_name || item.entity_id,
+        area_name: item.area_name || roomById.get(item.area_id)?.name || '',
+        area_icon: item.area_icon || roomById.get(item.area_id)?.icon || '',
+      });
+    }
+    for (const r of rooms) {
+      for (const eid of (r.sensors?.smoke || [])) {
+        if (!eid || !states[eid] || out.has(eid)) continue;
+        out.set(eid, {
+          entity_id: eid,
+          device_id: e2d[eid] || null,
+          name: states[eid]?.attributes?.friendly_name || eid,
+          area_name: r.name || '',
+          area_icon: r.icon || '',
+        });
+      }
+      for (const t of (r.tiles || [])) {
+        if ((t.category === 'rauchmelder' || t.category === 'smoke') && t.entity_id && states[t.entity_id] && !out.has(t.entity_id)) {
+          out.set(t.entity_id, {
+            entity_id: t.entity_id,
+            device_id: t.device_id || e2d[t.entity_id] || null,
+            name: t.name || states[t.entity_id]?.attributes?.friendly_name || t.entity_id,
+            area_name: r.name || '',
+            area_icon: r.icon || '',
+          });
+        }
+      }
+    }
+    return Array.from(out.values());
+  }
+
+  _configuredCameras(states) {
+    const out = new Map();
+    const e2d = this.layout?.configured?.entity_to_device || {};
+    for (const item of (this.layout?.configured?.cameras || [])) {
+      if (!item?.entity_id || !states[item.entity_id]) continue;
+      out.set(item.entity_id, {
+        entity_id: item.entity_id,
+        device_id: item.device_id || e2d[item.entity_id] || null,
+        name: item.name || states[item.entity_id]?.attributes?.friendly_name || item.entity_id,
+      });
+    }
+    const cfgList = this.config?.views?.security?.camera_entities;
+    if (Array.isArray(cfgList)) {
+      for (const cid of cfgList) {
+        if (!cid || !states[cid] || out.has(cid)) continue;
+        out.set(cid, {
+          entity_id: cid,
+          device_id: e2d[cid] || null,
+          name: states[cid]?.attributes?.friendly_name || cid,
+        });
+      }
+    }
+    return Array.from(out.values());
+  }
+
+  _findConfiguredAlarm(states) {
+    const e2d = this.layout?.configured?.entity_to_device || {};
     const cfgId = this.config?.views?.security?.alarm_entity;
-    if (cfgId && hass.states[cfgId]) return cfgId;
-    if (hass.states['alarm_control_panel.alarmo']) return 'alarm_control_panel.alarmo';
-    return Object.keys(hass.states).find((id) => id.startsWith('alarm_control_panel.')) || null;
+    if (cfgId && states[cfgId]) {
+      return { entity_id: cfgId, device_id: e2d[cfgId] || null };
+    }
+    const cfgAlarm = (this.layout?.configured?.alarms || []).find((a) => a?.entity_id && states[a.entity_id]);
+    if (cfgAlarm) {
+      return { entity_id: cfgAlarm.entity_id, device_id: cfgAlarm.device_id || e2d[cfgAlarm.entity_id] || null };
+    }
+    return null;
   }
 
   _refreshCameras() {
@@ -10736,40 +11459,28 @@ class SecurityView {
     (root?.append ? root : this.el).append(this._pinModal.el);
   }
 
-  update(hass) {
+  update(hass, layout, config) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
+    if (layout !== undefined) this.layout = layout;
+    if (config !== undefined) this.config = config;
     const states = hass.states || {};
-
     const secCfg = this.config?.views?.security || {};
-    const alarmId = this._findAlarmEntity(hass);
-    const timerId = secCfg.timer_entity && states[secCfg.timer_entity] ? secCfg.timer_entity : 'timer.rauchalarm_countdown';
-    const timerSt = states[timerId];
-    const abortId = secCfg.abort_entity && states[secCfg.abort_entity] ? secCfg.abort_entity : 'input_boolean.rauchalarm_abbrechen';
-    const smokeSensors = Object.keys(states).filter((id) => id.startsWith('binary_sensor.') && states[id]?.attributes?.device_class === 'smoke');
-    const sirens = Object.keys(states).filter((id) => (id.startsWith('switch.') || id.startsWith('siren.')) && /sirene|siren/i.test(id));
-    const camIds = Object.keys(states).filter((id) => id.startsWith('camera.'));
-    const windowDoors = Object.keys(states).filter((id) => id.startsWith('binary_sensor.') && ['window', 'door', 'garage_door', 'opening'].includes(states[id]?.attributes?.device_class));
-    const coverAutos = Object.keys(states).filter((id) => id.startsWith('automation.') && /rollladen|jalousie/i.test(id));
-    const batteries = Object.keys(states).filter((id) => id.startsWith('sensor.') && states[id]?.attributes?.device_class === 'battery' && !/iphone|ipad|handy|phone|pixel|galaxy|watch|macbook|ios_/i.test(`${id} ${states[id]?.attributes?.friendly_name || ''}`));
-    const fritz = (secCfg.router_entity && states[secCfg.router_entity])
-      || states['binary_sensor.fritz_box_7590_ax_verbindung']
-      || Object.values(states).find((s) => /fritz.*verbindung|router.*online/i.test(s.entity_id));
-    const presenceId = secCfg.presence_entity && states[secCfg.presence_entity] ? secCfg.presence_entity : 'switch.anwesenheitssimulation';
-    const pumpId = secCfg.water_pump_entity && states[secCfg.water_pump_entity] ? secCfg.water_pump_entity : 'switch.garten_wasserpumpe_fenster';
+    const editMode = !!this.ctx?.isEditMode?.();
+
+    const smokeList = this._configuredSmoke(states);
+    const camList = this._configuredCameras(states);
+    const alarmEntry = this._findConfiguredAlarm(states);
+    const alarmId = alarmEntry?.entity_id || null;
+    const batteries = Object.keys(states).filter(
+      (id) => id.startsWith('sensor.') && states[id]?.attributes?.device_class === 'battery'
+        && !/iphone|ipad|handy|phone|pixel|galaxy|watch|macbook|ios_/i.test(`${id} ${states[id]?.attributes?.friendly_name || ''}`),
+    );
 
     const trackedIds = [
       alarmId,
-      timerId,
-      abortId,
-      presenceId,
-      pumpId,
-      fritz?.entity_id,
-      ...smokeSensors,
-      ...sirens,
-      ...camIds,
-      ...windowDoors,
-      ...coverAutos,
+      ...smokeList.map((s) => s.entity_id),
+      ...camList.map((c) => c.entity_id),
       ...batteries,
     ].filter(Boolean);
 
@@ -10781,67 +11492,107 @@ class SecurityView {
           return `|af=${a.supported_features ?? ''}:${a.arm_mode ?? ''}:${a.next_state ?? ''}:${a.code_arm_required ?? ''}:${openKey}:${bypKey}:${a.changed_by ?? ''}`;
         })()
       : '';
-    const sig = trackedIds.map((id) => `${id}=${states[id]?.state}:${states[id]?.attributes?.finishes_at || ''}`).join('|') + aSig;
+    const sig = trackedIds.map((id) => `${id}=${states[id]?.state}`).join('|') + aSig + `|em=${editMode ? 1 : 0}`;
     if (sig === this._lastSig) return;
     this._lastSig = sig;
 
     const children = [];
 
-    // 1. Header (clean — no isolated floating status chip)
-    const fritzOffline = fritz && (fritz.state === 'off' || isUnavailable(fritz));
+    // Header (no redundant back button; Bottom NavBar navigates)
     children.push(h('div', { class: 'subview-head' },
       h('div', { class: 'subview-head-left' },
-        h('button', { type: 'button', class: 'room-detail-back', onClick: () => this.onBack?.() }, icon('mdi:arrow-left'), 'Zurück'),
         h('div', { class: 'subview-hero-icon' }, icon('mdi:shield-home')),
         h('div', { style: { minWidth: '0' } },
           h('h2', { class: 'subview-title' }, 'Sicherheit'),
-          h('div', { class: 'subview-sub' }, 'Alarmanlage, Rauchmelder, Kameras & Sensoren')))));
+          h('div', { class: 'subview-sub' }, 'Rauchmelder, Kameras, Alarmanlage & Batterien')))));
 
-    // 2. Active Smoke Alarm or Timer Banner
-    const activeSmokes = smokeSensors.filter((id) => ['on', 'detected', 'smoke'].includes(states[id]?.state));
-    const timerActive = timerSt && (timerSt.state === 'active' || timerSt.state === 'paused');
-    clearInterval(this._countdownInterval);
-    this._countdownInterval = null;
+    // 1. Rauchmelderübersicht (#security-smoke target for alert banner click)
+    const activeSmokes = smokeList.filter((s) => ['on', 'detected', 'smoke', 'alarm', 'true'].includes(String(states[s.entity_id]?.state || '').toLowerCase()));
+    children.push(h('section', { id: 'security-smoke', class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:smoke-detector-variant'), `Rauchmelderübersicht (${smokeList.length})`),
+        activeSmokes.length
+          ? h('span', { class: 'badge-tag', style: { background: '#dc2626', color: '#fff', fontWeight: '700' } }, `${activeSmokes.length} ausgelöst`)
+          : (smokeList.length ? h('span', { class: 'badge-tag', style: { color: '#22c55e' } }, 'Alle OK') : null)),
+      smokeList.length
+        ? h('div', { class: 'kpi-grid' },
+          ...smokeList.map((s) => {
+            const st = states[s.entity_id];
+            const alarm = ['on', 'detected', 'smoke', 'alarm', 'true'].includes(String(st?.state || '').toLowerCase());
+            const unav = isUnavailable(st);
+            return h('div', {
+              class: 'kpi-card',
+              ...(editMode ? { 'data-edit-mode': '' } : {}),
+              style: alarm ? { borderColor: '#ef4444', background: 'rgba(239,68,68,.22)' } : {},
+              onClick: () => {
+                if (editMode && s.device_id) { this.ctx?.onOpenDevice?.(s.device_id); return; }
+                moreInfo(this.el, s.entity_id);
+              },
+            },
+            h('div', { class: 'kpi-top' },
+              icon(alarm ? 'mdi:fire-alert' : 'mdi:smoke-detector'),
+              h('span', {}, s.name)),
+            h('div', { class: 'kpi-val', style: { fontSize: '15px', color: alarm ? '#ef4444' : (unav ? 'var(--cd-secondary)' : '#4caf50') } },
+              unav ? 'Nicht verfügbar' : (alarm ? 'Rauch erkannt!' : 'OK · Kein Rauch')),
+            s.area_name ? h('div', { class: 'kpi-sub' }, s.area_name) : null);
+          }))
+        : h('div', { class: 'hint' }, '• Keine Rauchmelder eingerichtet\n• Im Assistenten hinzufügen')));
 
-    if (activeSmokes.length || timerActive) {
-      const timerDigits = h('div', { class: 'timer-digits' }, '00:00');
-      const tickTimer = () => {
-        if (!timerSt) return;
-        if (timerSt.state === 'active' && timerSt.attributes?.finishes_at) {
-          const rem = Date.parse(timerSt.attributes.finishes_at) - Date.now();
-          timerDigits.textContent = formatCountdownMs(rem);
-        } else if (timerSt.attributes?.remaining) {
-          timerDigits.textContent = String(timerSt.attributes.remaining);
+    // 2. Kameraübersicht (configured cameras only)
+    this._camObserver?.disconnect?.();
+    this._visibleCams.clear();
+    if (camList.length && typeof IntersectionObserver !== 'undefined') {
+      this._camObserver = new IntersectionObserver((entries) => {
+        for (const ent of entries) {
+          const cid = ent.target.getAttribute('data-cam-id');
+          if (!cid) continue;
+          if (ent.isIntersecting) this._visibleCams.add(cid);
+          else this._visibleCams.delete(cid);
         }
-      };
-      if (timerActive) {
-        tickTimer();
-        if (timerSt.state === 'active') {
-          this._countdownInterval = setInterval(tickTimer, 1000);
-        }
-      }
-
-      const abortEntity = states[abortId] ? abortId : null;
-      children.push(h('div', { class: 'smoke-alert-banner' },
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
-          icon('mdi:fire-alert'),
-          h('div', {},
-            h('div', { style: { fontWeight: '800', fontSize: '15px', color: '#fecaca' } },
-              activeSmokes.length ? `Rauch erkannt (${activeSmokes.map((id) => states[id]?.attributes?.friendly_name || id).join(', ')})` : 'Rauchalarm-Countdown aktiv'),
-            h('div', { class: 'hint', style: { color: '#fee2e2' } }, '• Sirenen-Auslösung prüfen\n• Abbruch über Button'))),
-        timerActive ? timerDigits : null,
-        h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-          abortEntity ? h('button', {
-            type: 'button', class: 'btn danger',
-            onClick: () => hass.callService('input_boolean', 'turn_on', { entity_id: abortEntity }),
-          }, icon('mdi:smoke-detector-variant-off'), 'Rauchalarm abbrechen') : null,
-          timerActive ? h('button', {
-            type: 'button', class: 'btn secondary',
-            onClick: () => hass.callService('timer', 'cancel', { entity_id: timerId }),
-          }, 'Timer stoppen') : null)));
+      }, { threshold: 0.05 });
     }
+    const tick = Date.now();
+    children.push(h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:cctv'), `Kameraübersicht (${camList.length})`)),
+      camList.length
+        ? h('div', { class: 'camera-grid' },
+          ...camList.map((cam) => {
+            const st = states[cam.entity_id];
+            const pic = st?.attributes?.entity_picture || '';
+            const unav = isUnavailable(st);
+            const img = pic ? h('img', {
+              alt: cam.name,
+              'data-cam-img': '',
+              'data-cam-id': cam.entity_id,
+              'data-cam-base': pic,
+              src: `${pic}${pic.includes('?') ? '&' : '?'}_t=${tick}`,
+              loading: 'lazy',
+            }) : h('div', { class: 'empty', style: { padding: '24px' } }, icon('mdi:video-off'));
+            const card = h('div', {
+              class: 'camera-card',
+              'data-cam-id': cam.entity_id,
+              ...(editMode ? { 'data-edit-mode': '' } : {}),
+              onClick: () => {
+                if (editMode) {
+                  if (cam.device_id) { this.ctx?.onOpenDevice?.(cam.device_id); return; }
+                  this.ctx?.onOpenSettings?.();
+                  return;
+                }
+                moreInfo(this.el, cam.entity_id);
+              },
+            },
+            h('div', { class: 'camera-frame' }, unav ? h('div', { class: 'hint' }, 'Kamera offline') : img),
+            h('div', { class: 'camera-foot' },
+              h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, cam.name),
+              h('span', { class: 'badge-tag' }, unav ? 'Offline' : 'Live')));
+            this._camObserver?.observe?.(card);
+            return card;
+          }))
+        : h('div', { class: 'hint' }, '• Keine Kameras eingerichtet\n• Über Assistent oder Einstellungen konfigurieren')));
 
-    // 3. Alarmo / Alarm Control Panel
+    // 3. Alarmanlagenübersicht (configured alarm only, with PIN modal & modes)
+    let alarmBody;
     if (alarmId && states[alarmId]) {
       const aSt = states[alarmId];
       const meta = ALARM_STATE_META[aSt.state] || ALARM_STATE_META.unavailable;
@@ -10858,16 +11609,16 @@ class SecurityView {
       const bypassedSensors = extractSensorNames(aSt.attributes?.bypassed_sensors, hass);
 
       const actionButtons = [];
-      if (!isUnavail) {
+      if (!isUnavail && !editMode) {
         if (isDisarmed) {
           modes.forEach((m) => actionButtons.push(h('button', {
             type: 'button', class: 'btn primary small',
-            onClick: () => this._triggerAlarmAction(alarmId, m.service, `${m.label} aktivieren`, modes),
+            onClick: (e) => { e.stopPropagation(); this._triggerAlarmAction(alarmId, m.service, `${m.label} aktivieren`, modes); },
           }, icon(m.icon), m.label)));
         } else {
           actionButtons.push(h('button', {
             type: 'button', class: `btn danger${isArmed ? ' small' : ''}`,
-            onClick: () => this._triggerAlarmAction(alarmId, 'alarm_disarm', 'Alarmanlage entschärfen', modes),
+            onClick: (e) => { e.stopPropagation(); this._triggerAlarmAction(alarmId, 'alarm_disarm', 'Alarmanlage entschärfen', modes); },
           }, icon('mdi:shield-off'), 'Entschärfen'));
           if (isArmed && modes.length > 1) {
             modes.forEach((m) => {
@@ -10876,167 +11627,48 @@ class SecurityView {
                 type: 'button',
                 class: `btn small${isCurrent ? ' alarm-mode-active' : ' secondary'}`,
                 disabled: isCurrent,
-                onClick: () => this._triggerAlarmAction(alarmId, m.service, `${m.label} aktivieren`, modes),
+                onClick: (e) => { e.stopPropagation(); this._triggerAlarmAction(alarmId, m.service, `${m.label} aktivieren`, modes); },
               }, icon(isCurrent ? 'mdi:check-circle' : m.icon), m.label));
             });
           }
         }
       }
 
-      children.push(h('div', { class: 'alarm-hero', style: { '--alarm-color': meta.color } },
-        h('div', { style: { display: 'grid', gap: '6px' } },
-          h('div', { class: 'alarm-status-pill', onClick: () => moreInfo(this.el, alarmId) },
-            icon(meta.icon),
-            h('span', {}, statusText)),
-          aSt.attributes?.changed_by ? h('div', { class: 'hint' }, `Zuletzt: ${aSt.attributes.changed_by}`) : null,
-          openSensors.length ? h('div', { class: 'hint', style: { color: '#f59e0b' } }, `Offene Sensoren: ${openSensors.join(', ')}`) : null,
-          bypassedSensors.length ? h('div', { class: 'hint' }, `Umgehung aktiv: ${bypassedSensors.join(', ')}`) : null),
-        h('div', { class: 'alarm-modes' }, ...actionButtons)));
+      alarmBody = h('div', {
+        class: 'alarm-hero',
+        ...(editMode ? { 'data-edit-mode': '' } : {}),
+        style: { '--alarm-color': meta.color },
+        onClick: () => {
+          if (!editMode) return;
+          if (alarmEntry?.device_id) { this.ctx?.onOpenDevice?.(alarmEntry.device_id); return; }
+          this.ctx?.onOpenSettings?.();
+        },
+      },
+      h('div', { style: { display: 'grid', gap: '6px' } },
+        h('div', {
+          class: 'alarm-status-pill',
+          onClick: (e) => {
+            if (editMode) return;
+            e.stopPropagation();
+            moreInfo(this.el, alarmId);
+          },
+        }, icon(meta.icon), h('span', {}, statusText)),
+        aSt.attributes?.changed_by ? h('div', { class: 'hint' }, `Zuletzt: ${aSt.attributes.changed_by}`) : null,
+        openSensors.length ? h('div', { class: 'hint', style: { color: '#f59e0b' } }, `Offene Sensoren: ${openSensors.join(', ')}`) : null,
+        bypassedSensors.length ? h('div', { class: 'hint' }, `Umgehung aktiv: ${bypassedSensors.join(', ')}`) : null),
+      h('div', { class: 'alarm-modes' }, ...actionButtons));
+    } else {
+      alarmBody = h('div', {
+        class: 'hint',
+        ...(editMode ? { 'data-edit-mode': '', onClick: () => this.ctx?.onOpenSettings?.() } : {}),
+      }, '• Keine Alarmanlage eingerichtet\n• In Einstellungen oder Assistent festlegen');
     }
+    children.push(h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:shield-lock-outline'), 'Alarmanlagenübersicht')),
+      alarmBody));
 
-    // 4. Quick Security Toggles (Presence Sim, Water Pump, Sirens)
-    const quickEntities = [
-      { id: presenceId, name: 'Anwesenheitssimulation', icon: 'mdi:home-clock', color: '#8b5cf6' },
-      { id: pumpId, name: 'Garten Wasserpumpe', icon: 'mdi:water-pump', color: '#0ea5e9' },
-      ...sirens.map((id) => ({
-        id,
-        name: states[id]?.attributes?.friendly_name || id,
-        icon: 'mdi:bullhorn-variant',
-        color: '#ef4444',
-      })),
-    ].filter((q) => states[q.id]);
-
-    if (quickEntities.length) {
-      children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon('mdi:shield-check'), 'Schutz & Aktoren')),
-        h('div', { class: 'tile-grid', style: { padding: '0' } },
-          ...quickEntities.map((q) => {
-            const st = states[q.id];
-            const active = st.state === 'on';
-            const unav = isUnavailable(st);
-            return h('div', {
-              class: 'tile',
-              'data-active': active ? 'true' : 'false',
-              ...(unav ? { 'data-unavailable': '' } : {}),
-              style: { '--tile-color': active ? q.color : 'var(--cd-secondary)' },
-            },
-            h('div', { class: 'tile-main' },
-              h('button', {
-                type: 'button', class: 'tile-icon',
-                onClick: () => hass.callService(q.id.split('.')[0], 'toggle', { entity_id: q.id }),
-              }, icon(q.icon)),
-              h('div', { class: 'tile-info', onClick: () => moreInfo(this.el, q.id) },
-                h('div', { class: 'tile-name' }, q.name),
-                h('div', { class: 'tile-state' }, unav ? 'Nicht verfügbar' : (active ? 'Ein' : 'Aus')))));
-          }))));
-    }
-
-    // 5. Cameras (each camera reads its own entity_picture — never hardcoded cross-camera ID)
-    if (camIds.length) {
-      this._camObserver?.disconnect?.();
-      this._visibleCams.clear();
-      if (typeof IntersectionObserver !== 'undefined') {
-        this._camObserver = new IntersectionObserver((entries) => {
-          for (const ent of entries) {
-            const cid = ent.target.getAttribute('data-cam-id');
-            if (!cid) continue;
-            if (ent.isIntersecting) this._visibleCams.add(cid);
-            else this._visibleCams.delete(cid);
-          }
-        }, { threshold: 0.05 });
-      }
-      const tick = Date.now();
-      children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon('mdi:cctv'), `Kameras (${camIds.length})`)),
-        h('div', { class: 'camera-grid' },
-          ...camIds.map((cid) => {
-            const st = states[cid];
-            const name = st?.attributes?.friendly_name || cid;
-            const pic = st?.attributes?.entity_picture || '';
-            const unav = isUnavailable(st);
-            const img = pic ? h('img', {
-              alt: name,
-              'data-cam-img': '',
-              'data-cam-id': cid,
-              'data-cam-base': pic,
-              src: `${pic}${pic.includes('?') ? '&' : '?'}_t=${tick}`,
-              loading: 'lazy',
-            }) : h('div', { class: 'empty', style: { padding: '24px' } }, icon('mdi:video-off'));
-            const card = h('div', {
-              class: 'camera-card',
-              'data-cam-id': cid,
-              onClick: () => moreInfo(this.el, cid),
-            },
-            h('div', { class: 'camera-frame' }, unav ? h('div', { class: 'hint' }, 'Kamera offline') : img),
-            h('div', { class: 'camera-foot' },
-              h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, name),
-              h('span', { class: 'badge-tag' }, unav ? 'Offline' : 'Live')));
-            this._camObserver?.observe?.(card);
-            return card;
-          }))));
-    }
-
-    // 6. Smoke Detectors + Windows/Doors + Rolladen Automations
-    if (smokeSensors.length) {
-      children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon('mdi:smoke-detector-variant'), `Rauchmelder (${smokeSensors.length})`)),
-        h('div', { class: 'kpi-grid' },
-          ...smokeSensors.map((id) => {
-            const st = states[id];
-            const alarm = ['on', 'detected', 'smoke'].includes(st?.state);
-            const unav = isUnavailable(st);
-            return h('div', {
-              class: 'kpi-card',
-              style: alarm ? { borderColor: '#ef4444', background: 'rgba(239,68,68,.16)' } : {},
-              onClick: () => moreInfo(this.el, id),
-            },
-            h('div', { class: 'kpi-top' },
-              icon(alarm ? 'mdi:fire-alert' : 'mdi:smoke-detector'),
-              h('span', {}, st?.attributes?.friendly_name || id)),
-            h('div', { class: 'kpi-val', style: { fontSize: '15px', color: alarm ? '#ef4444' : (unav ? 'var(--cd-secondary)' : '#4caf50') } },
-              unav ? 'Nicht verfügbar' : (alarm ? 'Rauchalarm' : 'OK · Kein Rauch')));
-          }))));
-    }
-
-    if (windowDoors.length) {
-      const openCount = windowDoors.filter((id) => states[id]?.state === 'on').length;
-      children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon('mdi:window-open-variant'), `Fenster & Türen`),
-          h('span', { class: 'badge-tag', style: openCount ? { color: '#ff9800' } : { color: '#4caf50' } },
-            openCount ? `${openCount} geöffnet` : 'Alle geschlossen')),
-        h('div', { class: 'log-list' },
-          ...windowDoors.slice(0, 12).map((id) => {
-            const st = states[id];
-            const open = st?.state === 'on';
-            return h('div', { class: 'log-row', style: { cursor: 'pointer' }, onClick: () => moreInfo(this.el, id) },
-              h('div', { class: 'log-row-main' }, st?.attributes?.friendly_name || id),
-              h('span', { class: 'badge-tag', style: open ? { color: '#ff9800' } : { color: '#4caf50' } }, open ? 'Offen' : 'Geschlossen'));
-          }))));
-    }
-
-    if (coverAutos.length) {
-      children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:window-shutter-auto'), 'Rollladen-Automationen'),
-        h('div', { class: 'tile-grid', style: { padding: '0' } },
-          ...coverAutos.map((id) => {
-            const st = states[id];
-            const on = st?.state === 'on';
-            return h('div', { class: 'tile', 'data-active': on ? 'true' : 'false' },
-              h('div', { class: 'tile-main' },
-                h('button', {
-                  type: 'button', class: 'tile-icon',
-                  onClick: () => hass.callService('automation', 'toggle', { entity_id: id }),
-                }, icon('mdi:robot')),
-                h('div', { class: 'tile-info', onClick: () => moreInfo(this.el, id) },
-                  h('div', { class: 'tile-name' }, st?.attributes?.friendly_name || id),
-                  h('div', { class: 'tile-state' }, on ? 'Aktiv' : 'Deaktiviert'))));
-          }))));
-    }
-
+    // 4. Kritische Batterien (only allowed section that scans unconfigured HA batteries <= threshold)
     const batThreshold = Number(secCfg.battery_threshold ?? 20);
     const critBat = batteries
       .map((id) => {
@@ -11048,35 +11680,18 @@ class SecurityView {
       .filter((b) => Number.isFinite(b.val) && b.val <= batThreshold)
       .sort((a, b) => a.val - b.val || a.name.localeCompare(b.name, 'de'));
 
-    if (critBat.length) {
-      children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon('mdi:battery-alert'), `Kritische Geräte-Batterien (≤ ${batThreshold} %)`),
-          h('span', { class: 'badge-tag', style: { color: '#ef4444' } }, `${critBat.length} schwach`)),
-        h('div', { class: 'kpi-grid' },
+    children.push(h('section', { class: 'subview-section' },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:battery-alert'), `Kritische Batterien (≤ ${batThreshold} %)`),
+        critBat.length
+          ? h('span', { class: 'badge-tag', style: { color: '#ef4444' } }, `${critBat.length} schwach`)
+          : h('span', { class: 'badge-tag', style: { color: '#22c55e' } }, 'Alle OK')),
+      critBat.length
+        ? h('div', { class: 'kpi-grid' },
           ...critBat.map((b) => h('div', { class: 'kpi-card', onClick: () => moreInfo(this.el, b.id) },
             h('div', { class: 'kpi-top' }, icon('mdi:battery-alert'), h('span', {}, b.name)),
-            h('div', { class: 'kpi-val', style: { fontSize: '16px', color: '#ef4444' } }, formatState(b.st)))))));
-    }
-
-    if (fritz) {
-      children.push(h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon(fritzOffline ? 'mdi:cloud-off-outline' : 'mdi:router-wireless'), 'System & Konnektivität')),
-        h('div', { class: 'log-row', style: { cursor: 'pointer' }, onClick: () => moreInfo(this.el, fritz.entity_id) },
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1' } },
-            icon(fritzOffline ? 'mdi:router-wireless-off' : 'mdi:router-wireless'),
-            h('span', { class: 'log-row-main' }, fritz.attributes?.friendly_name || 'Router / Internet')),
-          h('span', { class: 'badge-tag', style: fritzOffline ? { color: '#ef4444' } : { color: '#4caf50' } },
-            fritzOffline ? 'Offline' : 'Online'))));
-    }
-
-    if (!alarmId && !smokeSensors.length && !camIds.length && !quickEntities.length) {
-      children.push(h('div', { class: 'card empty' },
-        icon('mdi:shield-outline'),
-        h('div', { style: { fontWeight: '600', margin: '8px 0 4px' } }, 'Keine Sicherheits-Entitäten gefunden'),
-        h('div', { class: 'hint' }, '• Alarmanlage, Rauchmelder oder Kameras in HA einrichten')));
-    }
+            h('div', { class: 'kpi-val', style: { fontSize: '16px', color: '#ef4444' } }, formatState(b.st)))))
+        : h('div', { class: 'hint' }, `• Keine Batterien unter oder gleich ${batThreshold} %`)));
 
     this.el.replaceChildren(...children);
   }
@@ -11086,31 +11701,8 @@ class SecurityView {
 
 // ─── START: components/view_solar.js ───
 // Solar View: In-Place Live SVG Energy Flow, Statistics Trend Chart, Forecast & Consumption KPIs.
-const SOLAR_SENSORS = {
-  pv: ['sensor.power_inverter_input_total', 'sensor.inverter_input_power'],
-  charge: ['sensor.power_battery_charge'],
-  discharge: ['sensor.power_battery_discharge'],
-  soc: ['sensor.batteries_batterieladung'],
-  imp: ['sensor.power_import'],
-  exp: ['sensor.power_export'],
-  house: ['sensor.power_house_load'],
-  dailyYield: ['sensor.daily_yield_total_energy'],
-  dailyHouse: ['sensor.daily_house_load_energy'],
-  dailyIncome: ['sensor.fsp_ne_148436238_today_income'],
-  schimmeldry: ['sensor.stromverbrauch_schimmeldry'],
-  westNow: ['sensor.solarproduktionsvorhersage_westen_geschaetzte_erzeugungsleistung_jetzt'],
-  westToday: ['sensor.solarproduktionsvorhersage_westen_geschaetzte_energieerezeugung_heute'],
-  westPeak: ['sensor.solarproduktionsvorhersage_westen_spitzenleistungszeitpunkt_heute'],
-  eastNow: ['sensor.solarproduktionsvorhersage_osten_geschaetzte_erzeugungsleistung_jetzt'],
-  eastToday: ['sensor.solarproduktionsvorhersage_osten_geschaetzte_energieerezeugung_heute'],
-  eastPeak: ['sensor.solarproduktionsvorhersage_osten_spitzenleistungszeitpunkt_heute'],
-};
-
-function _pickState(states, list) {
-  for (const id of list) {
-    if (states[id]) return states[id];
-  }
-  return null;
+function _pickState(states, id) {
+  return (id && states[id]) ? states[id] : null;
 }
 
 function _num(st) {
@@ -11123,10 +11715,11 @@ function _fmtWatts(w) {
   return abs >= 1000 ? `${(w / 1000).toFixed(2)} kW` : `${Math.round(w)} W`;
 }
 class SolarView {
-  constructor({ hass, config, onBack }) {
+  constructor({ hass, layout, config, ctx }) {
     this.hass = hass;
+    this.layout = layout || null;
     this.config = config || {};
-    this.onBack = onBack;
+    this.ctx = ctx || null;
     this._destroyed = false;
     this._lastSig = '';
     this._statsCache = null;
@@ -11135,7 +11728,7 @@ class SolarView {
 
     this.el = h('div', { class: 'subview-page', style: { '--view-color': '#f59e0b' } });
     this._buildShell();
-    if (hass) this.update(hass, config);
+    if (hass) this.update(hass, layout, config);
   }
 
   destroy() {
@@ -11188,26 +11781,38 @@ class SolarView {
       h('div', { class: 'hint' }, 'Lade 24h Solar-Verlauf...'));
     this._forecastWrap = h('div', { class: 'kpi-grid' });
 
+    this._flowSec = h('div', {
+      class: 'subview-section',
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('solar'); },
+    },
+      h('div', { class: 'subview-section-title' }, icon('mdi:transmission-tower'), 'Energiefluss'),
+      h('div', { class: 'solar-svg-wrap' }, flowSvg),
+      this._kpiWrap);
+    this._chartSec = h('div', {
+      class: 'subview-section',
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('solar'); },
+    },
+      h('div', { class: 'subview-section-head' },
+        h('div', { class: 'subview-section-title' }, icon('mdi:chart-areaspline'), '24h Verlauf (PV & Haus)'),
+        h('button', { type: 'button', class: 'btn secondary small', onClick: (e) => { e.stopPropagation(); this._loadHistory(true); } }, icon('mdi:refresh'), 'Aktualisieren')),
+      this._chartWrap);
+    this._forecastSec = h('div', {
+      class: 'subview-section',
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('solar'); },
+    },
+      h('div', { class: 'subview-section-title' }, icon('mdi:weather-sunny'), 'Produktions-Prognose (Ost / West)'),
+      this._forecastWrap);
+
     this.el.replaceChildren(
       h('div', { class: 'subview-head' },
         h('div', { class: 'subview-head-left' },
-          h('button', { type: 'button', class: 'room-detail-back', onClick: () => this.onBack?.() }, icon('mdi:arrow-left'), 'Zurück'),
           h('div', { class: 'subview-hero-icon' }, icon('mdi:solar-power-variant')),
           h('div', { style: { minWidth: '0' } },
             h('h2', { class: 'subview-title' }, 'Solar & Energie'),
             h('div', { class: 'subview-sub' }, 'Live-Energiefluss, Verlauf & Prognose')))),
-      h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:transmission-tower'), 'Energiefluss'),
-        h('div', { class: 'solar-svg-wrap' }, flowSvg),
-        this._kpiWrap),
-      h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-head' },
-          h('div', { class: 'subview-section-title' }, icon('mdi:chart-areaspline'), '24h Verlauf (PV & Haus)'),
-          h('button', { type: 'button', class: 'btn secondary small', onClick: () => this._loadHistory(true) }, icon('mdi:refresh'), 'Aktualisieren')),
-        this._chartWrap),
-      h('div', { class: 'subview-section' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:weather-sunny'), 'Produktions-Prognose (Ost / West)'),
-        this._forecastWrap));
+      this._flowSec,
+      this._chartSec,
+      this._forecastSec);
   }
 
   async _loadHistory(force = false) {
@@ -11222,12 +11827,12 @@ class SolarView {
     if (this._statsCache) this._chartWrap.style.opacity = '0.6';
 
     const sCfg = this.config?.views?.solar || {};
-    const pvId = _pickState(this.hass.states, [sCfg.pv_entity, ...SOLAR_SENSORS.pv].filter(Boolean))?.entity_id;
-    const houseId = _pickState(this.hass.states, [sCfg.house_entity, ...SOLAR_SENSORS.house].filter(Boolean))?.entity_id;
+    const pvId = _pickState(this.hass.states, sCfg.pv_entity)?.entity_id;
+    const houseId = _pickState(this.hass.states, sCfg.house_entity)?.entity_id;
     const entityIds = [pvId, houseId].filter(Boolean);
     if (!entityIds.length) {
       this._chartWrap.style.opacity = '1';
-      this._chartWrap.replaceChildren(h('div', { class: 'hint' }, '• Keine PV-/Haus-Verbrauchssensoren gefunden'));
+      this._chartWrap.replaceChildren(h('div', { class: 'hint' }, '• Keine PV-/Haus-Sensoren in Einstellungen hinterlegt'));
       return;
     }
 
@@ -11329,32 +11934,44 @@ class SolarView {
       svg);
   }
 
-  update(hass, config) {
+  update(hass, arg1, arg2, arg3) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
-    if (config !== undefined) this.config = config;
+    if (arg1 && (Array.isArray(arg1.rooms) || 'configured' in arg1)) {
+      this.layout = arg1;
+      if (arg2 !== undefined) this.config = arg2;
+      if (arg3 !== undefined) this.ctx = arg3;
+    } else {
+      if (arg1 !== undefined) this.config = arg1;
+      if (arg2 !== undefined) this.ctx = arg2;
+    }
+    const editMode = Boolean(this.ctx?.editMode);
+    this._flowSec?.toggleAttribute('data-edit-mode', editMode);
+    this._chartSec?.toggleAttribute('data-edit-mode', editMode);
+    this._forecastSec?.toggleAttribute('data-edit-mode', editMode);
+
     const states = hass.states || {};
     const sCfg = this.config?.views?.solar || {};
-    const pick = (key, extra = []) => _pickState(states, [sCfg[key], ...(SOLAR_SENSORS[key] || []), ...extra].filter(Boolean));
+    const pick = (key) => _pickState(states, sCfg[key]);
 
-    const pv = pick('pv_entity', SOLAR_SENSORS.pv);
-    const chg = pick('charge_entity', SOLAR_SENSORS.charge);
-    const dis = pick('discharge_entity', SOLAR_SENSORS.discharge);
-    const soc = pick('soc_entity', SOLAR_SENSORS.soc);
-    const imp = pick('grid_import_entity', SOLAR_SENSORS.imp);
-    const exp = pick('grid_export_entity', SOLAR_SENSORS.exp);
-    const house = pick('house_entity', SOLAR_SENSORS.house);
-    const dy = pick('daily_yield_entity', SOLAR_SENSORS.dailyYield);
-    const dh = pick('daily_house_entity', SOLAR_SENSORS.dailyHouse);
-    const inc = _pickState(states, SOLAR_SENSORS.dailyIncome);
-    const sch = _pickState(states, SOLAR_SENSORS.schimmeldry);
+    const pv = pick('pv_entity');
+    const chg = pick('charge_entity');
+    const dis = pick('discharge_entity');
+    const soc = pick('soc_entity');
+    const imp = pick('grid_import_entity');
+    const exp = pick('grid_export_entity');
+    const house = pick('house_entity');
+    const dy = pick('daily_yield_entity');
+    const dh = pick('daily_house_entity');
+    const inc = pick('daily_income_entity');
+    const sch = pick('schimmeldry_entity');
 
-    const wNow = _pickState(states, SOLAR_SENSORS.westNow);
-    const wToday = _pickState(states, SOLAR_SENSORS.westToday);
-    const wPeak = _pickState(states, SOLAR_SENSORS.westPeak);
-    const eNow = _pickState(states, SOLAR_SENSORS.eastNow);
-    const eToday = _pickState(states, SOLAR_SENSORS.eastToday);
-    const ePeak = _pickState(states, SOLAR_SENSORS.eastPeak);
+    const wNow = pick('west_now_entity');
+    const wToday = pick('west_today_entity');
+    const wPeak = pick('west_peak_entity');
+    const eNow = pick('east_now_entity');
+    const eToday = pick('east_today_entity');
+    const ePeak = pick('east_peak_entity');
 
     const pvW = _num(pv);
     const chgW = _num(chg);
@@ -11379,30 +11996,36 @@ class SolarView {
     this._flowBatHouse.toggleAttribute('data-active', disW > 15);
     this._flowGridHouse.toggleAttribute('data-active', impW > 15);
 
-    const sig = [pv, chg, dis, soc, imp, exp, house, dy, dh, inc, sch, wNow, wToday, eNow, eToday]
+    const sig = `${editMode ? 1 : 0}|` + [pv, chg, dis, soc, imp, exp, house, dy, dh, inc, sch, wNow, wToday, eNow, eToday]
       .map((s) => `${s?.entity_id || ''}:${s?.state || ''}`).join('|');
     if (sig === this._lastSig) return;
     this._lastSig = sig;
 
     const kpis = [
-      { label: 'PV-Leistung', val: _fmtWatts(pvW), icon: 'mdi:solar-power', color: '#f59e0b', id: pv?.entity_id },
-      { label: 'Hausverbrauch', val: _fmtWatts(houseW), icon: 'mdi:home-lightning-bolt', color: '#ef4444', id: house?.entity_id },
-      { label: 'Batterie', val: socVal, sub: chgW > 5 ? `Lädt ${_fmtWatts(chgW)}` : (disW > 5 ? `Entlädt ${_fmtWatts(disW)}` : 'Standby'), icon: 'mdi:battery-charging', color: '#10b981', id: soc?.entity_id },
-      { label: expW > 10 ? 'Einspeisung' : 'Netzbezug', val: _fmtWatts(expW > 10 ? expW : impW), icon: 'mdi:transmission-tower', color: '#03a9f4', id: (expW > 10 ? exp : imp)?.entity_id },
+      ...(pv ? [{ label: 'PV-Leistung', val: _fmtWatts(pvW), icon: 'mdi:solar-power', color: '#f59e0b', id: pv.entity_id }] : []),
+      ...(house ? [{ label: 'Hausverbrauch', val: _fmtWatts(houseW), icon: 'mdi:home-lightning-bolt', color: '#ef4444', id: house.entity_id }] : []),
+      ...(soc ? [{ label: 'Batterie', val: socVal, sub: chgW > 5 ? `Lädt ${_fmtWatts(chgW)}` : (disW > 5 ? `Entlädt ${_fmtWatts(disW)}` : 'Standby'), icon: 'mdi:battery-charging', color: '#10b981', id: soc.entity_id }] : []),
+      ...((exp || imp) ? [{ label: expW > 10 ? 'Einspeisung' : 'Netzbezug', val: _fmtWatts(expW > 10 ? expW : impW), icon: 'mdi:transmission-tower', color: '#03a9f4', id: (expW > 10 ? exp : imp)?.entity_id }] : []),
       ...(dy ? [{ label: 'Tagesertrag', val: `${_num(dy).toFixed(1)} kWh`, icon: 'mdi:counter', color: '#f59e0b', id: dy.entity_id }] : []),
       ...(dh ? [{ label: 'Tagesverbrauch', val: `${_num(dh).toFixed(1)} kWh`, icon: 'mdi:home-analytics', color: '#fb7185', id: dh.entity_id }] : []),
       ...(inc ? [{ label: 'Tagesersparnis', val: `${_num(inc).toFixed(2)} €`, icon: 'mdi:cash-multiple', color: '#22c55e', id: inc.entity_id }] : []),
       ...(sch ? [{ label: 'Schimmeldry', val: `${_num(sch).toFixed(2)} ${sch.attributes?.unit_of_measurement || 'kWh'}`, icon: 'mdi:fan', color: '#38bdf8', id: sch.entity_id }] : []),
     ];
 
-    this._kpiWrap.replaceChildren(...kpis.map((k) => h('div', {
-      class: 'kpi-card',
-      style: { '--kpi-color': k.color },
-      onClick: () => { if (k.id) moreInfo(this.el, k.id); },
-    },
-    h('div', { class: 'kpi-top' }, icon(k.icon), h('span', {}, k.label)),
-    h('div', { class: 'kpi-val' }, k.val),
-    k.sub ? h('div', { class: 'kpi-sub' }, k.sub) : null)));
+    this._kpiWrap.replaceChildren(...(kpis.length
+      ? kpis.map((k) => h('div', {
+          class: 'kpi-card',
+          style: { '--kpi-color': k.color },
+          onClick: (e) => {
+            if (editMode) return;
+            e.stopPropagation();
+            if (k.id) moreInfo(this.el, k.id);
+          },
+        },
+        h('div', { class: 'kpi-top' }, icon(k.icon), h('span', {}, k.label)),
+        h('div', { class: 'kpi-val' }, k.val),
+        k.sub ? h('div', { class: 'kpi-sub' }, k.sub) : null))
+      : [h('div', { class: 'empty-hint' }, '• Keine Solar-Sensoren konfiguriert\n• Sensoren in Einstellungen → Solar hinterlegen')]));
 
     const totalNow = _num(wNow) + _num(eNow);
     const totalToday = _num(wToday) + _num(eToday);
@@ -11412,26 +12035,30 @@ class SolarView {
       fCards.push(
         h('div', {
           class: 'kpi-card', style: { '--kpi-color': '#f59e0b' },
-          onClick: () => { if (primForecastId) moreInfo(this.el, primForecastId); },
+          onClick: (e) => {
+            if (editMode) return;
+            e.stopPropagation();
+            if (primForecastId) moreInfo(this.el, primForecastId);
+          },
         },
           h('div', { class: 'kpi-top' }, icon('mdi:solar-power'), h('span', {}, 'Gesamt Prognose')),
           h('div', { class: 'kpi-val' }, _fmtWatts(totalNow)),
           h('div', { class: 'kpi-sub' }, `Heute ca. ${totalToday.toFixed(1)} kWh`)),
-        h('div', { class: 'kpi-card', style: { '--kpi-color': '#fb923c' }, onClick: () => wNow && moreInfo(this.el, wNow.entity_id) },
+        ...(wNow ? [h('div', { class: 'kpi-card', style: { '--kpi-color': '#fb923c' }, onClick: (e) => { if (editMode) return; e.stopPropagation(); moreInfo(this.el, wNow.entity_id); } },
           h('div', { class: 'kpi-top' }, icon('mdi:weather-sunset-down'), h('span', {}, 'Westen')),
           h('div', { class: 'kpi-val' }, _fmtWatts(_num(wNow))),
-          h('div', { class: 'kpi-sub' }, `Heute ${_num(wToday).toFixed(1)} kWh${wPeak ? ` · Peak ${wPeak.state}` : ''}`)),
-        h('div', { class: 'kpi-card', style: { '--kpi-color': '#38bdf8' }, onClick: () => eNow && moreInfo(this.el, eNow.entity_id) },
+          h('div', { class: 'kpi-sub' }, `Heute ${_num(wToday).toFixed(1)} kWh${wPeak ? ` · Peak ${wPeak.state}` : ''}`))] : []),
+        ...(eNow ? [h('div', { class: 'kpi-card', style: { '--kpi-color': '#38bdf8' }, onClick: (e) => { if (editMode) return; e.stopPropagation(); moreInfo(this.el, eNow.entity_id); } },
           h('div', { class: 'kpi-top' }, icon('mdi:weather-sunset-up'), h('span', {}, 'Osten')),
           h('div', { class: 'kpi-val' }, _fmtWatts(_num(eNow))),
-          h('div', { class: 'kpi-sub' }, `Heute ${_num(eToday).toFixed(1)} kWh${ePeak ? ` · Peak ${ePeak.state}` : ''}`)),
+          h('div', { class: 'kpi-sub' }, `Heute ${_num(eToday).toFixed(1)} kWh${ePeak ? ` · Peak ${ePeak.state}` : ''}`))] : []),
       );
     } else {
       fCards.push(h('div', { class: 'hint' }, '• Keine Solarprognose-Sensoren konfiguriert'));
     }
     this._forecastWrap.replaceChildren(...fCards);
 
-    if (!this._statsCache) this._loadHistory(false);
+    if (!this._statsCache && (pv || house)) this._loadHistory(false);
   }
 }
 // ─── END: components/view_solar.js ───
@@ -11439,19 +12066,10 @@ class SolarView {
 
 // ─── START: components/view_blinds.js ───
 // Blinds View: Sun & Facade Solar Intensity, Configured/Unconfigured Stats, Grouped Cover Controls & 24h Logbook.
-const _BL_FACADES = [
-  { key: 'ost', label: 'Osten', intensity: 'sensor.geschatzte_sonnenintensitat_hauswand_osten', peak: 'sensor.sonneneinstrahlung_hoehepunkt_hauswand_osten' },
-  { key: 'sued', label: 'Süden', intensity: 'sensor.geschatzte_sonnenintensitat_hauswand_suden', peak: 'sensor.power_highest_peak_time_today_3' },
-  { key: 'west', label: 'Westen', intensity: 'sensor.geschatzte_sonnenintensitat_hauswand_westen', peak: 'sensor.power_highest_peak_time_today_2' },
-];
-
-function _blCoverSignature(states, rooms) {
-  const covers = Object.keys(states)
-    .filter((id) => id.startsWith('cover.'))
-    .sort();
-  const avail = covers.map((id) => `${id}:${isUnavailable(states[id]) ? '0' : '1'}`).join(',');
+function _blCoverSignature(states, rooms, coverIds, editMode) {
+  const avail = (coverIds || []).map((id) => `${id}:${isUnavailable(states[id]) ? '0' : '1'}`).join(',');
   const roomSig = (rooms || []).map((r) => `${r.area_id}:${r.name}:${r.expanded ? 1 : 0}`).join('|');
-  return `${avail}##${roomSig}`;
+  return `${editMode ? 1 : 0}##${avail}##${roomSig}`;
 }
 
 function _blFmtTime(raw) {
@@ -11466,9 +12084,11 @@ function _blFmtTime(raw) {
   return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 }
 class BlindsView {
-  constructor({ hass, layout, onBack }) {
+  constructor({ hass, layout, config, ctx, onBack } = {}) {
     this.hass = hass;
     this.layout = layout;
+    this.config = config;
+    this.ctx = ctx || {};
     this.onBack = onBack;
     this._destroyed = false;
     this._structSig = '';
@@ -11481,7 +12101,7 @@ class BlindsView {
 
     this.el = h('div', { class: 'subview-page', style: { '--view-color': '#9c27b0' } });
     this._buildShell();
-    if (hass) this.update(hass, layout);
+    if (hass) this.update(hass, layout, config, ctx);
   }
 
   destroy() {
@@ -11520,13 +12140,15 @@ class BlindsView {
       h('div', { class: 'subview-actions' },
         allOpenBtn,
         allCloseBtn,
-        openIntegrationBtn,
-        this.onBack ? h('button', { type: 'button', class: 'btn', onClick: this.onBack }, icon('mdi:arrow-left'), 'Zurück') : null));
+        openIntegrationBtn));
 
     // Sun & Facades
     this._sunSummaryEl = h('span', { class: 'badge-chip' });
     this._facadeGrid = h('div', { class: 'kpi-grid' });
-    const facadeSec = h('section', { class: 'subview-section' },
+    this._facadeSec = h('section', {
+      class: 'subview-section',
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('blinds'); },
+    },
       h('div', { class: 'subview-section-head' },
         h('div', { class: 'subview-section-title' }, icon('mdi:weather-sunny'), 'Sonnenstand & Fassaden'),
         this._sunSummaryEl),
@@ -11563,36 +12185,70 @@ class BlindsView {
         }, icon('mdi:refresh'), 'Aktualisieren')),
       this._logWrap);
 
-    this.el.append(head, facadeSec, this._offlineSec, this._groupsWrap, this._setupSec, logSec);
+    this.el.append(head, this._facadeSec, this._offlineSec, this._groupsWrap, this._setupSec, logSec);
+  }
+
+  _configuredCoverIds(states) {
+    const ids = new Set(
+      (this.layout?.configured?.covers || [])
+        .map((c) => (typeof c === 'string' ? c : c?.entity_id))
+        .filter(Boolean)
+    );
+    for (const r of this.layout?.rooms || []) {
+      for (const t of r.tiles || []) {
+        if (t.entity_id?.startsWith('cover.')) ids.add(t.entity_id);
+        for (const m of t.members || []) {
+          const eid = typeof m === 'string' ? m : m?.entity_id;
+          if (eid?.startsWith('cover.')) ids.add(eid);
+        }
+      }
+    }
+    return [...ids].filter((id) => Boolean(states[id])).sort();
+  }
+
+  _facadesList() {
+    const bCfg = this.config?.views?.blinds || {};
+    return [
+      { key: 'ost', label: 'Osten', intensity: bCfg.facade_east_entity || '', peak: bCfg.facade_east_peak_entity || '' },
+      { key: 'sued', label: 'Süden', intensity: bCfg.facade_south_entity || '', peak: bCfg.facade_south_peak_entity || '' },
+      { key: 'west', label: 'Westen', intensity: bCfg.facade_west_entity || '', peak: bCfg.facade_west_peak_entity || '' },
+    ].filter((f) => f.intensity || f.peak);
   }
 
   _allAction(svc) {
     if (!this.hass) return;
-    const ids = Object.keys(this.hass.states || {})
-      .filter((id) => id.startsWith('cover.') && !isUnavailable(this.hass.states[id]));
+    const states = this.hass.states || {};
+    const ids = this._configuredCoverIds(states).filter((id) => !isUnavailable(states[id]));
     if (!ids.length) return;
     this.hass.callService('cover', svc, { entity_id: ids });
   }
 
-  update(hass, layout) {
+  update(hass, layout, config, ctx) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
     if (layout) this.layout = layout;
+    if (config !== undefined) this.config = config;
+    if (ctx !== undefined) this.ctx = ctx;
     const states = hass.states || {};
     const rooms = this.layout?.rooms || [];
+    const editMode = Boolean(this.ctx?.editMode);
+    this._facadeSec.toggleAttribute('data-edit-mode', editMode);
 
     this._updateSunAndFacades(states);
     this._updateSetupStatus(states);
-    this._syncCoverGroups(states, rooms);
+    this._syncCoverGroups(states, rooms, editMode);
 
     // Refresh existing persistent cover rows without DOM rebuild
     for (const ctrl of this._rowCtrls.values()) {
       updateCoverRow(ctrl, hass);
     }
 
-    const activeCovers = Object.keys(states).filter((id) => id.startsWith('cover.') && !isUnavailable(states[id]));
+    const coverIds = this._configuredCoverIds(states);
+    const activeCovers = coverIds.filter((id) => !isUnavailable(states[id]));
     const openCount = activeCovers.filter((id) => states[id].state === 'open').length;
-    this._subEl.textContent = `${openCount} von ${activeCovers.length} geöffnet`;
+    this._subEl.textContent = coverIds.length
+      ? `${openCount} von ${activeCovers.length} geöffnet`
+      : 'Noch keine Rollläden eingerichtet';
 
     if (Date.now() - this._logFetchedAt > 60000) {
       this._fetchLogbook();
@@ -11601,7 +12257,8 @@ class BlindsView {
 
   _updateSunAndFacades(states) {
     const sun = states['sun.sun'];
-    const sig = `${sun?.state || ''}:${sun?.attributes?.elevation ?? ''}|` + _BL_FACADES.map((f) => `${states[f.intensity]?.state || ''}:${states[f.peak]?.state || ''}`).join('|');
+    const facades = this._facadesList();
+    const sig = `${sun?.state || ''}:${sun?.attributes?.elevation ?? ''}|` + facades.map((f) => `${states[f.intensity]?.state || ''}:${states[f.peak]?.state || ''}`).join('|');
     if (sig === this._sunFacadeSig) return;
     this._sunFacadeSig = sig;
 
@@ -11615,9 +12272,9 @@ class BlindsView {
     }
 
     const cards = [];
-    for (const fac of _BL_FACADES) {
-      const stInt = states[fac.intensity];
-      const stPeak = states[fac.peak];
+    for (const fac of facades) {
+      const stInt = fac.intensity ? states[fac.intensity] : null;
+      const stPeak = fac.peak ? states[fac.peak] : null;
       if (!stInt && !stPeak) continue;
       const valText = stInt ? formatState(stInt) : '—';
       let peakText = 'Höhepunkt: —';
@@ -11627,17 +12284,26 @@ class BlindsView {
       }
       cards.push(h('div', {
         class: 'kpi-card', style: { '--kpi-color': '#f59e0b' },
-        onClick: () => moreInfo(this.el, (stInt || stPeak).entity_id),
+        onClick: (e) => {
+          if (this.ctx?.editMode) return;
+          e.stopPropagation();
+          moreInfo(this.el, (stInt || stPeak).entity_id);
+        },
       },
         h('div', { class: 'kpi-top' }, icon('mdi:white-balance-sunny'), fac.label),
         h('div', { class: 'kpi-val' }, valText),
         h('div', { class: 'kpi-sub' }, peakText)));
     }
-    if (!cards.length) {
-      cards.push(h('div', { class: 'kpi-card' },
-        h('div', { class: 'kpi-top' }, icon('mdi:weather-sunny'), 'Sonneneinstrahlung'),
-        h('div', { class: 'kpi-val' }, '—'),
-        h('div', { class: 'kpi-sub' }, 'Keine Fassaden-Sensoren')));
+    if (!cards.length && !sun) {
+      this._facadeSec.hidden = true;
+    } else {
+      this._facadeSec.hidden = false;
+      if (!cards.length) {
+        cards.push(h('div', { class: 'kpi-card' },
+          h('div', { class: 'kpi-top' }, icon('mdi:weather-sunny'), 'Sonnenstand'),
+          h('div', { class: 'kpi-val' }, sun.state === 'above_horizon' ? 'Tag' : 'Nacht'),
+          h('div', { class: 'kpi-sub' }, '• Keine Fassaden-Sensoren konfiguriert')));
+      }
     }
     this._facadeGrid.replaceChildren(...cards);
   }
@@ -11685,13 +12351,13 @@ class BlindsView {
     this._setupLists.replaceChildren(...blocks);
   }
 
-  _syncCoverGroups(states, rooms) {
-    const sig = _blCoverSignature(states, rooms);
+  _syncCoverGroups(states, rooms, editMode = false) {
+    const allCovers = this._configuredCoverIds(states);
+    const sig = _blCoverSignature(states, rooms, allCovers, editMode);
     if (sig === this._structSig) return;
     this._structSig = sig;
     this._rowCtrls.clear();
 
-    const allCovers = Object.keys(states).filter((id) => id.startsWith('cover.')).sort();
     const offline = allCovers.filter((id) => isUnavailable(states[id]));
     const active = allCovers.filter((id) => !isUnavailable(states[id]));
 
@@ -11812,8 +12478,13 @@ class BlindsView {
     }
 
     if (!sections.length) {
-      sections.push(h('section', { class: 'subview-section' },
-        h('div', { class: 'empty-hint' }, 'Keine Rollläden gefunden.')));
+      const emptyCard = h('section', {
+        class: 'subview-section',
+        onClick: () => { if (editMode) this.ctx?.onAddDevice?.() || this.ctx?.onOpenSettings?.('blinds'); },
+      },
+        h('div', { class: 'empty-hint' }, '• Noch keine Rollläden im Assistenten eingerichtet\n• Geräte über „+ Gerät“ hinzufügen'));
+      emptyCard.toggleAttribute('data-edit-mode', editMode);
+      sections.push(emptyCard);
     }
 
     this._groupsWrap.replaceChildren(...sections);
@@ -11823,9 +12494,9 @@ class BlindsView {
     if (!this.hass || this._destroyed) return;
     const seq = ++this._logSeq;
     this._logFetchedAt = Date.now();
-    const coverIds = Object.keys(this.hass.states || {}).filter((id) => id.startsWith('cover.'));
+    const coverIds = this._configuredCoverIds(this.hass.states || {});
     if (!coverIds.length) {
-      this._logWrap.replaceChildren(h('div', { class: 'empty-hint' }, 'Keine Rollläden vorhanden.'));
+      this._logWrap.replaceChildren(h('div', { class: 'empty-hint' }, 'Keine eingerichteten Rollläden vorhanden.'));
       return;
     }
 
@@ -11870,15 +12541,7 @@ class BlindsView {
 
 // ─── START: components/view_auto.js ───
 // Auto View: Dynamic BMW CarData Entity/Device Discovery & Configurable Volvo Webview (with HTTPS Mixed-Content Guard).
-const _AUTO_BMW_DEVICE_ID = '7ae00fdd4f8a117f65bb4f5275b021fc';
-const _AUTO_DEFAULT_VOLVO_URL = 'http://192.168.178.188:6176/';
 const _AUTO_UTILITY_RE = /(overcharge|protection|kindersicherung|child_lock|childlock|led_mode|ledmode)/i;
-
-function _autoMatchId(id, extraPrefix = '') {
-  if (_AUTO_UTILITY_RE.test(id)) return false;
-  if (extraPrefix && id.toLowerCase().includes(String(extraPrefix).toLowerCase())) return true;
-  return /(?:^|\.)(?:.*(?:bmw|gv_jm_13|cardata).*)$/i.test(id);
-}
 
 function _autoIsUtility(st, entry) {
   if (entry && (entry.disabled_by || ['config', 'diagnostic'].includes(entry.entity_category))) return true;
@@ -11916,17 +12579,18 @@ function _autoClassify(states, ids) {
   return { kpis, controls, trackers, other };
 }
 class AutoView {
-  constructor({ hass, config, onBack }) {
+  constructor({ hass, layout, config, ctx }) {
     this.hass = hass;
+    this.layout = layout || null;
     this.config = config;
-    this.onBack = onBack;
+    this.ctx = ctx || null;
     this._destroyed = false;
     this._bmwSig = '';
     this._volvoUrlRendered = null;
 
     this.el = h('div', { class: 'subview-page', style: { '--view-color': '#3b82f6' } });
     this._buildShell();
-    if (hass) this.update(hass, config);
+    if (hass) this.update(hass, layout, config);
   }
 
   destroy() {
@@ -11941,12 +12605,9 @@ class AutoView {
         h('div', { class: 'subview-hero-icon' }, icon('mdi:car')),
         h('div', { style: { minWidth: '0' } },
           h('h2', { class: 'subview-title' }, 'Auto'),
-          this._subEl)),
-      h('div', { class: 'subview-actions' },
-        this.onBack ? h('button', { type: 'button', class: 'btn', onClick: this.onBack }, icon('mdi:arrow-left'), 'Zurück') : null));
+          this._subEl)));
 
-    // BMW CarData Section
-    this._bmwPlateChip = h('span', { class: 'badge-chip' }, 'GV-JM-13');
+    this._bmwPlateChip = h('span', { class: 'badge-chip' }, '');
     this._bmwKpiGrid = h('div', { class: 'kpi-grid' });
     this._bmwControls = h('div', { class: 'alarm-modes' });
     this._bmwOther = h('div', { class: 'log-list' });
@@ -11954,31 +12615,41 @@ class AutoView {
       h('summary', { style: { cursor: 'pointer', fontSize: '12px', fontWeight: '600', color: 'var(--cd-secondary)', padding: '4px 0' } }, 'Alle Fahrzeugsensoren'),
       this._bmwOther);
 
-    const bmwSec = h('section', { class: 'subview-section' },
+    this._bmwSec = h('section', {
+      class: 'subview-section',
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('auto'); },
+    },
       h('div', { class: 'subview-section-head' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:car-electric'), 'BMW CarData'),
+        h('div', { class: 'subview-section-title' }, icon('mdi:car-electric'), 'Fahrzeug-Status'),
         this._bmwPlateChip),
       this._bmwKpiGrid,
       this._bmwControls,
       this._bmwDetails);
 
-    // Volvo / External Iframe Section
     this._volvoActions = h('div', { class: 'subview-actions' });
     this._volvoBody = h('div', { style: { display: 'grid', gap: '10px', minWidth: '0' } });
-    this._volvoSec = h('section', { class: 'subview-section' },
+    this._volvoSec = h('section', {
+      class: 'subview-section',
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('auto'); },
+    },
       h('div', { class: 'subview-section-head' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:car-estate'), 'Volvo'),
+        h('div', { class: 'subview-section-title' }, icon('mdi:car-estate'), 'Fahrzeug-Webansicht'),
         this._volvoActions),
       this._volvoBody);
 
-    this.el.append(head, bmwSec, this._volvoSec);
+    this.el.append(head, this._bmwSec, this._volvoSec);
   }
 
-  update(hass, config) {
+  update(hass, layout, config, ctx) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
+    if (layout !== undefined) this.layout = layout;
     if (config !== undefined) this.config = config;
-    const plate = this.config?.views?.auto?.plate || 'GV-JM-13';
+    if (ctx !== undefined) this.ctx = ctx;
+    const editMode = Boolean(this.ctx?.editMode);
+    this._bmwSec?.toggleAttribute('data-edit-mode', editMode);
+    this._volvoSec?.toggleAttribute('data-edit-mode', editMode);
+    const plate = this.config?.views?.auto?.plate || '';
     if (this._bmwPlateChip) {
       this._bmwPlateChip.textContent = plate;
       this._bmwPlateChip.hidden = !plate;
@@ -11989,37 +12660,51 @@ class AutoView {
 
   _collectBmwIds(states) {
     const autoCfg = this.config?.views?.auto || {};
-    const extraPrefix = autoCfg.entity_prefix || '';
-    const devId = autoCfg.bmw_device_id || _AUTO_BMW_DEVICE_ID;
+    const extraPrefix = (autoCfg.entity_prefix || '').trim().toLowerCase();
+    const devId = autoCfg.device_id || autoCfg.bmw_device_id || '';
+    const configuredDevs = new Set(this.layout?.configured?.device_ids || []);
+    const configuredEnts = new Set(this.layout?.configured?.entity_ids || []);
+    const targetDevId = devId || (configuredDevs.has(devId) ? devId : '');
+    if (!targetDevId && !extraPrefix) return [];
+
     const ids = new Set();
     const haEnts = this.hass?.entities || {};
     for (const [eid, entry] of Object.entries(haEnts)) {
       if (!entry || entry.disabled_by) continue;
       if (['config', 'diagnostic'].includes(entry.entity_category)) continue;
       if (!states[eid]) continue;
-      if (
-        (entry.device_id === devId || entry.platform === 'bmw_cardata' || _autoMatchId(eid, extraPrefix))
-        && !_autoIsUtility(states[eid], entry)
-      ) {
+      const matchDev = targetDevId && entry.device_id === targetDevId;
+      const matchPrefix = extraPrefix && eid.toLowerCase().includes(extraPrefix);
+      if ((matchDev || matchPrefix) && !_autoIsUtility(states[eid], entry)) {
         ids.add(eid);
       }
     }
-    for (const id of Object.keys(states)) {
-      if (_autoMatchId(id, extraPrefix) && !_autoIsUtility(states[id], haEnts[id])) {
-        ids.add(id);
+    if (extraPrefix) {
+      for (const id of Object.keys(states)) {
+        if (id.toLowerCase().includes(extraPrefix) && !_autoIsUtility(states[id], haEnts[id])) {
+          ids.add(id);
+        }
       }
+    }
+    for (const cid of configuredEnts) {
+      if (extraPrefix && cid.toLowerCase().includes(extraPrefix) && states[cid]) ids.add(cid);
     }
     return [...ids].sort();
   }
 
   _renderBmw(states) {
     const ids = this._collectBmwIds(states);
-    const sig = ids.map((id) => `${id}:${states[id]?.state}`).join('|');
+    const editMode = !!this.ctx?.isEditMode?.();
+    const sig = ids.map((id) => `${id}:${states[id]?.state}`).join('|') + `|em:${editMode ? 1 : 0}`;
     if (sig === this._bmwSig) return;
     this._bmwSig = sig;
+    const e2d = this.layout?.configured?.entity_to_device || {};
 
     if (!ids.length) {
-      this._bmwKpiGrid.replaceChildren(h('div', { class: 'empty-hint' }, 'Keine BMW CarData Entitäten gefunden.'));
+      this._bmwKpiGrid.replaceChildren(h('div', {
+        class: 'empty-hint',
+        ...(editMode ? { 'data-edit-mode': '', onClick: () => this.ctx?.onOpenSettings?.() } : {}),
+      }, 'Keine Fahrzeug-Entitäten konfiguriert.'));
       this._bmwControls.replaceChildren();
       this._bmwDetails.hidden = true;
       return;
@@ -12031,8 +12716,17 @@ class AutoView {
 
     this._bmwKpiGrid.replaceChildren(...primary.map((st) => h('div', {
       class: 'kpi-card',
+      ...(editMode ? { 'data-edit-mode': '' } : {}),
       style: { '--kpi-color': isUnavailable(st) ? '#64748b' : '#3b82f6' },
-      onClick: () => moreInfo(this.el, st.entity_id),
+      onClick: () => {
+        if (editMode) {
+          const did = e2d[st.entity_id];
+          if (did) this.ctx?.onOpenDevice?.(did);
+          else this.ctx?.onOpenSettings?.();
+          return;
+        }
+        moreInfo(this.el, st.entity_id);
+      },
     },
       h('div', { class: 'kpi-top' },
         icon(st.attributes?.icon || 'mdi:car-info'),
@@ -12076,12 +12770,12 @@ class AutoView {
 
     const firstTracker = trackers[0];
     this._subEl.textContent = firstTracker
-      ? `BMW GV-JM-13 · ${formatState(firstTracker)}`
-      : `${ids.length} BMW Sensoren aktiv`;
+      ? `${this.config?.views?.auto?.plate || 'Fahrzeug'} · ${formatState(firstTracker)}`
+      : `${ids.length} Fahrzeug-Sensoren aktiv`;
   }
 
   _renderVolvo() {
-    const rawUrl = this.config?.views?.auto?.webview_url ?? _AUTO_DEFAULT_VOLVO_URL;
+    const rawUrl = this.config?.views?.auto?.webview_url ?? '';
     const url = typeof rawUrl === 'string' ? rawUrl.trim() : '';
     const isHttps = typeof window !== 'undefined' && window.location?.protocol === 'https:';
     const isMixedContent = Boolean(url && isHttps && /^http:/i.test(url));
@@ -12124,35 +12818,33 @@ class AutoView {
 
 // ─── START: components/view_printer3d.js ───
 // 3D Printer View: Bambu Lab A1 Mini Auto-Discovery, Print Progress, Temperatures & Hue Work Light.
-const _P3D_DEVICE_ID = '3896a2c7ff7d1946d671305a9359c828';
-const _P3D_LIGHT_ID = 'light.phillips_hue_vintage_8_temp';
-
-const _P3D_KNOWN = {
-  step: 'sensor.3dprinter_a1mini_aktueller_arbeitsschritt',
-  task: 'sensor.3dprinter_a1mini_name_der_aufgabe',
-  remaining: 'sensor.3dprinter_a1mini_verbleibende_zeit',
-  eta: 'sensor.3dprinter_a1mini_vrs_fertigstellung',
-  progress: 'sensor.3dprinter_a1mini_druckfortschritt',
-  layerCur: 'sensor.3dprinter_a1mini_aktuelle_schicht',
-  layerTotal: 'sensor.3dprinter_a1mini_gesamtzahl_der_schichten',
-  nozzleSize: 'sensor.3dprinter_a1mini_dusengrosse',
-  nozzleType: 'sensor.3dprinter_a1mini_dusentyp',
-  fan: 'fan.3dprinter_a1mini_druckkopflufter',
-  nozzleTempTarget: 'number.3dprinter_a1mini_zieltemperatur_der_duse',
-  bedTempTarget: 'number.3dprinter_a1mini_zieltemperatur_des_druckbett',
-  speedSelect: 'select.3dprinter_a1mini_druckgeschwindigkeit',
+const _P3D_KNOWN_SUFFIXES = {
+  step: '_aktueller_arbeitsschritt',
+  task: '_name_der_aufgabe',
+  remaining: '_verbleibende_zeit',
+  eta: '_vrs_fertigstellung',
+  progress: '_druckfortschritt',
+  layerCur: '_aktuelle_schicht',
+  layerTotal: '_gesamtzahl_der_schichten',
+  nozzleSize: '_dusengrosse',
+  nozzleType: '_dusentyp',
+  fan: '_druckkopflufter',
+  nozzleTempTarget: '_zieltemperatur_der_duse',
+  bedTempTarget: '_zieltemperatur_des_druckbett',
+  speedSelect: '_druckgeschwindigkeit',
 };
 class Printer3DView {
-  constructor({ hass, config, onBack }) {
+  constructor({ hass, layout, config, ctx }) {
     this.hass = hass;
+    this.layout = layout || null;
     this.config = config || {};
-    this.onBack = onBack;
+    this.ctx = ctx || null;
     this._destroyed = false;
     this._lastSig = '';
 
     this.el = h('div', { class: 'subview-page', style: { '--view-color': '#10b981' } });
     this._buildShell();
-    if (hass) this.update(hass, config);
+    if (hass) this.update(hass, layout, config);
   }
 
   destroy() {
@@ -12160,23 +12852,24 @@ class Printer3DView {
   }
 
   _lightId() {
-    return this.config?.views?.printer3d?.light_entity || _P3D_LIGHT_ID;
+    return this.config?.views?.printer3d?.light_entity || '';
   }
 
   _knownState(states, key) {
-    const baseId = _P3D_KNOWN[key];
-    if (!baseId) return null;
-    if (states[baseId]) return states[baseId];
-    const prefix = (this.config?.views?.printer3d?.entity_prefix || '').trim();
-    if (prefix && prefix !== '3dprinter_a1mini') {
-      const altId = baseId.replace('3dprinter_a1mini', prefix);
-      if (states[altId]) return states[altId];
+    const p3dCfg = this.config?.views?.printer3d || {};
+    const prefix = (p3dCfg.entity_prefix || '').trim();
+    if (!prefix) return null;
+    const suf = _P3D_KNOWN_SUFFIXES[key];
+    if (!suf) return null;
+    for (const dom of ['sensor', 'fan', 'number', 'select']) {
+      const eid = `${dom}.${prefix}${suf}`;
+      if (states[eid]) return states[eid];
     }
     return null;
   }
 
   _buildShell() {
-    this._subEl = h('div', { class: 'subview-sub' }, 'Bambu Lab A1 Mini');
+    this._subEl = h('div', { class: 'subview-sub' }, '3D-Drucker Status & Steuerung');
     this._lightBtn = h('button', {
       type: 'button', class: 'btn', hidden: true,
       onClick: () => this.hass?.callService('light', 'toggle', { entity_id: this._lightId() }),
@@ -12189,8 +12882,7 @@ class Printer3DView {
           h('h2', { class: 'subview-title' }, '3D-Drucker'),
           this._subEl)),
       h('div', { class: 'subview-actions' },
-        this._lightBtn,
-        this.onBack ? h('button', { type: 'button', class: 'btn', onClick: this.onBack }, icon('mdi:arrow-left'), 'Zurück') : null));
+        this._lightBtn));
 
     // Print Status Hero
     this._jobTitleEl = h('div', { style: { fontSize: '16px', fontWeight: '700' } }, 'Standby');
@@ -12199,7 +12891,10 @@ class Printer3DView {
     this._progressFillEl = h('div', { class: 'progress-bar-fill', style: { width: '0%', background: '#10b981' } });
     this._heroKpiGrid = h('div', { class: 'kpi-grid' });
 
-    const statusSec = h('section', { class: 'subview-section' },
+    this._statusSec = h('section', {
+      class: 'subview-section',
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('printer3d'); },
+    },
       h('div', { class: 'subview-section-head' },
         h('div', { class: 'subview-section-title' }, icon('mdi:cube-scan'), 'Druckstatus'),
         this._stepBadgeEl),
@@ -12211,25 +12906,33 @@ class Printer3DView {
 
     // Controls Section (Fan, Speed, Nozzle & Bed Target Temps, Action buttons)
     this._controlsWrap = h('div', { style: { display: 'grid', gap: '10px', minWidth: '0' } });
-    const ctrlSec = h('section', { class: 'subview-section' },
+    this._ctrlSec = h('section', {
+      class: 'subview-section',
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('printer3d'); },
+    },
       h('div', { class: 'subview-section-head' },
         h('div', { class: 'subview-section-title' }, icon('mdi:tune-variant'), 'Steuerung')),
       this._controlsWrap);
 
     // Details & Specs
     this._detailsWrap = h('div', { class: 'log-list' });
-    const detailsSec = h('section', { class: 'subview-section' },
+    this._detailsSec = h('section', {
+      class: 'subview-section',
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('printer3d'); },
+    },
       h('div', { class: 'subview-section-head' },
         h('div', { class: 'subview-section-title' }, icon('mdi:information-outline'), 'Drucker-Details')),
       this._detailsWrap);
 
-    this.el.append(head, statusSec, ctrlSec, detailsSec);
+    this.el.append(head, this._statusSec, this._ctrlSec, this._detailsSec);
   }
 
   _collectEntityIds(states) {
     const p3dCfg = this.config?.views?.printer3d || {};
-    const devId = p3dCfg.device_id || _P3D_DEVICE_ID;
-    const prefix = p3dCfg.entity_prefix || '3dprinter_a1mini';
+    const devId = (p3dCfg.device_id || '').trim();
+    const prefix = (p3dCfg.entity_prefix || '').trim();
+    if (!devId && !prefix) return [];
+
     const haEnts = this.hass?.entities || {};
     const ids = new Set();
 
@@ -12237,25 +12940,40 @@ class Printer3DView {
       if (!entry || entry.disabled_by) continue;
       if (['config', 'diagnostic'].includes(entry.entity_category)) continue;
       if (!states[eid]) continue;
-      if (entry.device_id === devId || eid.toLowerCase().includes(prefix.toLowerCase())) {
+      if ((devId && entry.device_id === devId) || (prefix && eid.toLowerCase().includes(prefix.toLowerCase()))) {
         ids.add(eid);
       }
     }
-    for (const id of Object.values(_P3D_KNOWN)) {
-      const altId = prefix && prefix !== '3dprinter_a1mini' ? id.replace('3dprinter_a1mini', prefix) : id;
-      if (states[id]) ids.add(id);
-      if (states[altId]) ids.add(altId);
-    }
-    for (const id of Object.keys(states)) {
-      if (id.toLowerCase().includes(prefix.toLowerCase())) ids.add(id);
+    if (prefix) {
+      for (const suf of Object.values(_P3D_KNOWN_SUFFIXES)) {
+        for (const dom of ['sensor', 'fan', 'number', 'select']) {
+          const eid = `${dom}.${prefix}${suf}`;
+          if (states[eid]) ids.add(eid);
+        }
+      }
+      for (const id of Object.keys(states)) {
+        if (id.toLowerCase().includes(prefix.toLowerCase())) ids.add(id);
+      }
     }
     return [...ids].sort();
   }
 
-  update(hass, config) {
+  update(hass, arg1, arg2, arg3) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
-    if (config !== undefined) this.config = config;
+    if (arg1 && (Array.isArray(arg1.rooms) || 'configured' in arg1)) {
+      this.layout = arg1;
+      if (arg2 !== undefined) this.config = arg2;
+      if (arg3 !== undefined) this.ctx = arg3;
+    } else {
+      if (arg1 !== undefined) this.config = arg1;
+      if (arg2 !== undefined) this.ctx = arg2;
+    }
+    const editMode = Boolean(this.ctx?.editMode);
+    this._statusSec?.toggleAttribute('data-edit-mode', editMode);
+    this._ctrlSec?.toggleAttribute('data-edit-mode', editMode);
+    this._detailsSec?.toggleAttribute('data-edit-mode', editMode);
+
     const states = hass.states || {};
     const ids = this._collectEntityIds(states);
 
@@ -12268,7 +12986,7 @@ class Printer3DView {
       this._lightBtn.hidden = true;
     }
 
-    const sig = `${lightId}|` + ids.map((id) => `${id}:${states[id]?.state}:${states[id]?.attributes?.percentage ?? ''}`).join('|');
+    const sig = `${editMode ? 1 : 0}|${lightId}|` + ids.map((id) => `${id}:${states[id]?.state}:${states[id]?.attributes?.percentage ?? ''}`).join('|');
     if (sig === this._lastSig) return;
     this._lastSig = sig;
 
@@ -12444,22 +13162,7 @@ class Printer3DView {
 
 
 // ─── START: components/view_more.js ───
-// More View: Unified Navigation Hub (Topics & Settings), Persons & iPhone Batteries, Exterior Temp, Trash Preview & Helpers.
-const _MORE_PEOPLE_TRACKERS = [
-  { tracker: 'device_tracker.iphonevonbrigitte', name: 'Gitte', battery: 'sensor.gitte_battery_level' },
-  { tracker: 'device_tracker.iphonevonjulian', name: 'Julian', battery: 'sensor.ahmalo_battery_level' },
-  { tracker: 'device_tracker.iphonevonmatilda', name: 'Matilda', battery: 'sensor.matilda_battery_level' },
-  { tracker: 'device_tracker.iphonevonsven', name: 'Sven', battery: 'sensor.ios_mphcv50qjl_battery_level' },
-];
-
-const _MORE_SCHIMMELDRY = [
-  { id: 'switch.schimmeldry', name: 'Schimmeldry', icon: 'mdi:fan', toggle: true },
-  { id: 'sensor.schimmeldry_tageslaufzeit', name: 'Tageslaufzeit', icon: 'mdi:timer-outline', toggle: false },
-  { id: 'automation.schimmeldry_um_9_an', name: 'Schimmeldry um 9 Uhr an', icon: 'mdi:clock-start', toggle: true },
-  { id: 'automation.batterie_leer_schimmeldry_aus', name: 'Batterie leer → Aus', icon: 'mdi:battery-alert', toggle: true },
-  { id: 'automation.kein_ertrag_solar_aus', name: 'Kein Solar-Ertrag → Aus', icon: 'mdi:solar-power', toggle: true },
-];
-
+// More View: Unified Navigation Hub, Configured Weather/Temp/Router & Trash, Configured Batteries & Helpers.
 function _moreBatColor(pct) {
   if (pct == null) return '#64748b';
   if (pct <= 20) return '#ef4444';
@@ -12500,14 +13203,15 @@ const _WEATHER_DE = {
   sunny: 'Sonnig', windy: 'Windig', 'windy-variant': 'Windig', exceptional: 'Ausnahme',
 };
 class MoreView {
-  constructor({ hass, config, user, isAdmin, onNavigate, onOpenSettings, onBack }) {
+  constructor({ hass, layout, config, user, isAdmin, ctx, onNavigate, onOpenSettings } = {}) {
     this.hass = hass;
+    this.layout = layout || null;
     this.config = config;
-    this.user = user;
-    this.isAdmin = Boolean(isAdmin);
-    this.onNavigate = onNavigate;
-    this.onOpenSettings = onOpenSettings;
-    this.onBack = onBack;
+    this.user = user || ctx?.user;
+    this.isAdmin = Boolean(isAdmin ?? ctx?.isAdmin);
+    this.ctx = ctx || {};
+    this.onNavigate = onNavigate || ((v) => this.ctx?.onNavigate?.(v));
+    this.onOpenSettings = onOpenSettings || (() => this.ctx?.onOpenSettings?.('more'));
     this._destroyed = false;
     this._lastSig = '';
     this._hubSig = '';
@@ -12518,7 +13222,7 @@ class MoreView {
 
     this.el = h('div', { class: 'subview-page', style: { '--view-color': '#03a9f4' } });
     this._buildShell();
-    if (hass) this.update(hass, config, user, isAdmin);
+    if (hass) this.update(hass, layout, config, ctx);
   }
 
   destroy() {
@@ -12531,9 +13235,7 @@ class MoreView {
         h('div', { class: 'subview-hero-icon' }, icon('mdi:view-grid-plus-outline')),
         h('div', { style: { minWidth: '0' } },
           h('h2', { class: 'subview-title' }, 'Mehr & Bereiche'),
-          h('div', { class: 'subview-sub' }, 'Themen, Batterien, Wetter & Müllplan'))),
-      h('div', { class: 'subview-actions' },
-        this.onBack ? h('button', { type: 'button', class: 'btn', onClick: this.onBack }, icon('mdi:arrow-left'), 'Zurück') : null));
+          h('div', { class: 'subview-sub' }, 'Themen, Wetter, Müllplan & konfigurierte Geräte'))));
 
     // Topic Hub Grid
     this._hubGrid = h('div', { class: 'more-grid' });
@@ -12542,39 +13244,41 @@ class MoreView {
         h('div', { class: 'subview-section-title' }, icon('mdi:compass-outline'), 'Bereiche')),
       this._hubGrid);
 
-    // Persons + iPhone Battery Grid
-    this._peopleGrid = h('div', { class: 'kpi-grid' });
-    this._peopleSec = h('section', { class: 'subview-section' },
-      h('div', { class: 'subview-section-head' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:account-group-outline'), 'Personen & Smartphones')),
-      this._peopleGrid);
-
     // Climate, System Status & Trash Preview
     this._tempCard = h('div', { class: 'kpi-grid' });
     this._trashList = h('div', { class: 'log-list' });
-    const infoSec = h('section', { class: 'subview-section' },
+    this._infoSec = h('section', {
+      class: 'subview-section',
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('more'); },
+    },
       h('div', { class: 'subview-section-head' },
         h('div', { class: 'subview-section-title' }, icon('mdi:calendar-month-outline'), 'Wetter, System & Müllplan')),
       this._tempCard,
       this._trashList);
 
-    // Full Battery Overview with filter chips & low-first sorting
+    // Full Battery Overview (strictly configured devices)
     this._batFilters = h('div', { class: 'filter-chips' });
     this._batList = h('div', { class: 'log-list' });
-    this._batSec = h('section', { class: 'subview-section', hidden: true },
+    this._batSec = h('section', {
+      class: 'subview-section', hidden: true,
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('more'); },
+    },
       h('div', { class: 'subview-section-head' },
         h('div', { class: 'subview-section-title' }, icon('mdi:battery-charging-80'), 'Batterie-Übersicht'),
         this._batFilters),
       this._batList);
 
-    // Schimmeldry & Helpers
+    // Configured Helpers
     this._helpersWrap = h('div', { class: 'log-list' });
-    this._helpersSec = h('section', { class: 'subview-section', hidden: true },
+    this._helpersSec = h('section', {
+      class: 'subview-section', hidden: true,
+      onClick: () => { if (this.ctx?.editMode) this.ctx?.onOpenSettings?.('more'); },
+    },
       h('div', { class: 'subview-section-head' },
-        h('div', { class: 'subview-section-title' }, icon('mdi:fan'), 'Schimmeldry & Automationen')),
+        h('div', { class: 'subview-section-title' }, icon('mdi:tune-variant'), 'Konfigurierte Helfer')),
       this._helpersWrap);
 
-    this.el.append(head, hubSec, this._peopleSec, infoSec, this._batSec, this._helpersSec);
+    this.el.append(head, hubSec, this._infoSec, this._batSec, this._helpersSec);
   }
 
   _viewVisible(viewId) {
@@ -12634,43 +13338,65 @@ class MoreView {
   }
 
   _trashCalendars(states) {
-    const configured = (this.config?.trash?.calendar_entities || []).filter((id) => id && states[id]);
-    if (configured.length) return configured;
-    if (states['calendar.muellplan']) return ['calendar.muellplan'];
-    return Object.keys(states).filter((id) => id.startsWith('calendar.') && /m[uü]ll|abfall|trash/i.test(id));
+    return (this.config?.trash?.calendar_entities || []).filter((id) => id && states[id]);
   }
 
   _weatherEntity(states) {
     const cfgId = this.config?.views?.more?.weather_entity || this.config?.weather_entity;
-    if (cfgId && states[cfgId]) return cfgId;
-    if (states['weather.forecast_home']) return 'weather.forecast_home';
-    return Object.keys(states).find((id) => id.startsWith('weather.')) || '';
+    return (cfgId && states[cfgId]) ? cfgId : '';
   }
 
   _tempEntity(states) {
     const cfgId = this.config?.views?.more?.temp_entity;
-    if (cfgId && states[cfgId]) return cfgId;
-    if (states['sensor.aussentemperatur_fallback']) return 'sensor.aussentemperatur_fallback';
-    return Object.keys(states).find((id) => (
-      id.startsWith('sensor.')
-      && states[id]?.attributes?.device_class === 'temperature'
-      && /aussen|außen|outdoor|exterior/i.test(`${id} ${states[id]?.attributes?.friendly_name || ''}`)
-    )) || '';
+    return (cfgId && states[cfgId]) ? cfgId : '';
   }
 
   _routerEntity(states) {
     const cfgId = this.config?.views?.more?.router_entity || this.config?.views?.security?.router_entity;
-    if (cfgId && states[cfgId]) return cfgId;
-    if (states['binary_sensor.fritz_box_7590_ax_verbindung']) return 'binary_sensor.fritz_box_7590_ax_verbindung';
-    return Object.keys(states).find((id) => /fritz.*verbindung|router.*online/i.test(id)) || '';
+    return (cfgId && states[cfgId]) ? cfgId : '';
   }
 
-  update(hass, config, user, isAdmin) {
+  _configuredBatteryIds(states) {
+    const cfgDevs = new Set([
+      ...(this.layout?.configured?.device_ids || []),
+      ...Object.keys(this.config?.devices || {}),
+    ]);
+    const cfgEnts = new Set(this.layout?.configured?.entity_ids || []);
+    const entToDev = this.layout?.configured?.entity_to_device || {};
+    const haEnts = this.hass?.entities || {};
+
+    return Object.keys(states)
+      .filter((id) => {
+        if (!id.startsWith('sensor.') || states[id]?.attributes?.device_class !== 'battery') return false;
+        const devId = entToDev[id] || haEnts[id]?.device_id;
+        return cfgEnts.has(id) || (devId && cfgDevs.has(devId));
+      })
+      .sort();
+  }
+
+  update(hass, arg1, arg2, arg3) {
     if (this._destroyed || !hass) return;
     this.hass = hass;
-    if (config !== undefined) this.config = config;
-    if (user !== undefined) this.user = user;
-    if (isAdmin !== undefined) this.isAdmin = Boolean(isAdmin);
+    if (arg1 && (Array.isArray(arg1.rooms) || 'configured' in arg1)) {
+      this.layout = arg1;
+      if (arg2 !== undefined) this.config = arg2;
+      if (arg3 !== undefined) this.ctx = arg3;
+    } else {
+      if (arg1 !== undefined) this.config = arg1;
+      if (arg2 && typeof arg2 === 'object' && ('editMode' in arg2 || 'onOpenSettings' in arg2)) {
+        this.ctx = arg2;
+      } else {
+        if (arg2 !== undefined) this.user = arg2;
+        if (arg3 !== undefined) this.isAdmin = Boolean(arg3);
+      }
+    }
+    if (this.ctx?.user !== undefined) this.user = this.ctx.user;
+    if (this.ctx?.isAdmin !== undefined) this.isAdmin = Boolean(this.ctx.isAdmin);
+
+    const editMode = Boolean(this.ctx?.editMode);
+    this._infoSec?.toggleAttribute('data-edit-mode', editMode);
+    this._batSec?.toggleAttribute('data-edit-mode', editMode);
+    this._helpersSec?.toggleAttribute('data-edit-mode', editMode);
 
     this._renderHub();
 
@@ -12679,25 +13405,22 @@ class MoreView {
     const weatherId = this._weatherEntity(states);
     const tempId = this._tempEntity(states);
     const routerId = this._routerEntity(states);
-    const batIds = Object.keys(states)
-      .filter((id) => id.startsWith('sensor.') && states[id]?.attributes?.device_class === 'battery')
-      .sort();
+    const batIds = this._configuredBatteryIds(states);
+    const helperIds = (Array.isArray(this.config?.views?.more?.helpers) ? this.config.views.more.helpers : [])
+      .map((s) => s?.id).filter(Boolean);
 
     const trackedIds = [
-      ..._MORE_PEOPLE_TRACKERS.flatMap((p) => [p.tracker, p.battery]),
-      ...((this.config?.persons || []).map((p) => p.entity_id).filter(Boolean)),
       weatherId,
       tempId,
       routerId,
       ...cals,
       ...batIds,
-      ..._MORE_SCHIMMELDRY.map((s) => s.id),
+      ...helperIds,
     ].filter(Boolean);
 
-    const sig = trackedIds.map((id) => `${id}:${states[id]?.state}`).join('|') + `|bf:${this._batFilter}`;
+    const sig = trackedIds.map((id) => `${id}:${states[id]?.state}`).join('|') + `|bf:${this._batFilter}|em:${editMode ? 1 : 0}`;
     if (sig !== this._lastSig) {
       this._lastSig = sig;
-      this._renderPeople(states);
       this._renderTempAndTrash(states);
       this._renderBatteries(states, batIds);
       this._renderHelpers(states);
@@ -12713,55 +13436,9 @@ class MoreView {
     }
   }
 
-  _renderPeople(states) {
-    const cards = [];
-    for (const p of _MORE_PEOPLE_TRACKERS) {
-      const tr = states[p.tracker];
-      const bat = states[p.battery];
-      if (!tr && !bat) continue;
-      const isHome = tr?.state === 'home';
-      const batPct = numeric(bat);
-      const batColor = _moreBatColor(batPct);
-
-      cards.push(h('div', {
-        class: 'kpi-card',
-        style: { '--kpi-color': isHome ? '#10b981' : '#64748b' },
-        onClick: () => moreInfo(this.el, (tr || bat).entity_id),
-      },
-        h('div', { class: 'kpi-top' }, icon(isHome ? 'mdi:home-account' : 'mdi:account-arrow-right'), h('span', {}, p.name)),
-        h('div', { class: 'kpi-val', style: { fontSize: '16px' } },
-          tr ? (isHome ? 'Zuhause' : tr.state === 'not_home' ? 'Abwesend' : tr.state) : '—'),
-        h('div', {
-          class: 'kpi-sub',
-          style: { color: batPct != null ? batColor : 'var(--cd-secondary)', fontWeight: '600' },
-          onClick: (e) => { if (bat) { e.stopPropagation(); moreInfo(this.el, bat.entity_id); } },
-        }, bat ? `Akku: ${formatState(bat)}` : 'Kein Akku-Sensor')));
-    }
-
-    if (!cards.length) {
-      const configuredPersons = (this.config?.persons || [])
-        .map((p) => states[p.entity_id])
-        .filter(Boolean);
-      const fallbackPersons = configuredPersons.length
-        ? configuredPersons
-        : Object.values(states).filter((s) => s.entity_id.startsWith('person.')).slice(0, 6);
-      for (const s of fallbackPersons) {
-        const isHome = s.state === 'home';
-        cards.push(h('div', {
-          class: 'kpi-card', style: { '--kpi-color': isHome ? '#10b981' : '#64748b' },
-          onClick: () => moreInfo(this.el, s.entity_id),
-        },
-          h('div', { class: 'kpi-top' }, icon('mdi:account'), h('span', {}, s.attributes?.friendly_name || s.entity_id)),
-          h('div', { class: 'kpi-val', style: { fontSize: '16px' } }, isHome ? 'Zuhause' : s.state === 'not_home' ? 'Abwesend' : s.state)));
-      }
-    }
-
-    this._peopleSec.hidden = cards.length === 0;
-    this._peopleGrid.replaceChildren(...cards);
-  }
-
   _renderTempAndTrash(states) {
     const cards = [];
+    const editMode = Boolean(this.ctx?.editMode);
     const wId = this._weatherEntity(states);
     const wst = wId ? states[wId] : null;
     if (wst) {
@@ -12770,7 +13447,11 @@ class MoreView {
       const unit = this.hass?.config?.unit_system?.temperature || '°C';
       cards.push(h('div', {
         class: 'kpi-card', style: { '--kpi-color': '#38bdf8' },
-        onClick: () => moreInfo(this.el, wst.entity_id),
+        onClick: (e) => {
+          if (editMode) return;
+          e.stopPropagation();
+          moreInfo(this.el, wst.entity_id);
+        },
       },
         h('div', { class: 'kpi-top' }, icon('mdi:weather-partly-cloudy'), h('span', {}, wst.attributes?.friendly_name || 'Wetter')),
         h('div', { class: 'kpi-val' }, wTemp != null ? `${wTemp}${unit}` : cond),
@@ -12782,16 +13463,15 @@ class MoreView {
     if (ext) {
       cards.push(h('div', {
         class: 'kpi-card', style: { '--kpi-color': '#4dd0e1' },
-        onClick: () => moreInfo(this.el, ext.entity_id),
+        onClick: (e) => {
+          if (editMode) return;
+          e.stopPropagation();
+          moreInfo(this.el, ext.entity_id);
+        },
       },
         h('div', { class: 'kpi-top' }, icon('mdi:thermometer'), h('span', {}, 'Außentemperatur')),
         h('div', { class: 'kpi-val' }, formatState(ext)),
         h('div', { class: 'kpi-sub' }, 'Tippen für Verlauf')));
-    } else if (!wst) {
-      cards.push(h('div', { class: 'kpi-card' },
-        h('div', { class: 'kpi-top' }, icon('mdi:thermometer'), h('span', {}, 'Außentemperatur')),
-        h('div', { class: 'kpi-val' }, '—'),
-        h('div', { class: 'kpi-sub' }, 'Kein Sensor')));
     }
 
     const rId = this._routerEntity(states);
@@ -12800,11 +13480,21 @@ class MoreView {
       const online = fritz.state === 'on';
       cards.push(h('div', {
         class: 'kpi-card', style: { '--kpi-color': online ? '#10b981' : '#ef4444' },
-        onClick: () => moreInfo(this.el, fritz.entity_id),
+        onClick: (e) => {
+          if (editMode) return;
+          e.stopPropagation();
+          moreInfo(this.el, fritz.entity_id);
+        },
       },
         h('div', { class: 'kpi-top' }, icon(online ? 'mdi:router-wireless' : 'mdi:router-wireless-off'), h('span', {}, 'Router')),
         h('div', { class: 'kpi-val', style: { fontSize: '16px', color: online ? '#10b981' : '#ef4444' } }, online ? 'Online' : 'Offline'),
         h('div', { class: 'kpi-sub' }, fritz.attributes?.friendly_name || fritz.entity_id)));
+    }
+
+    if (!cards.length) {
+      cards.push(h('div', { class: 'kpi-card' },
+        h('div', { class: 'kpi-top' }, icon('mdi:cog-outline'), h('span', {}, 'Info-Kacheln')),
+        h('div', { class: 'kpi-sub' }, '• Wetter, Außentemperatur oder Router in Einstellungen wählen')));
     }
 
     this._tempCard.replaceChildren(...cards);
@@ -12853,12 +13543,16 @@ class MoreView {
       return;
     }
     this._trashList.replaceChildren(...this._trashEvents.slice(0, 8).map((ev) => {
-      const targetCal = ev._entityId || cals[0] || 'calendar.muellplan';
+      const targetCal = ev._entityId || cals[0] || '';
       const title = ev.summary || ev.title || 'Abholung';
       const match = this._matchTrashPattern(title);
       return h('div', {
-        class: 'log-row', style: { cursor: 'pointer' },
-        onClick: () => moreInfo(this.el, targetCal),
+        class: 'log-row', style: targetCal ? { cursor: 'pointer' } : {},
+        onClick: (e) => {
+          if (this.ctx?.editMode || !targetCal) return;
+          e.stopPropagation();
+          moreInfo(this.el, targetCal);
+        },
       },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1' } },
           h('span', { style: { color: match.color || 'var(--cd-secondary)', display: 'inline-flex', flex: 'none' } }, icon(match.icon)),
@@ -12993,7 +13687,8 @@ class MoreView {
 
   _renderHelpers(states) {
     const customHelpers = this.config?.views?.more?.helpers;
-    const items = Array.isArray(customHelpers) && customHelpers.length ? customHelpers : _MORE_SCHIMMELDRY;
+    const items = Array.isArray(customHelpers) ? customHelpers : [];
+    const editMode = Boolean(this.ctx?.editMode);
     const rows = [];
     for (const item of items) {
       const st = states[item.id];
@@ -13002,16 +13697,30 @@ class MoreView {
         const isOn = st.state === 'on';
         const dom = item.id.split('.')[0];
         rows.push(h('div', { class: 'log-row', style: { padding: '8px 12px' } },
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1', cursor: 'pointer' }, onClick: () => moreInfo(this.el, item.id) },
+          h('div', {
+            style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1', cursor: 'pointer' },
+            onClick: (e) => {
+              if (editMode) return;
+              e.stopPropagation();
+              moreInfo(this.el, item.id);
+            },
+          },
             icon(item.icon || 'mdi:toggle-switch'),
             h('span', { class: 'log-row-main' }, st.attributes?.friendly_name || item.name || item.id)),
           h('button', {
             type: 'button', class: `btn sm${isOn ? ' primary' : ''}`,
             disabled: isUnavailable(st),
-            onClick: () => this.hass?.callService(dom, 'toggle', { entity_id: item.id }),
+            onClick: (e) => { e.stopPropagation(); this.hass?.callService(dom, 'toggle', { entity_id: item.id }); },
           }, isOn ? 'Ein' : 'Aus')));
       } else {
-        rows.push(h('div', { class: 'log-row', style: { cursor: 'pointer' }, onClick: () => moreInfo(this.el, item.id) },
+        rows.push(h('div', {
+          class: 'log-row', style: { cursor: 'pointer' },
+          onClick: (e) => {
+            if (editMode) return;
+            e.stopPropagation();
+            moreInfo(this.el, item.id);
+          },
+        },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flex: '1' } },
             icon(item.icon || 'mdi:information-outline'),
             h('span', { class: 'log-row-main' }, st.attributes?.friendly_name || item.name || item.id)),
@@ -13276,6 +13985,7 @@ class CompanionDashboardPanel extends HTMLElement {
       onOpenGroup: (groupId) => {
         this._openWizard(null, groupId);
       },
+      onOpenSettings: () => this._openSettings(),
       isEditMode: () => !!this._editMode,
     };
 
@@ -13321,33 +14031,42 @@ class CompanionDashboardPanel extends HTMLElement {
     const activeView = this._activeView;
     if (activeView && activeView !== 'overview') {
       let viewInst = null;
-      const goBack = () => this._navigate(this._prevView === 'more' && ['auto', 'printer3d'].includes(activeView) ? 'more' : 'overview');
-      if (activeView === 'security') viewInst = new SecurityView({ hass: this._hass, config, onBack: goBack });
-      else if (activeView === 'solar') viewInst = new SolarView({ hass: this._hass, config, onBack: goBack });
-      else if (activeView === 'blinds') viewInst = new BlindsView({ hass: this._hass, layout, config, onBack: goBack });
-      else if (activeView === 'auto') viewInst = new AutoView({ hass: this._hass, config, onBack: goBack });
-      else if (activeView === 'printer3d') viewInst = new Printer3DView({ hass: this._hass, config, onBack: goBack });
+      if (activeView === 'security') viewInst = new SecurityView({ hass: this._hass, layout, config, ctx });
+      else if (activeView === 'solar') viewInst = new SolarView({ hass: this._hass, layout, config, ctx });
+      else if (activeView === 'blinds') viewInst = new BlindsView({ hass: this._hass, layout, config, ctx });
+      else if (activeView === 'auto') viewInst = new AutoView({ hass: this._hass, layout, config, ctx });
+      else if (activeView === 'printer3d') viewInst = new Printer3DView({ hass: this._hass, layout, config, ctx });
       else if (activeView === 'more') {
         viewInst = new MoreView({
           hass: this._hass,
+          layout,
           config,
+          ctx,
           user,
           isAdmin: !!user?.is_admin,
           onNavigate: (target) => this._navigate(target),
           onOpenSettings: () => this._openSettings(),
-          onBack: () => this._navigate('overview'),
         });
       }
 
       if (viewInst) {
         this._ro?.disconnect();
-        this._backBtn.hidden = false;
-        this._menuBtn.hidden = true;
+        this._backBtn.hidden = true;
+        this._menuBtn.hidden = !this._narrow;
         this._syncToolbar();
         this._nav = this._makeNavBar(config, user);
         this._components = [viewInst];
         this._content.replaceChildren(viewInst.el, this._nav.el);
+        if (this._editMode && this._editBanner) {
+          this._content.prepend(this._editBanner);
+        }
         this._push();
+        if (activeView === 'security' && this._pendingSecuritySmokeScroll) {
+          this._pendingSecuritySmokeScroll = false;
+          requestAnimationFrame(() => {
+            this._content.querySelector('#security-smoke')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
+        }
         return;
       }
       this._activeView = 'overview';
@@ -13363,15 +14082,21 @@ class CompanionDashboardPanel extends HTMLElement {
     this._greeting = h('h1', {});
     this._badges = new Badges(config.badges, user, (target) => this._navigate(target));
 
-    // Side column (alerts / trash / persons / announcement)
-    this._smoke = new SmokeAlerts();
+    // Smoke alert banner right under status badges (configured smoke detectors only)
+    this._smoke = new SmokeAlerts({
+      onOpenSmoke: () => {
+        this._pendingSecuritySmokeScroll = true;
+        this._navigate('security');
+      },
+    });
+    this._smoke.setLayout(layout);
+
+    // Side column (warning / trash / announcement — persons removed from home overview)
     this._warning = new WarningCard(config.warning, () => this._openWarningDetail());
     this._trash = new TrashCard(config.trash);
-    this._persons = new PersonCards(config.persons, user);
     this._announce = new AnnounceCard(config.announce);
 
-    const hasSide = !!(config.warning?.entity_id || config.trash?.calendar_entities?.length
-      || config.persons?.length || config.announce?.entity_id);
+    const hasSide = !!(config.warning?.entity_id || config.trash?.calendar_entities?.length || config.announce?.entity_id);
 
     // Rooms (independent masonry columns layout)
     this._rooms = layout.rooms.map((r) => new Room(r, ctx));
@@ -13380,14 +14105,14 @@ class CompanionDashboardPanel extends HTMLElement {
 
     this._nav = this._makeNavBar(config, user);
 
-    this._components = [this._badges, this._smoke, this._warning, this._trash, this._persons, this._announce, ...this._rooms];
+    this._components = [this._badges, this._smoke, this._warning, this._trash, this._announce, ...this._rooms];
 
     this._content.replaceChildren(
       h('div', { class: 'greeting' }, this._greeting),
       this._badges.el,
       this._smoke.el,
       h('div', { class: `layout${hasSide ? ' has-side' : ''}` },
-        hasSide ? h('div', { class: 'side' }, this._warning.el, this._trash.el, this._persons.el, this._announce.el) : null,
+        hasSide ? h('div', { class: 'side' }, this._warning.el, this._trash.el, this._announce.el) : null,
         h('div', { class: 'main' }, roomsEl)),
       this._nav.el);
 
@@ -13462,12 +14187,15 @@ class CompanionDashboardPanel extends HTMLElement {
 
   _greetingText(hass) {
     const name = hass.user?.name || '';
-    const entityId = this._data.config.greeting_entity;
-    const st = entityId ? hass.states[entityId] : null;
-    let hello = st && st.state && !['unknown', 'unavailable'].includes(st.state) ? st.state : '';
-    if (!hello) {
-      const hour = new Date().getHours();
-      hello = hour < 5 ? 'Gute Nacht' : hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend';
+    const g = this._data?.config?.greetings || {};
+    const hour = new Date().getHours();
+    let hello;
+    if (hour < 11) {
+      hello = (typeof g.morning === 'string' && g.morning.trim()) ? g.morning.trim() : 'Guten Morgen';
+    } else if (hour < 18) {
+      hello = (typeof g.day === 'string' && g.day.trim()) ? g.day.trim() : 'Guten Tag';
+    } else {
+      hello = (typeof g.evening === 'string' && g.evening.trim()) ? g.evening.trim() : 'Guten Abend';
     }
     return name ? `${hello}, ${name}` : hello;
   }
@@ -13535,6 +14263,7 @@ class CompanionDashboardPanel extends HTMLElement {
     } else {
       this._editBanner?.remove();
     }
+    this._push();
   }
 
   // ── room edit modal ──

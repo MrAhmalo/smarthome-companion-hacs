@@ -9,7 +9,7 @@ import { Room } from './components/room.js';
 import { RoomDetailView } from './components/room_detail.js';
 import { WarningDetailView } from './components/warning_detail.js';
 import {
-  Badges, SmokeAlerts, WarningCard, TrashCard, PersonCards, AnnounceCard, NavBar,
+  Badges, SmokeAlerts, WarningCard, TrashCard, AnnounceCard, NavBar,
 } from './components/specials.js';
 import { Settings } from './components/settings.js';
 import { RoomEditModal } from './components/room_modals.js';
@@ -271,6 +271,7 @@ class CompanionDashboardPanel extends HTMLElement {
       onOpenGroup: (groupId) => {
         this._openWizard(null, groupId);
       },
+      onOpenSettings: () => this._openSettings(),
       isEditMode: () => !!this._editMode,
     };
 
@@ -316,33 +317,42 @@ class CompanionDashboardPanel extends HTMLElement {
     const activeView = this._activeView;
     if (activeView && activeView !== 'overview') {
       let viewInst = null;
-      const goBack = () => this._navigate(this._prevView === 'more' && ['auto', 'printer3d'].includes(activeView) ? 'more' : 'overview');
-      if (activeView === 'security') viewInst = new SecurityView({ hass: this._hass, config, onBack: goBack });
-      else if (activeView === 'solar') viewInst = new SolarView({ hass: this._hass, config, onBack: goBack });
-      else if (activeView === 'blinds') viewInst = new BlindsView({ hass: this._hass, layout, config, onBack: goBack });
-      else if (activeView === 'auto') viewInst = new AutoView({ hass: this._hass, config, onBack: goBack });
-      else if (activeView === 'printer3d') viewInst = new Printer3DView({ hass: this._hass, config, onBack: goBack });
+      if (activeView === 'security') viewInst = new SecurityView({ hass: this._hass, layout, config, ctx });
+      else if (activeView === 'solar') viewInst = new SolarView({ hass: this._hass, layout, config, ctx });
+      else if (activeView === 'blinds') viewInst = new BlindsView({ hass: this._hass, layout, config, ctx });
+      else if (activeView === 'auto') viewInst = new AutoView({ hass: this._hass, layout, config, ctx });
+      else if (activeView === 'printer3d') viewInst = new Printer3DView({ hass: this._hass, layout, config, ctx });
       else if (activeView === 'more') {
         viewInst = new MoreView({
           hass: this._hass,
+          layout,
           config,
+          ctx,
           user,
           isAdmin: !!user?.is_admin,
           onNavigate: (target) => this._navigate(target),
           onOpenSettings: () => this._openSettings(),
-          onBack: () => this._navigate('overview'),
         });
       }
 
       if (viewInst) {
         this._ro?.disconnect();
-        this._backBtn.hidden = false;
-        this._menuBtn.hidden = true;
+        this._backBtn.hidden = true;
+        this._menuBtn.hidden = !this._narrow;
         this._syncToolbar();
         this._nav = this._makeNavBar(config, user);
         this._components = [viewInst];
         this._content.replaceChildren(viewInst.el, this._nav.el);
+        if (this._editMode && this._editBanner) {
+          this._content.prepend(this._editBanner);
+        }
         this._push();
+        if (activeView === 'security' && this._pendingSecuritySmokeScroll) {
+          this._pendingSecuritySmokeScroll = false;
+          requestAnimationFrame(() => {
+            this._content.querySelector('#security-smoke')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
+        }
         return;
       }
       this._activeView = 'overview';
@@ -358,15 +368,21 @@ class CompanionDashboardPanel extends HTMLElement {
     this._greeting = h('h1', {});
     this._badges = new Badges(config.badges, user, (target) => this._navigate(target));
 
-    // Side column (alerts / trash / persons / announcement)
-    this._smoke = new SmokeAlerts();
+    // Smoke alert banner right under status badges (configured smoke detectors only)
+    this._smoke = new SmokeAlerts({
+      onOpenSmoke: () => {
+        this._pendingSecuritySmokeScroll = true;
+        this._navigate('security');
+      },
+    });
+    this._smoke.setLayout(layout);
+
+    // Side column (warning / trash / announcement — persons removed from home overview)
     this._warning = new WarningCard(config.warning, () => this._openWarningDetail());
     this._trash = new TrashCard(config.trash);
-    this._persons = new PersonCards(config.persons, user);
     this._announce = new AnnounceCard(config.announce);
 
-    const hasSide = !!(config.warning?.entity_id || config.trash?.calendar_entities?.length
-      || config.persons?.length || config.announce?.entity_id);
+    const hasSide = !!(config.warning?.entity_id || config.trash?.calendar_entities?.length || config.announce?.entity_id);
 
     // Rooms (independent masonry columns layout)
     this._rooms = layout.rooms.map((r) => new Room(r, ctx));
@@ -375,14 +391,14 @@ class CompanionDashboardPanel extends HTMLElement {
 
     this._nav = this._makeNavBar(config, user);
 
-    this._components = [this._badges, this._smoke, this._warning, this._trash, this._persons, this._announce, ...this._rooms];
+    this._components = [this._badges, this._smoke, this._warning, this._trash, this._announce, ...this._rooms];
 
     this._content.replaceChildren(
       h('div', { class: 'greeting' }, this._greeting),
       this._badges.el,
       this._smoke.el,
       h('div', { class: `layout${hasSide ? ' has-side' : ''}` },
-        hasSide ? h('div', { class: 'side' }, this._warning.el, this._trash.el, this._persons.el, this._announce.el) : null,
+        hasSide ? h('div', { class: 'side' }, this._warning.el, this._trash.el, this._announce.el) : null,
         h('div', { class: 'main' }, roomsEl)),
       this._nav.el);
 
@@ -457,12 +473,15 @@ class CompanionDashboardPanel extends HTMLElement {
 
   _greetingText(hass) {
     const name = hass.user?.name || '';
-    const entityId = this._data.config.greeting_entity;
-    const st = entityId ? hass.states[entityId] : null;
-    let hello = st && st.state && !['unknown', 'unavailable'].includes(st.state) ? st.state : '';
-    if (!hello) {
-      const hour = new Date().getHours();
-      hello = hour < 5 ? 'Gute Nacht' : hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Guten Tag' : 'Guten Abend';
+    const g = this._data?.config?.greetings || {};
+    const hour = new Date().getHours();
+    let hello;
+    if (hour < 11) {
+      hello = (typeof g.morning === 'string' && g.morning.trim()) ? g.morning.trim() : 'Guten Morgen';
+    } else if (hour < 18) {
+      hello = (typeof g.day === 'string' && g.day.trim()) ? g.day.trim() : 'Guten Tag';
+    } else {
+      hello = (typeof g.evening === 'string' && g.evening.trim()) ? g.evening.trim() : 'Guten Abend';
     }
     return name ? `${hello}, ${name}` : hello;
   }
@@ -530,6 +549,7 @@ class CompanionDashboardPanel extends HTMLElement {
     } else {
       this._editBanner?.remove();
     }
+    this._push();
   }
 
   // ── room edit modal ──

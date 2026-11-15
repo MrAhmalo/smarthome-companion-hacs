@@ -31,6 +31,7 @@ export function average(hass, ids) {
 export function applySmartTileLayout(tiles, grid = null) {
   if (!tiles || !tiles.length) return;
 
+  const priorityTiles = [];
   const topWide = [];
   const compactTiles = [];
   const sliderTiles = [];
@@ -38,7 +39,10 @@ export function applySmartTileLayout(tiles, grid = null) {
 
   for (const t of tiles) {
     const isGroup = t.spec?.is_group || t.is_group === true || t.constructor?.name === 'GroupTile';
-    if (isGroup) {
+    const effCat = t.spec ? effectiveCategory(t.spec) : effectiveCategory(t);
+    if (!isGroup && effCat === 'rauchmelder') {
+      priorityTiles.push(t);
+    } else if (isGroup) {
       bottomWide.push(t);
     } else if (t.isForceOwnRow) {
       sliderTiles.push(t);
@@ -49,6 +53,15 @@ export function applySmartTileLayout(tiles, grid = null) {
     } else {
       compactTiles.push(t);
     }
+  }
+
+  if (priorityTiles.length % 2 === 1) {
+    for (let i = 0; i < priorityTiles.length - 1; i++) {
+      priorityTiles[i].setWide(false);
+    }
+    priorityTiles[priorityTiles.length - 1].setWide(true);
+  } else {
+    priorityTiles.forEach((t) => t.setWide(false));
   }
 
   topWide.forEach((t) => t.setWide(true));
@@ -65,7 +78,7 @@ export function applySmartTileLayout(tiles, grid = null) {
   }
 
   if (grid) {
-    const ordered = [...topWide, ...compactTiles, ...sliderTiles, ...bottomWide];
+    const ordered = [...priorityTiles, ...topWide, ...compactTiles, ...sliderTiles, ...bottomWide];
     const current = Array.from(grid.children);
     const changed = current.length !== ordered.length || ordered.some((t, i) => current[i] !== t.el);
     if (changed) {
@@ -225,16 +238,17 @@ export class Room {
       this.tiles = spec.tiles.map(makeTileInstance);
     }
 
-    // Strict priority in room: 1. Jalousien (Rollläden), 2. Medien / TV, 3. Der Rest
+    // Strict priority in room: 0. Rauchmelder, 1. Jalousien (Rollläden), 2. Medien / TV, 3. Der Rest
     const tileWeight = (t) => {
-      if (t instanceof GroupedCoverTile) return 0;
+      if (t instanceof GroupedCoverTile) return 1;
       const cat = effectiveCategory(t);
-      if (cat === 'cover') return 0;
-      if (cat === 'media_player') return 1;
-      if (cat === 'light') return 2;
-      if (cat === 'outlet') return 3;
-      if (cat === 'switch') return 4;
-      return 5;
+      if (cat === 'rauchmelder' || cat === 'smoke') return 0;
+      if (cat === 'cover') return 1;
+      if (cat === 'media_player') return 2;
+      if (cat === 'light') return 3;
+      if (cat === 'outlet') return 4;
+      if (cat === 'switch') return 5;
+      return 6;
     };
     this.tiles.sort((a, b) => tileWeight(a) - tileWeight(b));
 
@@ -362,25 +376,32 @@ export class Room {
     if (group.key === 'cover') {
       const anyOpen = states.some((s) => s.state !== 'closed');
       const targetService = anyOpen ? 'close_cover' : 'open_cover';
+      const coverIds = [];
+      const otherIds = [];
       for (const id of group.ids) {
-        const dom = domainOf(id);
-        if (dom === 'cover') {
-          this.hass.callService('cover', targetService, { entity_id: id });
-        } else {
-          this.hass.callService(dom, targetService === 'close_cover' ? 'turn_off' : 'turn_on', { entity_id: id });
-        }
+        if (domainOf(id) === 'cover') coverIds.push(id);
+        else otherIds.push(id);
+      }
+      if (coverIds.length) {
+        this.hass.callService('cover', targetService, { entity_id: coverIds });
+      }
+      if (otherIds.length) {
+        this.hass.callService('homeassistant', targetService === 'close_cover' ? 'turn_off' : 'turn_on', { entity_id: otherIds });
       }
     } else {
       const anyOn = states.some((s) => isActive(s));
       const targetService = anyOn ? 'turn_off' : 'turn_on';
+      const lightIds = [];
       const valveIds = [];
       const genericIds = [];
       for (const id of group.ids) {
-        if (domainOf(id) === 'valve') {
-          valveIds.push(id);
-        } else {
-          genericIds.push(id);
-        }
+        const dom = domainOf(id);
+        if (dom === 'light') lightIds.push(id);
+        else if (dom === 'valve') valveIds.push(id);
+        else genericIds.push(id);
+      }
+      if (lightIds.length) {
+        this.hass.callService('light', targetService, { entity_id: lightIds });
       }
       if (genericIds.length) {
         this.hass.callService('homeassistant', targetService, { entity_id: genericIds });
@@ -418,6 +439,25 @@ export class Room {
       const v = String(st.state || '').toLowerCase();
       return isActive(st) || ['on', 'home', 'detected', 'occupied', 'true'].includes(v);
     };
+    const isSmokeTriggered = (id) => {
+      const st = hass.states[id];
+      if (!st) return false;
+      const v = String(st.state || '').toLowerCase();
+      return ['on', 'detected', 'smoke', 'alarm', 'true'].includes(v);
+    };
+    const tileSmokeIds = (this.spec.tiles || [])
+      .filter((t) => effectiveCategory(t) === 'rauchmelder' && t.entity_id)
+      .map((t) => t.entity_id);
+    const allSmokeIds = Array.from(new Set([...(sensors.smoke || []), ...tileSmokeIds]));
+    const smokeTriggered = allSmokeIds.some(isSmokeTriggered);
+    this.el.toggleAttribute('data-smoke-alarm', smokeTriggered);
+    if (allSmokeIds.length > 0) {
+      if (smokeTriggered) {
+        chips.push(h('span', { class: 'smoke-header-chip alert', title: 'Rauchalarm!' }, icon('mdi:smoke-detector-alert'), 'Rauch!'));
+      } else {
+        chips.push(h('span', { class: 'smoke-header-chip', title: 'Rauchmelder aktiv' }, icon('mdi:smoke-detector')));
+      }
+    }
     const moistIds = sensors.moisture || [];
     const numericMoistIds = moistIds.filter((id) => numeric(hass.states[id]) !== null);
     const binaryMoistIds = moistIds.filter((id) => numeric(hass.states[id]) === null);
@@ -429,7 +469,7 @@ export class Room {
     if (binaryMoistIds.some(isSensorOn)) {
       chips.push(h('span', { class: 'alert' }, icon('mdi:water-alert'), 'Feuchtigkeit'));
     }
-    const key = chips.map((c) => c.textContent).join('|');
+    const key = `${chips.map((c) => c.textContent || c.getAttribute('title') || '').join('|')}|${smokeTriggered ? 1 : 0}`;
     if (key !== this._metaKey) {
       this._metaKey = key;
       this.metaEl.replaceChildren(...chips);

@@ -1,7 +1,7 @@
 DOMAIN = "smarthome_companion_hacs"
 STORAGE_KEY = "smarthome_companion_hacs.configuration"
 STORAGE_VERSION = 1
-VERSION = "2.10.1"
+VERSION = "2.10.2"
 
 DEFAULT_CATEGORIES = {
     "leuchte": {
@@ -69,6 +69,16 @@ DEFAULT_CATEGORIES = {
         "color": "#FF5722",
         "display_name": "Raummessgeräte",
     },
+    "kamera": {
+        "icon": "mdi:cctv",
+        "color": "#03A9F4",
+        "display_name": "Kameras",
+    },
+    "alarmanlage": {
+        "icon": "mdi:shield-home",
+        "color": "#4CAF50",
+        "display_name": "Alarmanlagen",
+    },
 }
 
 # Maps HA domains to suggested categories
@@ -79,4 +89,6 @@ DOMAIN_CATEGORY_MAP = {
     "media_player": "medien",
     "switch": "schalter",
     "fan": "schalter",
+    "camera": "kamera",
+    "alarm_control_panel": "alarmanlage",
 }

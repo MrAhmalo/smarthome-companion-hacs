@@ -51,25 +51,27 @@ _WATCHED_EVENTS = (
 )
 
 # Sort weight of device categories inside a room (lower = further up).
-# Strict priority: 1. Jalousien (Rollläden), 2. Medien (TV / Apple TV), 3. Der Rest (Lichter, Schalter, etc.)
+# Strict priority: 0. Rauchmelder, 1. Jalousien (Rollläden), 2. Medien (TV / Apple TV), 3. Der Rest (Lichter, Schalter, etc.)
 _CATEGORY_WEIGHT = {
     "rauchmelder": 0,
-    "jalousie": 0,
-    "cover": 0,
-    "fernseher": 1,
-    "medien": 1,
-    "media_player": 1,
-    "leuchte": 2,
-    "light": 2,
-    "steckdose": 3,
-    "schalter": 4,
-    "switch": 4,
-    "klima": 5,
-    "wasserventil": 6,
-    "pumpe": 7,
-    "bewegungsmelder": 8,
-    "raummessgeraet": 9,
-    "bodenmessgeraet": 9,
+    "jalousie": 1,
+    "cover": 1,
+    "fernseher": 2,
+    "medien": 2,
+    "media_player": 2,
+    "leuchte": 3,
+    "light": 3,
+    "steckdose": 4,
+    "schalter": 5,
+    "switch": 5,
+    "klima": 6,
+    "wasserventil": 7,
+    "pumpe": 8,
+    "bewegungsmelder": 9,
+    "raummessgeraet": 10,
+    "bodenmessgeraet": 10,
+    "kamera": 11,
+    "alarmanlage": 12,
 }
 
 NO_AREA_ID = "__none__"
@@ -82,13 +84,42 @@ _UTILITY_ENTITY_PATTERNS = (
     "childlock",
     "led_mode",
     "ledmode",
+    "port_forward",
+    "deflection",
+    "guest_wifi",
 )
+
+_IGNORED_PLATFORMS = frozenset({
+    "portainer",
+    "fritz",
+    "systemmonitor",
+    "glances",
+    "hassio",
+    "supervisor",
+    "version",
+    "webuntis",
+    "caldav",
+    "local_calendar",
+    "ical",
+    "ics_calendar",
+    "waste_collection_schedule",
+    "garbage_collection",
+    "sun",
+    "hacs",
+    "uptime",
+    "backup",
+    "analytics",
+    "diagnostics",
+    "speedtestdotnet",
+})
 
 
 def _is_utility_entity(hass, entry, entity_id: str, custom_name: str = "") -> bool:
-    """Return True for disabled, config/diagnostic, or plug child-lock/protection utility entities."""
+    """Return True for disabled, config/diagnostic, ignored-platform, or plug protection utility entities."""
     if entry is not None:
         if entry.disabled_by or getattr(entry, "entity_category", None) in ("config", "diagnostic"):
+            return True
+        if str(getattr(entry, "platform", "") or "").lower() in _IGNORED_PLATFORMS:
             return True
     eid_lower = (entity_id or "").lower()
     st = hass.states.get(entity_id) if entity_id else None
@@ -170,9 +201,16 @@ async def _async_default_config(hass) -> dict:
             {"entity_id": "device_tracker.pcvonmatilda", "users": ["a07810862d04475f9d56c97293603c3d"]},
         ],
         "nav": [
-            {"name": "Sicherheit", "icon": "mdi:shield-home", "path": "/lovelace/sicherheit"},
-            {"name": "", "icon": "mdi:home-export-outline", "path": "/lovelace/mehr"},
+            {"name": "Sicherheit", "icon": "mdi:shield-home", "view": "security", "path": "companion:security"},
+            {"name": "Solar", "icon": "mdi:solar-power-variant", "view": "solar", "path": "companion:solar"},
+            {"name": "Rollläden", "icon": "mdi:window-shutter", "view": "blinds", "path": "companion:blinds"},
+            {"name": "Mehr", "icon": "mdi:apps", "view": "more", "path": "companion:more"},
         ],
+        "greetings": {
+            "morning": "Guten Morgen",
+            "day": "Guten Tag",
+            "evening": "Guten Abend",
+        },
         "color_presets": [[234, 136, 140], [136, 198, 237], [140, 231, 185], [255, 119, 0]],
         "room_order": ["wohnzimmer", "schlafzimmer", "julian_s_zimmer", "matilda_s_zimmer", "garten", "haus"],
         "rooms": {
@@ -198,7 +236,7 @@ _LEGACY_SEEDED_EXTRA_ENTITIES = {
 }
 
 _LIST_KEYS = ("badges", "nav", "persons", "color_presets", "room_order", "hidden_tiles", "extra_tiles")
-_DICT_KEYS = ("warning", "announce", "trash", "rooms", "tile_order", "tile_users", "views")
+_DICT_KEYS = ("greetings", "warning", "announce", "trash", "rooms", "tile_order", "tile_users", "views")
 
 
 def _sanitize_config(raw: dict) -> dict:
@@ -309,6 +347,72 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
     tiles_by_area: dict[str, list[dict]] = {}
     configured_sensors: dict[str, dict[str, list[str]]] = {}
     seen_entities: set[str] = set()
+    configured_device_ids: set[str] = set()
+    configured_entity_ids: set[str] = set()
+    entity_to_device: dict[str, str] = {}
+    configured_smoke_entries: list[dict] = []
+    seen_smoke_ids: set[str] = set()
+    configured_camera_entries: list[dict] = []
+    seen_camera_ids: set[str] = set()
+    configured_alarm_entries: list[dict] = []
+    seen_alarm_ids: set[str] = set()
+    configured_cover_entries: list[dict] = []
+    seen_cover_ids: set[str] = set()
+
+    def _area_meta(aid: str | None) -> tuple[str, str, str]:
+        va = valid_area(aid) or NO_AREA_ID
+        rcfg = rooms_cfg.get(va, {}) if isinstance(rooms_cfg.get(va, {}), dict) else {}
+        area = areas.get(va)
+        a_name = area.name if area else "Nicht zugeordnet"
+        a_icon = _clean_icon(rcfg.get("icon")) or (area.icon if area and area.icon else "mdi:home-outline")
+        return va, a_name, a_icon
+
+    def _record_configured_entity(entity_id: str, device_id: str | None, category: str | None, name: str, area_id: str | None):
+        if not entity_id:
+            return
+        configured_entity_ids.add(entity_id)
+        if device_id:
+            configured_device_ids.add(device_id)
+            entity_to_device.setdefault(entity_id, device_id)
+        va, a_name, a_icon = _area_meta(area_id)
+        if category == "rauchmelder" and entity_id not in seen_smoke_ids:
+            seen_smoke_ids.add(entity_id)
+            configured_smoke_entries.append({
+                "entity_id": entity_id,
+                "device_id": device_id,
+                "name": name or entity_id,
+                "area_id": va,
+                "area_name": a_name,
+                "area_icon": a_icon,
+            })
+        elif (category == "kamera" or entity_id.startswith("camera.")) and entity_id not in seen_camera_ids:
+            seen_camera_ids.add(entity_id)
+            configured_camera_entries.append({
+                "entity_id": entity_id,
+                "device_id": device_id,
+                "name": name or entity_id,
+                "area_id": va,
+                "area_name": a_name,
+            })
+        elif (category == "alarmanlage" or entity_id.startswith("alarm_control_panel.")) and entity_id not in seen_alarm_ids:
+            seen_alarm_ids.add(entity_id)
+            configured_alarm_entries.append({
+                "entity_id": entity_id,
+                "device_id": device_id,
+                "name": name or entity_id,
+                "area_id": va,
+                "area_name": a_name,
+            })
+        elif (category in ("jalousie", "cover") or entity_id.startswith("cover.")) and entity_id not in seen_cover_ids:
+            seen_cover_ids.add(entity_id)
+            configured_cover_entries.append({
+                "entity_id": entity_id,
+                "device_id": device_id,
+                "name": name or entity_id,
+                "area_id": va,
+                "area_name": a_name,
+                "area_icon": a_icon,
+            })
 
     def add_tile(area_id, tile):
         eid = tile.get("entity_id")
@@ -364,8 +468,10 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
         category = cfg.get("category")
         options = cfg.get("options") or {}
         device_name = cfg.get("custom_name") or (device.name_by_user if device else None) or (device.name if device else None) or ""
-        soil_placement = options.get("sensor_placement", "tile") if category == "bodenmessgeraet" else "room"
+        sensor_placement = options.get("sensor_placement", "tile") if category in ("bodenmessgeraet", "rauchmelder") else "room"
         emitted_primary_tile = False
+        configured_device_ids.add(device_id)
+        dev_area = valid_area(cfg.get("area_id")) or valid_area(device.area_id if device else None)
 
         if isinstance(subs, dict) and subs:
             valid_subs = []
@@ -421,8 +527,9 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
             else:
                 for area_id, tile in child_pairs:
                     add_tile(area_id, tile)
+                    _record_configured_entity(tile.get("entity_id"), device_id, tile.get("category") or category, tile.get("name"), area_id)
                     emitted_primary_tile = True
-        elif ents.get("primary") and not (category == "bodenmessgeraet" and soil_placement == "room"):
+        elif ents.get("primary"):
             primary = ents.get("primary")
             entry = _resolve_entry(ent_reg, by_uid, primary, ents.get("primary_unique_id"))
             if entry is not None and not entry.disabled_by:
@@ -437,7 +544,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                     (
                         e for e in ent_reg.entities.values()
                         if getattr(e, "device_id", None) == device_id
-                        and (getattr(e, "domain", None) or e.entity_id.split(".", 1)[0]) in ("switch", "light", "cover", "valve", "climate", "media_player", "fan")
+                        and (getattr(e, "domain", None) or e.entity_id.split(".", 1)[0]) in ("switch", "light", "cover", "valve", "climate", "media_player", "fan", "camera", "alarm_control_panel")
                         and not getattr(e, "disabled_by", None)
                         and not getattr(e, "hidden_by", None)
                         and not _is_utility_entity(hass, e, e.entity_id, device_name)
@@ -448,29 +555,38 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                     entry = fallback_entry
                     entity_id = fallback_entry.entity_id
             if entity_id:
-                uid = ents.get("primary_unique_id") or entity_id
-                dev_force = bool(options.get("force_own_row", False))
-                sub_sensors = []
-                if category == "bodenmessgeraet":
-                    room_sensors_map = ents.get("room_sensors") or {}
-                    if isinstance(room_sensors_map, dict):
-                        for s_key, s_cfg in room_sensors_map.items():
-                            if not isinstance(s_cfg, dict) or not s_cfg.get("enabled", True):
-                                continue
-                            s_entry = _resolve_entry(ent_reg, by_uid, s_key, s_cfg.get("unique_id"), s_cfg.get("original_id"))
-                            s_eid = s_entry.entity_id if (s_entry and not s_entry.disabled_by) else (s_key if s_entry is None and hass.states.get(s_key) else None)
-                            if s_eid:
-                                sub_sensors.append({"entity_id": s_eid, "type": s_cfg.get("type") or "other"})
-                area_id, tile = make_tile(
-                    f"{device_id}:{uid}", entry, entity_id, device_name or (entry.name or entry.original_name if entry else ""),
-                    category, cfg.get("icon"), device,
-                    resolve_aux(ents.get("power")), resolve_aux(ents.get("energy")),
-                    force_own_row=dev_force,
-                    sub_sensors=sub_sensors or None,
-                )
-                tile["device_id"] = device_id
-                add_tile(area_id, tile)
-                emitted_primary_tile = True
+                p_area = valid_area((entry.area_id if entry else None) or dev_area)
+                _record_configured_entity(entity_id, device_id, category, device_name or (entry.name or entry.original_name if entry else entity_id), p_area)
+                if category == "rauchmelder":
+                    s_bucket = configured_sensors.setdefault(p_area or NO_AREA_ID, {}).setdefault("smoke", [])
+                    if entity_id not in s_bucket:
+                        s_bucket.append(entity_id)
+                skip_tile = category in ("bodenmessgeraet", "rauchmelder") and sensor_placement == "room"
+                if not skip_tile:
+                    uid = ents.get("primary_unique_id") or entity_id
+                    dev_force = bool(options.get("force_own_row", False))
+                    sub_sensors = []
+                    if category == "bodenmessgeraet":
+                        room_sensors_map = ents.get("room_sensors") or {}
+                        if isinstance(room_sensors_map, dict):
+                            for s_key, s_cfg in room_sensors_map.items():
+                                if not isinstance(s_cfg, dict) or not s_cfg.get("enabled", True):
+                                    continue
+                                s_entry = _resolve_entry(ent_reg, by_uid, s_key, s_cfg.get("unique_id"), s_cfg.get("original_id"))
+                                s_eid = s_entry.entity_id if (s_entry and not s_entry.disabled_by) else (s_key if s_entry is None and hass.states.get(s_key) else None)
+                                if s_eid:
+                                    sub_sensors.append({"entity_id": s_eid, "type": s_cfg.get("type") or "other"})
+                    area_id, tile = make_tile(
+                        f"{device_id}:{uid}", entry, entity_id, device_name or (entry.name or entry.original_name if entry else ""),
+                        category, cfg.get("icon"), device,
+                        resolve_aux(ents.get("power")), resolve_aux(ents.get("energy")),
+                        force_own_row=dev_force,
+                        sub_sensors=sub_sensors or None,
+                        area_override=p_area,
+                    )
+                    tile["device_id"] = device_id
+                    add_tile(area_id, tile)
+                    emitted_primary_tile = True
 
         # Explicitly configured room sensors on this device
         room_sensors = ents.get("room_sensors") or {}
@@ -495,7 +611,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                     continue
                 resolved_sensors.append((s_eid, s_type, s_entry))
 
-            if category == "bodenmessgeraet" and soil_placement == "tile":
+            if category == "bodenmessgeraet" and sensor_placement == "tile":
                 if not emitted_primary_tile and resolved_sensors:
                     pref_entry = next(((eid, tp, ent) for eid, tp, ent in resolved_sensors if tp == "moisture"), resolved_sensors[0])
                     p_eid, _, p_ent = pref_entry
@@ -510,14 +626,20 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                     add_tile(area_id, tile)
             else:
                 for s_eid, s_type, s_entry in resolved_sensors:
-                    if s_type not in ("temperature", "humidity", "motion", "moisture"):
+                    if s_type not in ("temperature", "humidity", "motion", "moisture", "smoke"):
                         continue
-                    s_area = valid_area((s_entry.area_id if s_entry else None) or (device.area_id if device else None)) or NO_AREA_ID
+                    s_area = valid_area((s_entry.area_id if s_entry else None) or dev_area) or NO_AREA_ID
                     bucket = configured_sensors.setdefault(s_area, {}).setdefault(s_type, [])
                     if s_eid not in bucket:
                         bucket.append(s_eid)
+                    if s_type == "smoke":
+                        _record_configured_entity(s_eid, device_id, "rauchmelder", device_name or s_eid, s_area)
+                    else:
+                        configured_entity_ids.add(s_eid)
+                        entity_to_device.setdefault(s_eid, device_id)
 
-    # ── Extra tiles (helpers, scripts … that have no device) ──
+    # Also include bundled multi-channel entities in configured inventory
+    # (covered cleanly below as well; record extra_tiles & security config settings)
     for extra in config.get("extra_tiles", []):
         if not isinstance(extra, dict) or not extra.get("entity_id"):
             continue
@@ -532,7 +654,24 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
             f"extra:{(entry.unique_id if entry and entry.unique_id else entity_id)}",
             entry, entity_id, extra.get("name"), None, extra.get("icon"), device,
         )
-        add_tile(valid_area(extra.get("area_id")) or area_id, tile)
+        eff_area = valid_area(extra.get("area_id")) or area_id
+        add_tile(eff_area, tile)
+        _record_configured_entity(entity_id, entry.device_id if entry else None, None, extra.get("name") or entity_id, eff_area)
+
+    sec_cfg = (config.get("views") or {}).get("security") or {}
+    if isinstance(sec_cfg, dict):
+        alarm_eid = sec_cfg.get("alarm_entity")
+        if isinstance(alarm_eid, str) and alarm_eid:
+            a_entry = ent_reg.async_get(alarm_eid)
+            a_area = a_entry.area_id if a_entry else None
+            _record_configured_entity(alarm_eid, a_entry.device_id if a_entry else None, "alarmanlage", (a_entry.name or a_entry.original_name) if a_entry else alarm_eid, a_area)
+        cam_eids = sec_cfg.get("camera_entities")
+        if isinstance(cam_eids, list):
+            for c_eid in cam_eids:
+                if isinstance(c_eid, str) and c_eid:
+                    c_entry = ent_reg.async_get(c_eid)
+                    c_area = c_entry.area_id if c_entry else None
+                    _record_configured_entity(c_eid, c_entry.device_id if c_entry else None, "kamera", (c_entry.name or c_entry.original_name) if c_entry else c_eid, c_area)
 
     # Only configured devices and extra_tiles are included on the dashboard
 
@@ -769,6 +908,15 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
     return {
         "rooms": rooms,
         "areas": [{"area_id": a.id, "name": a.name, "icon": a.icon or ""} for a in sorted(areas.values(), key=lambda x: x.name.lower())],
+        "configured": {
+            "device_ids": sorted(configured_device_ids),
+            "entity_ids": sorted(configured_entity_ids),
+            "entity_to_device": entity_to_device,
+            "smoke": configured_smoke_entries,
+            "cameras": configured_camera_entries,
+            "alarms": configured_alarm_entries,
+            "covers": configured_cover_entries,
+        },
     }
 
 

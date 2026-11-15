@@ -197,6 +197,11 @@ export const MOCK_DATA = {
   },
 
   config: {
+    greetings: {
+      morning: 'Guten Morgen',
+      day: 'Guten Tag',
+      evening: 'Guten Abend',
+    },
     color_presets: [
       [255, 128, 140],
       [150, 200, 255],
