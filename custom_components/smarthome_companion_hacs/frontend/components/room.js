@@ -1,6 +1,7 @@
 // Room component: collapsible "expander" card with area header (sensors, alerts, group controls) and tiles.
 import {
   h, icon, editBorder, domainOf, isActive, numeric, effectiveCategory, parseChannelKey,
+  enableGridPointerReorder,
 } from '../lib/util.js';
 import { Tile, GroupTile } from './tile.js';
 
@@ -31,58 +32,35 @@ export function average(hass, ids) {
 export function applySmartTileLayout(tiles, grid = null) {
   if (!tiles || !tiles.length) return;
 
-  const priorityTiles = [];
-  const topWide = [];
-  const compactTiles = [];
-  const sliderTiles = [];
-  const bottomWide = [];
-
+  // Preserve the exact tile order (pinned + drag-and-drop) while pairing consecutive
+  // compact tiles 2-up (left/right) and promoting lone compact tiles before wide rows or at end.
+  let pendingCompact = null;
   for (const t of tiles) {
     const isGroup = t.spec?.is_group || t.is_group === true || t.constructor?.name === 'GroupTile';
-    const effCat = t.spec ? effectiveCategory(t.spec) : effectiveCategory(t);
-    if (!isGroup && effCat === 'rauchmelder') {
-      priorityTiles.push(t);
-    } else if (isGroup) {
-      bottomWide.push(t);
-    } else if (t.isForceOwnRow) {
-      sliderTiles.push(t);
-    } else if (t.isAlwaysWide) {
-      topWide.push(t);
-    } else if (t.hasSlider) {
-      sliderTiles.push(t);
+    const isWide = isGroup || t.isForceOwnRow || t.isAlwaysWide || t.hasSlider;
+    if (isWide) {
+      if (pendingCompact) {
+        pendingCompact.setWide(true);
+        pendingCompact = null;
+      }
+      t.setWide(true);
+    } else if (!pendingCompact) {
+      pendingCompact = t;
     } else {
-      compactTiles.push(t);
+      pendingCompact.setWide(false);
+      t.setWide(false);
+      pendingCompact = null;
     }
   }
-
-  if (priorityTiles.length % 2 === 1) {
-    for (let i = 0; i < priorityTiles.length - 1; i++) {
-      priorityTiles[i].setWide(false);
-    }
-    priorityTiles[priorityTiles.length - 1].setWide(true);
-  } else {
-    priorityTiles.forEach((t) => t.setWide(false));
-  }
-
-  topWide.forEach((t) => t.setWide(true));
-  sliderTiles.forEach((t) => t.setWide(true));
-  bottomWide.forEach((t) => t.setWide(true));
-
-  if (compactTiles.length % 2 === 1) {
-    for (let i = 0; i < compactTiles.length - 1; i++) {
-      compactTiles[i].setWide(false);
-    }
-    compactTiles[compactTiles.length - 1].setWide(true);
-  } else {
-    compactTiles.forEach((t) => t.setWide(false));
+  if (pendingCompact) {
+    pendingCompact.setWide(true);
   }
 
   if (grid) {
-    const ordered = [...priorityTiles, ...topWide, ...compactTiles, ...sliderTiles, ...bottomWide];
     const current = Array.from(grid.children);
-    const changed = current.length !== ordered.length || ordered.some((t, i) => current[i] !== t.el);
+    const changed = current.length !== tiles.length || tiles.some((t, i) => current[i] !== t.el);
     if (changed) {
-      grid.replaceChildren(...ordered.map((t) => t.el));
+      grid.replaceChildren(...tiles.map((t) => t.el));
     }
   }
 }
@@ -153,14 +131,23 @@ export class GroupedCoverTile {
     }, icon('mdi:arrow-right'));
 
     this.btns = h('div', { class: 'tile-btns' }, this.btnUp, this.btnStop, this.btnDown, this.btnDetail);
+    this.dragHandle = h('button', {
+      type: 'button',
+      class: 'tile-drag-handle',
+      'aria-label': 'Kachel verschieben',
+      title: 'Kachel verschieben',
+      onClick: (e) => e.stopPropagation(),
+    }, icon('mdi:drag'));
 
     this.el = h('div', {
       class: 'tile grouped-cover wide',
       'data-active': 'true',
-    }, h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns), editBorder(10));
+      'data-key': this.coverSpecs[0]?.key || `cover-group:${this.roomSpec.area_id}`,
+    }, h('div', { class: 'tile-main' }, this.dragHandle, this.iconBtn, this.info, this.btns), editBorder(10));
 
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
+        if (e.target.closest('.tile-drag-handle')) return;
         e.stopPropagation();
         e.preventDefault();
         const firstCover = this.coverSpecs[0];
@@ -228,29 +215,25 @@ export class Room {
     };
 
     // Smart Rollladen Gruppierung:
-    // If room has > 1 cover, group them into a single master GroupedCoverTile
+    // Group covers only when there are >= 2 covers AND the room has >= 3 tiles total.
     const covers = spec.tiles.filter((t) => effectiveCategory(t) === 'cover');
-    if (covers.length > 1) {
+    if (covers.length > 1 && spec.tiles.length >= 3) {
       this.groupedCover = new GroupedCoverTile(spec, covers, ctx);
-      const nonCovers = spec.tiles.filter((t) => effectiveCategory(t) !== 'cover');
-      this.tiles = [this.groupedCover, ...nonCovers.map(makeTileInstance)];
+      let insertedCover = false;
+      this.tiles = [];
+      for (const t of spec.tiles) {
+        if (effectiveCategory(t) === 'cover') {
+          if (!insertedCover) {
+            this.tiles.push(this.groupedCover);
+            insertedCover = true;
+          }
+        } else {
+          this.tiles.push(makeTileInstance(t));
+        }
+      }
     } else {
       this.tiles = spec.tiles.map(makeTileInstance);
     }
-
-    // Strict priority in room: 0. Rauchmelder, 1. Jalousien (Rollläden), 2. Medien / TV, 3. Der Rest
-    const tileWeight = (t) => {
-      if (t instanceof GroupedCoverTile) return 1;
-      const cat = effectiveCategory(t);
-      if (cat === 'rauchmelder' || cat === 'smoke') return 0;
-      if (cat === 'cover') return 1;
-      if (cat === 'media_player') return 2;
-      if (cat === 'light') return 3;
-      if (cat === 'outlet') return 4;
-      if (cat === 'switch') return 5;
-      return 6;
-    };
-    this.tiles.sort((a, b) => tileWeight(a) - tileWeight(b));
 
     this._build();
   }
@@ -357,6 +340,34 @@ export class Room {
       h('div', { class: 'room-body' }, h('div', { class: 'room-body-inner' }, this.grid)));
     this._applyOpen();
     applySmartTileLayout(this.tiles, this.grid);
+
+    enableGridPointerReorder(this.grid, {
+      itemSelector: '.tile',
+      handleSelector: '.tile-drag-handle',
+      onReorder: (from, to) => {
+        if (!this.ctx?.isEditMode?.()) return;
+        const [moved] = this.tiles.splice(from, 1);
+        if (!moved) return;
+        this.tiles.splice(to, 0, moved);
+        applySmartTileLayout(this.tiles, this.grid);
+
+        const nextOrder = [];
+        for (const t of this.tiles) {
+          if (t instanceof GroupedCoverTile) {
+            for (const c of (t.coverSpecs || [])) {
+              if (c.key) nextOrder.push(c.key);
+            }
+          } else if (t.spec?.key) {
+            nextOrder.push(t.spec.key);
+          }
+        }
+        this.ctx?.hass?.callWS({
+          type: 'smarthome_companion/dashboard/tile_order',
+          area_id: this.spec.area_id,
+          tile_order: nextOrder,
+        }).catch(() => {});
+      },
+    });
   }
 
   _applyOpen() {

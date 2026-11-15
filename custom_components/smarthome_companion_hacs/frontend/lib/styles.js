@@ -832,6 +832,7 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 }
 .ep-item[data-active] { background: rgba(3, 169, 244, 0.18); background: color-mix(in srgb, var(--cd-accent) 22%, transparent); }
 .ep-item .item-state { flex: none; font-size: 11px; color: var(--cd-secondary); background: rgba(128,128,128,.15); padding: 2px 6px; border-radius: 6px; }
+.ep-divider { height: 1px; margin: 6px 10px; background: var(--cd-border); opacity: 0.9; }
 .ep-check { flex: none; color: var(--cd-accent); }
 
 /* ── Color Picker ── */
@@ -1790,6 +1791,20 @@ details.adv-options summary {
 }
 .drag-handle.small { width: 28px; height: 32px; }
 .drag-handle:active { cursor: grabbing; color: var(--cd-accent); background: rgba(128,128,128,.14); }
+.tile-drag-handle {
+  display: none;
+  flex: none; align-items: center; justify-content: center;
+  width: 22px; height: 28px; margin-left: -4px; margin-right: -2px;
+  border-radius: 6px; border: 0; padding: 0;
+  background: transparent; color: var(--cd-secondary); cursor: grab;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.page[data-edit-mode] .tile-drag-handle { display: inline-flex; }
+.tile-drag-handle:active { cursor: grabbing; color: var(--cd-accent); }
+.tile[data-drop-target] {
+  outline: 2px dashed var(--cd-accent);
+  outline-offset: 2px;
+}
 [data-dragging] {
   position: relative; z-index: 20; opacity: 0.92;
   box-shadow: 0 10px 28px rgba(0,0,0,.45), 0 0 0 1.5px var(--cd-accent);

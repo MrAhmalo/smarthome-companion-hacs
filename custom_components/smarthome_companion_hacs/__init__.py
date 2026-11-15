@@ -12,8 +12,10 @@ from .entity_sync import async_sync_renamed_entities
 from .ws_api import async_register_websockets
 from .migrations import (
     MIGRATION_ENERGY_SENSORS_V1,
+    MIGRATION_FRIENDLY_NAMES_V1,
     MIGRATION_SUB_ENTITY_NAMES_V1,
     async_migrate_energy_sensors,
+    async_migrate_friendly_names,
     async_migrate_sub_entity_names,
 )
 from .blinds_manager import BlindsManager
@@ -75,9 +77,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async def _run_startup_migrations(_event=None):
             await async_migrate_energy_sensors(hass, store)
             await async_migrate_sub_entity_names(hass, store)
+            await async_migrate_friendly_names(hass, store)
 
         migs = store.get_migrations()
-        if not migs.get(MIGRATION_ENERGY_SENSORS_V1) or not migs.get(MIGRATION_SUB_ENTITY_NAMES_V1):
+        if (
+            not migs.get(MIGRATION_ENERGY_SENSORS_V1)
+            or not migs.get(MIGRATION_SUB_ENTITY_NAMES_V1)
+            or not migs.get(MIGRATION_FRIENDLY_NAMES_V1)
+        ):
             if getattr(hass, "is_running", False):
                 await _run_startup_migrations()
             elif not hass.data[DOMAIN].get("_startup_migrations_scheduled"):

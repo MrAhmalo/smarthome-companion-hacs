@@ -423,7 +423,7 @@ export class DeviceWizard {
     const areaMap = new Map(this.areas.map((a) => [a.area_id, a.name]));
 
     const searchInput = h('input', {
-      type: 'text', placeholder: 'Gerät, Raum oder Funkstandard suchen', value: this.searchQuery,
+      type: 'text', placeholder: 'Gerät, Raum, Zigbee oder WLAN suchen', value: this.searchQuery,
       onInput: (e) => {
         this.searchQuery = e.target.value.toLowerCase().trim();
         if (this.searchQuery && this.preFilterMode === null) {
@@ -460,7 +460,7 @@ export class DeviceWizard {
 
       const grid = h('div', { class: 'wizard-prefilter-grid' },
         mkPrefilterCard('room', 'mdi:floor-plan', 'Nach Raum', 'Nach Home-Assistant-Bereichen filtern', `${roomIds.size} ${roomIds.size === 1 ? 'Raum' : 'Räume'}`),
-        mkPrefilterCard('protocol', 'mdi:zigbee', 'Nach Funkstandard', 'Zigbee vs. WLAN / Sonstige', `${zigbeeCount} Zigbee · ${wifiCount} WLAN/Sonst.`),
+        mkPrefilterCard('protocol', 'mdi:zigbee', 'Nach Verbindung', 'Zigbee vs. WLAN', `${zigbeeCount} Zigbee · ${wifiCount} WLAN`),
         mkPrefilterCard('all', 'mdi:devices', 'Alle unterstützten Geräte', 'Komplette bereinigte Geräteliste', `${candidates.length} Geräte`));
 
       this.deviceListEl = h('div', { class: 'device-list' });
@@ -487,7 +487,7 @@ export class DeviceWizard {
       }, icon('mdi:arrow-left'), ' Vorfilter'),
       ...[
         ['room', 'Nach Raum', 'mdi:floor-plan'],
-        ['protocol', 'Funkstandard', 'mdi:zigbee'],
+        ['protocol', 'Zigbee / WLAN', 'mdi:zigbee'],
         ['all', 'Alle Geräte', 'mdi:devices'],
       ].map(([mId, mLabel, mIcon]) => h('button', {
         type: 'button',
@@ -521,15 +521,15 @@ export class DeviceWizard {
       const wifiCount = candidates.length - zigbeeCount;
       subFilterRow = h('div', { class: 'filter-chips', style: { marginBottom: '8px' } },
         ...[
-          ['all', `Alle (${candidates.length})`],
-          ['zigbee', `Zigbee (${zigbeeCount})`],
-          ['wifi_other', `WLAN / Sonstige (${wifiCount})`],
-        ].map(([pid, plabel]) => h('button', {
+          ['all', `Alle (${candidates.length})`, 'mdi:devices'],
+          ['zigbee', `Zigbee (${zigbeeCount})`, 'mdi:zigbee'],
+          ['wifi_other', `WLAN (${wifiCount})`, 'mdi:wifi'],
+        ].map(([pid, plabel, pIcon]) => h('button', {
           type: 'button',
           class: 'filter-chip',
           ...(this.protocolFilter === pid ? { 'data-active': '' } : {}),
           onClick: () => { this.protocolFilter = pid; this._renderStep0(); },
-        }, plabel)));
+        }, icon(pIcon), ' ', plabel)));
     }
 
     const baseFiltered = this._getModeFilteredCandidates(candidates);
@@ -1369,6 +1369,9 @@ export class DeviceWizard {
     this.roomIcon = this._isNewRoomForDevice(this.selectedAreaId) ? this._getRoomIcon(this.selectedAreaId) : '';
     this.customIcon = existing?.icon || '';
     this.forceOwnRow = !!existing?.options?.force_own_row;
+    const pinnedList = this._dashboardConfig?.pinned_tiles || [];
+    const devTileKey = d.isVirtualEntity ? d.id : `dev:${d.id}`;
+    this.pinned = pinnedList.includes(devTileKey) || pinnedList.some((k) => String(k).startsWith(`d:${d.id}:`)) || !!existing?.options?.pinned;
     this.displayMode = existing?.options?.display_mode || 'individual';
     this.sensorPlacement = existing?.options?.sensor_placement || 'tile';
     let rawName = existing?.custom_name || d.name_by_user || d.name || '';
@@ -1618,6 +1621,22 @@ export class DeviceWizard {
       h('div', { class: 'feature-desc' }, 'Nicht kompakt gruppieren · Volle Breite')),
     h('div', { class: 'switch-ui' }));
 
+    const pinCard = h('div', {
+      class: `feature-card${this.pinned ? ' active' : ''}`,
+      style: { '--feat-color': 'var(--cd-accent, #29b6f6)', cursor: 'pointer', marginTop: '8px' },
+      ...(this.pinned ? { 'data-active': '' } : {}),
+      onClick: () => {
+        this.pinned = !this.pinned;
+        pinCard.toggleAttribute('data-active', this.pinned);
+        pinCard.classList.toggle('active', this.pinned);
+      },
+    },
+    h('div', { class: 'feature-icon' }, icon('mdi:pin-outline')),
+    h('div', { class: 'feature-info' },
+      h('div', { class: 'feature-title' }, 'Anpinnen'),
+      h('div', { class: 'feature-desc' }, 'Am Anfang der Kategorie anzeigen')),
+    h('div', { class: 'switch-ui' }));
+
     let soilPlacementBlock = null;
     if (this.selectedCategory === 'bodenmessgeraet' || this.selectedCategory === 'rauchmelder') {
       const isSmoke = this.selectedCategory === 'rauchmelder';
@@ -1659,6 +1678,7 @@ export class DeviceWizard {
           roomIconField,
           h('div', { class: 'field' }, 'Icon', devIconPicker.el)),
         ownRowCard,
+        pinCard,
         soilPlacementBlock,
         h('div', { class: 'section-title', style: { marginTop: '12px' } }, 'Kategorie'),
         catGrid,
@@ -1807,6 +1827,22 @@ export class DeviceWizard {
       return;
     }
 
+    const devEntityIds = new Set(
+      (this.entities || [])
+        .filter((e) => (this.selectedDevice?.isVirtualEntity ? e.entity_id === this.selectedDevice.entity_id : e.device_id === this.selectedDevice?.id))
+        .map((e) => e.entity_id),
+    );
+    const isPowerSensor = (_eid, st) => {
+      const dc = String(st?.attributes?.device_class || '').toLowerCase();
+      const u = String(st?.attributes?.unit_of_measurement || '').toLowerCase();
+      return dc === 'power' || ['w', 'kw', 'mw'].includes(u);
+    };
+    const isEnergySensor = (_eid, st) => {
+      const dc = String(st?.attributes?.device_class || '').toLowerCase();
+      const u = String(st?.attributes?.unit_of_measurement || '').toLowerCase();
+      return dc === 'energy' || ['kwh', 'wh', 'mwh'].includes(u);
+    };
+
     if (!isMulti) {
       const ch = this.channels[0];
 
@@ -1815,6 +1851,8 @@ export class DeviceWizard {
         value: ch.power || '',
         placeholder: 'Watt-Sensor (optional)',
         domain: 'sensor',
+        priorityEntityIds: devEntityIds,
+        filter: isPowerSensor,
         onChange: (val) => {
           ch.power = val;
           this.powerEntityId = val;
@@ -1841,6 +1879,8 @@ export class DeviceWizard {
         value: ch.energy || '',
         placeholder: 'kWh-Sensor (optional)',
         domain: 'sensor',
+        priorityEntityIds: devEntityIds,
+        filter: isEnergySensor,
         onChange: (val) => {
           ch.energy = val;
           this.energyEntityId = val;
@@ -1947,6 +1987,8 @@ export class DeviceWizard {
         value: ch.power || '',
         placeholder: 'Watt-Sensor (optional)',
         domain: 'sensor',
+        priorityEntityIds: devEntityIds,
+        filter: isPowerSensor,
         onChange: (val) => { ch.power = val; },
       });
       this._dropdowns.push(powerPicker);
@@ -1956,6 +1998,8 @@ export class DeviceWizard {
         value: ch.energy || '',
         placeholder: 'kWh-Sensor (optional)',
         domain: 'sensor',
+        priorityEntityIds: devEntityIds,
+        filter: isEnergySensor,
         onChange: (val) => { ch.energy = val; },
       });
       this._dropdowns.push(energyPicker);
@@ -2255,6 +2299,7 @@ export class DeviceWizard {
         const primary = activeChannels[0] || this.channels[0];
         const fallbackPrimaryId = primary?.entity_id
           || (this.selectedCategory === 'rauchmelder' ? (this.primaryEntityId || this.smokeEntityId) : undefined)
+          || (this.selectedCategory === 'solar' ? (this.powerEntityId || this.energyEntityId || this.sensorEntities.find((s) => s.type !== 'ignore')?.entity_id) : undefined)
           || (this.selectedCategory === 'bodenmessgeraet' && this.sensorPlacement === 'tile'
             ? (this.sensorEntities.find((s) => s.type === 'moisture')?.entity_id || this.sensorEntities.find((s) => s.type !== 'ignore')?.entity_id)
             : undefined);
@@ -2284,6 +2329,7 @@ export class DeviceWizard {
       const nextOptions = {
         ...existingOpts,
         force_own_row: !!this.forceOwnRow,
+        pinned: !!this.pinned,
       };
       if (isMultiDevice) {
         nextOptions.display_mode = this.displayMode;
@@ -2316,6 +2362,26 @@ export class DeviceWizard {
       });
 
       if (res?.save_failed) throw new Error('Speichern im Backend fehlgeschlagen');
+
+      // Persist pin state on dashboard config (for dev:<id> or entity:<id>)
+      const pinKey = d.isVirtualEntity ? d.id : `dev:${d.id}`;
+      try {
+        await this.hass.callWS({
+          type: 'smarthome_companion/dashboard/tile_order',
+          area_id: this.selectedAreaId || '__none__',
+          pin_key: pinKey,
+          pinned: !!this.pinned,
+        });
+        const curPins = Array.isArray(this._dashboardConfig?.pinned_tiles) ? [...this._dashboardConfig.pinned_tiles] : [];
+        if (this.pinned && !curPins.includes(pinKey)) curPins.push(pinKey);
+        if (!this.pinned) {
+          this._dashboardConfig = { ...(this._dashboardConfig || {}), pinned_tiles: curPins.filter((k) => k !== pinKey) };
+        } else {
+          this._dashboardConfig = { ...(this._dashboardConfig || {}), pinned_tiles: curPins };
+        }
+      } catch (pinErr) {
+        console.warn('[wizard] pin update failed', pinErr);
+      }
 
       // Optimistic cache update so returning to Step 0 immediately reflects the configured device
       this.configuredDevices[d.id] = {

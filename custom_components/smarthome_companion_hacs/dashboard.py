@@ -72,6 +72,7 @@ _CATEGORY_WEIGHT = {
     "bodenmessgeraet": 10,
     "kamera": 11,
     "alarmanlage": 12,
+    "solar": 13,
 }
 
 NO_AREA_ID = "__none__"
@@ -221,6 +222,7 @@ async def _async_default_config(hass) -> dict:
             "garten": {"expanded": "expanded", "expanded_users": ids("Matilda")},
         },
         "tile_order": {},
+        "pinned_tiles": [],
         "hidden_tiles": [],
         "tile_users": {},
         "extra_tiles": [],
@@ -235,7 +237,7 @@ _LEGACY_SEEDED_EXTRA_ENTITIES = {
     "input_boolean.pc_system",
 }
 
-_LIST_KEYS = ("badges", "nav", "persons", "color_presets", "room_order", "hidden_tiles", "extra_tiles")
+_LIST_KEYS = ("badges", "nav", "persons", "color_presets", "room_order", "pinned_tiles", "hidden_tiles", "extra_tiles")
 _DICT_KEYS = ("greetings", "warning", "announce", "trash", "rooms", "tile_order", "tile_users", "views")
 
 
@@ -731,11 +733,15 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                             continue
                         descendant_eids.append(eid)
                         st = hass.states.get(eid)
+                        raw_fn = st.attributes.get("friendly_name") or eid
+                        g_area_obj = areas.get(g.get("area_id")) if g.get("area_id") else None
+                        if g_area_obj and raw_fn.lower().startswith(f"{g_area_obj.name.lower()} ") and len(raw_fn) > len(g_area_obj.name) + 1:
+                            raw_fn = raw_fn[len(g_area_obj.name) + 1:].strip()
                         child_specs.append({
                             "key": ref,
                             "entity_id": eid,
                             "device_id": parts[1],
-                            "name": st.attributes.get("friendly_name") or eid,
+                            "name": raw_fn,
                             "category": g_cat,
                             "icon": g.get("icon") or cat_info.get("icon"),
                             "area_id": g.get("area_id"),
@@ -745,10 +751,14 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                     if _is_utility_entity(hass, e_entry, ref):
                         continue
                     descendant_eids.append(ref)
+                    raw_fn = hass.states.get(ref).attributes.get("friendly_name") or ref
+                    g_area_obj = areas.get(g.get("area_id")) if g.get("area_id") else None
+                    if g_area_obj and raw_fn.lower().startswith(f"{g_area_obj.name.lower()} ") and len(raw_fn) > len(g_area_obj.name) + 1:
+                        raw_fn = raw_fn[len(g_area_obj.name) + 1:].strip()
                     child_specs.append({
                         "key": f"e:{ref}",
                         "entity_id": ref,
-                        "name": hass.states.get(ref).attributes.get("friendly_name") or ref,
+                        "name": raw_fn,
                         "category": g_cat,
                         "icon": g.get("icon") or cat_info.get("icon"),
                     })
@@ -842,6 +852,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
     if NO_AREA_ID in all_ids and NO_AREA_ID not in ordered:
         ordered.append(NO_AREA_ID)
 
+    pinned_set = set(config.get("pinned_tiles", []))
     rooms = []
     for area_id in ordered:
         rcfg = rooms_cfg.get(area_id, {}) if isinstance(rooms_cfg.get(area_id, {}), dict) else {}
@@ -852,14 +863,24 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
         all_room_sensors = configured_sensors.get(area_id, {})
         if (not edit or area_id == NO_AREA_ID) and not tiles and not all_room_sensors:
             continue
+        for t in tiles:
+            t["pinned"] = t["key"] in pinned_set
         custom_order = config.get("tile_order", {}).get(area_id, [])
         pos = {k: i for i, k in enumerate(custom_order)}
-        # Strict hierarchy: 1. Jalousien, 2. Medien/TV, 3. Rest. Custom order applies within category.
-        tiles.sort(key=lambda t: (
-            _CATEGORY_WEIGHT.get(t["category"], 50),
-            pos.get(t["key"], 10_000),
-            t["name"].lower(),
-        ))
+        if custom_order:
+            tiles.sort(key=lambda t: (
+                pos.get(t["key"], 10_000),
+                _CATEGORY_WEIGHT.get(t["category"], 50),
+                0 if t.get("pinned") else 1,
+                t["name"].lower(),
+            ))
+        else:
+            # Strict category hierarchy, with pinned devices at top of their own category.
+            tiles.sort(key=lambda t: (
+                _CATEGORY_WEIGHT.get(t["category"], 50),
+                0 if t.get("pinned") else 1,
+                t["name"].lower(),
+            ))
         mode = rcfg.get("expanded", "collapsed")
         user_expanded = rcfg.get("user_expanded", {})
         if not isinstance(user_expanded, dict):
@@ -894,6 +915,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
             "name": area.name if area else "Nicht zugeordnet",
             "icon": _clean_icon(rcfg.get("icon")) or (area.icon if area and area.icon else "mdi:home-outline"),
             "tiles": tiles,
+            "has_custom_order": bool(custom_order),
             "expanded": expanded,
             "always_open": mode == "always",
             "visible_users": visible_users,
@@ -930,6 +952,7 @@ def async_register_dashboard_websockets(hass):
     websocket_api.async_register_command(hass, handle_dashboard_room_update)
     websocket_api.async_register_command(hass, handle_dashboard_room_delete)
     websocket_api.async_register_command(hass, handle_dashboard_set_room_expanded)
+    websocket_api.async_register_command(hass, handle_dashboard_tile_order)
     websocket_api.async_register_command(hass, handle_dashboard_users)
     websocket_api.async_register_command(hass, handle_dashboard_subscribe)
 
@@ -1060,6 +1083,13 @@ async def handle_dashboard_room_update(hass, connection, msg):
                     _LOGGER.warning("Could not cascade room rename to %s: %s", e.entity_id, err)
         if renamed_map:
             await async_sync_renamed_entities(hass, store, renamed_map)
+        from .entity_sync import sync_device_friendly_names
+        for d_id, d_cfg in store.get_devices().items():
+            if not isinstance(d_cfg, dict):
+                continue
+            d_obj = dev_reg.async_get(d_id)
+            if (d_obj and d_obj.area_id == area_id) or d_id in room_dev_ids:
+                sync_device_friendly_names(hass, d_id, d_cfg, area_id=area_id)
 
     hass.bus.async_fire(UPDATE_EVENT)
     connection.send_result(msg["id"], {"success": True, "renamed": renamed_map})
@@ -1142,6 +1172,45 @@ async def handle_dashboard_set_room_expanded(hass, connection, msg):
     else:
         ue[user_id] = mode
     room_cfg["expanded_users"] = [uid for uid, val in ue.items() if val == "expanded"]
+    if not await store.save_dashboard_config(config):
+        connection.send_result(msg["id"], {"save_failed": True})
+        return
+    hass.bus.async_fire(UPDATE_EVENT)
+    connection.send_result(msg["id"], {"success": True})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smarthome_companion/dashboard/tile_order",
+    vol.Required("area_id"): str,
+    vol.Optional("tile_order"): [str],
+    vol.Optional("pin_key"): str,
+    vol.Optional("pinned"): bool,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def handle_dashboard_tile_order(hass, connection, msg):
+    """Persist per-room drag-and-drop tile order and/or tile pin state."""
+    store = hass.data[DOMAIN]["store"]
+    config = _sanitize_config(await async_get_or_create_config(hass, store))
+    area_id = msg["area_id"]
+
+    if "tile_order" in msg:
+        order = [str(k) for k in (msg.get("tile_order") or []) if isinstance(k, str) and k]
+        if order:
+            config["tile_order"][area_id] = order
+        else:
+            config["tile_order"].pop(area_id, None)
+
+    if "pin_key" in msg and "pinned" in msg:
+        pin_key = str(msg["pin_key"]).strip()
+        pinned_list = [str(k) for k in config.get("pinned_tiles", []) if isinstance(k, str) and k]
+        if msg["pinned"]:
+            if pin_key and pin_key not in pinned_list:
+                pinned_list.append(pin_key)
+        else:
+            pinned_list = [k for k in pinned_list if k != pin_key]
+        config["pinned_tiles"] = pinned_list
+
     if not await store.save_dashboard_config(config):
         connection.send_result(msg["id"], {"save_failed": True})
         return

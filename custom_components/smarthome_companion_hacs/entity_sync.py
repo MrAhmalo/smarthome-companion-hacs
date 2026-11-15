@@ -509,6 +509,157 @@ def sync_device_entity_ids(
     return renamed_map
 
 
+def _compose_friendly_name(room_name: str, device_name: str) -> str:
+    """Return '<Raumname> <Gerätename>' without double-prefixing."""
+    r = (room_name or "").strip()
+    d = (device_name or "").strip()
+    if r and d:
+        if d.lower() == r.lower() or d.lower().startswith(f"{r.lower()} "):
+            return d
+        return f"{r} {d}"
+    return d or r
+
+
+def _strip_room_prefix(name: str, room_name: str) -> str:
+    n = (name or "").strip()
+    r = (room_name or "").strip()
+    if n and r and n.lower().startswith(f"{r.lower()} ") and len(n) > len(r) + 1:
+        return n[len(r) + 1:].strip()
+    return n
+
+
+def sync_device_friendly_names(
+    hass,
+    device_id: str,
+    dev_cfg: dict,
+    *,
+    area_id: str | None = None,
+) -> int:
+    """Set HA friendly names on device & entities to '<Raumname> <Gerätename>'.
+
+    Overwrites any prior manual friendly_name overrides while keeping Companion's
+    internal custom_name pure (without room prefix) for dashboard display.
+    Returns number of registry entries updated.
+    """
+    from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
+
+    if not isinstance(dev_cfg, dict):
+        return 0
+
+    ent_reg = er.async_get(hass)
+    dev_reg = dr.async_get(hass)
+    area_reg = ar.async_get(hass)
+    entities_cfg = dev_cfg.get("entities") if isinstance(dev_cfg.get("entities"), dict) else {}
+    primary_eid = entities_cfg.get("primary")
+    sub_entities = entities_cfg.get("sub_entities") if isinstance(entities_cfg.get("sub_entities"), dict) else {}
+
+    def _area_name(aid: str | None) -> str:
+        if not aid:
+            return ""
+        a = area_reg.async_get_area(aid)
+        return (a.name or "").strip() if a else ""
+
+    updated = 0
+    is_virtual = str(device_id).startswith("entity:")
+
+    if is_virtual:
+        eid = primary_eid or str(device_id).split(":", 1)[1]
+        entry = ent_reg.async_get(eid)
+        if entry is None:
+            return 0
+        eff_area = area_id if area_id is not None else entry.area_id
+        rname = _area_name(eff_area)
+        dname = _strip_room_prefix(dev_cfg.get("custom_name") or entry.name or entry.original_name or "", rname)
+        target_fn = _compose_friendly_name(rname, dname)
+        if target_fn and entry.name != target_fn:
+            try:
+                ent_reg.async_update_entity(eid, name=target_fn)
+                updated += 1
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning("Could not update friendly_name for %s: %s", eid, err)
+        return updated
+
+    dev = dev_reg.async_get(device_id)
+    eff_area = area_id if area_id is not None else (dev.area_id if dev else None)
+    rname = _area_name(eff_area)
+    raw_dname = (dev_cfg.get("custom_name") or (dev.name_by_user if dev else None) or (dev.name if dev else None) or "").strip()
+    dname = _strip_room_prefix(raw_dname, rname)
+    if not dname:
+        return 0
+    dev_target_fn = _compose_friendly_name(rname, dname)
+
+    if dev is not None and dev_target_fn and dev.name_by_user != dev_target_fn:
+        try:
+            dev_reg.async_update_device(device_id, name_by_user=dev_target_fn)
+            updated += 1
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("Could not update device name_by_user for %s: %s", device_id, err)
+
+    enabled_subs = {
+        seid: sdata for seid, sdata in sub_entities.items()
+        if isinstance(sdata, dict) and sdata.get("enabled", True)
+    }
+
+    handled_eids: set[str] = set()
+    if primary_eid and primary_eid not in enabled_subs:
+        p_entry = ent_reg.async_get(primary_eid)
+        if p_entry is not None:
+            handled_eids.add(primary_eid)
+            has_en = bool(getattr(p_entry, "has_entity_name", False))
+            desired_name = None if has_en else dev_target_fn
+            if p_entry.name != desired_name:
+                try:
+                    ent_reg.async_update_entity(primary_eid, name=desired_name)
+                    updated += 1
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.warning("Could not update friendly_name for %s: %s", primary_eid, err)
+
+    for sub_eid, sub_data in enabled_subs.items():
+        s_entry = ent_reg.async_get(sub_eid)
+        if s_entry is None:
+            continue
+        handled_eids.add(sub_eid)
+        ch_area = sub_data.get("area_id") if "area_id" in sub_data else eff_area
+        ch_rname = _area_name(ch_area)
+        ch_dname = _strip_room_prefix(sub_data.get("custom_name") or sub_data.get("name") or dname, ch_rname)
+        ch_target_fn = _compose_friendly_name(ch_rname, ch_dname)
+        has_en = bool(getattr(s_entry, "has_entity_name", False))
+        if has_en:
+            desired_name = None if (len(enabled_subs) <= 1 or ch_target_fn == dev_target_fn) else ch_dname
+        else:
+            desired_name = ch_target_fn
+        if s_entry.name != desired_name:
+            try:
+                ent_reg.async_update_entity(sub_eid, name=desired_name)
+                updated += 1
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning("Could not update friendly_name for %s: %s", sub_eid, err)
+
+    for e in list(ent_reg.entities.values()):
+        if e.device_id != device_id or e.entity_id in handled_eids:
+            continue
+        has_en = bool(getattr(e, "has_entity_name", False))
+        if has_en:
+            if e.name is not None:
+                try:
+                    ent_reg.async_update_entity(e.entity_id, name=None)
+                    updated += 1
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.warning("Could not reset friendly_name for %s: %s", e.entity_id, err)
+        else:
+            orig = (e.original_name or e.name or "").strip()
+            orig_clean = _strip_room_prefix(_strip_room_prefix(orig, rname), dname)
+            sub_fn = f"{dev_target_fn} {orig_clean}".strip() if orig_clean else dev_target_fn
+            if e.name != sub_fn:
+                try:
+                    ent_reg.async_update_entity(e.entity_id, name=sub_fn)
+                    updated += 1
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.warning("Could not update sub-entity friendly_name for %s: %s", e.entity_id, err)
+
+    return updated
+
+
 def _build_entity_id_pattern(id_map: dict[str, str]) -> re.Pattern[str] | None:
     """Compile a single-pass boundary-safe case-insensitive regex matching any entity ID in id_map."""
     keys = sorted((k for k in id_map if k), key=len, reverse=True)

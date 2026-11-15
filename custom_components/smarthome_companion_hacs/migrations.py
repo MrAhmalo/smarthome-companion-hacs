@@ -8,7 +8,7 @@ import re
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from .const import DOMAIN
-from .entity_sync import async_sync_renamed_entities, sync_device_entity_ids
+from .entity_sync import async_sync_renamed_entities, sync_device_entity_ids, sync_device_friendly_names
 from .util import safe_fire_event
 from .ws_api import _ensure_label_exists, _sync_entity_labels
 
@@ -16,6 +16,7 @@ _LOGGER = logging.getLogger(__name__)
 
 MIGRATION_ENERGY_SENSORS_V1 = "energy_sensors_v1"
 MIGRATION_SUB_ENTITY_NAMES_V1 = "sub_entity_names_v1"
+MIGRATION_FRIENDLY_NAMES_V1 = "friendly_names_v1"
 
 _ENERGY_UNITS = {"kwh", "wh", "mwh"}
 _NON_ENERGY_CLASSES = {
@@ -358,3 +359,35 @@ async def async_migrate_sub_entity_names(hass, store) -> bool:
         return bool(all_renamed)
     finally:
         store._sub_entity_migrating = False
+
+
+async def async_migrate_friendly_names(hass, store) -> bool:
+    """One-time, idempotent migration setting HA friendly_names to '<Raumname> <Gerätename>'."""
+    migrations = store.get_migrations()
+    if migrations.get(MIGRATION_FRIENDLY_NAMES_V1):
+        return False
+    if getattr(store, "_friendly_name_migrating", False):
+        return False
+
+    store._friendly_name_migrating = True
+    try:
+        devices = store.get_devices()
+        total_updated = 0
+        for device_id, cfg in list(devices.items()):
+            if not isinstance(cfg, dict):
+                continue
+            total_updated += sync_device_friendly_names(hass, device_id, cfg)
+
+        migrations[MIGRATION_FRIENDLY_NAMES_V1] = True
+        saved = await store.async_save()
+        if not saved:
+            migrations.pop(MIGRATION_FRIENDLY_NAMES_V1, None)
+            _LOGGER.warning("Friendly-name migration could not persist flag; will retry next startup.")
+            return False
+
+        if total_updated:
+            _LOGGER.info("Migrated %d HA friendly_name entries to '<Raumname> <Gerätename>'.", total_updated)
+            safe_fire_event(hass, f"{DOMAIN}_dashboard_updated")
+        return total_updated > 0
+    finally:
+        store._friendly_name_migrating = False

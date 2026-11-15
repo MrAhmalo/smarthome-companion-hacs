@@ -14,7 +14,12 @@ from homeassistant.helpers import (
 )
 from .const import DOMAIN
 from .util import safe_fire_event
-from .entity_sync import async_sync_renamed_entities, slugify_ha, sync_device_entity_ids
+from .entity_sync import (
+    async_sync_renamed_entities,
+    slugify_ha,
+    sync_device_entity_ids,
+    sync_device_friendly_names,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -229,32 +234,21 @@ async def handle_configure_device(hass, connection, msg):
                 )
                 _sync_entity_labels(hass, sub_data["energy"], [f"{sub_cat}_energy"])
 
-    # Update device / entity name and area in HA registry
+    # Update area in HA registry, then apply '<Raumname> <Gerätename>' friendly names
     is_virtual_entity = str(device_id).startswith("entity:")
     dev_reg = dr.async_get(hass)
     if is_virtual_entity:
-        if primary:
+        if primary and area_id is not None:
             try:
-                v_updates = {}
-                if custom_name:
-                    v_updates["name"] = custom_name
-                if area_id is not None:
-                    v_updates["area_id"] = area_id if area_id else None
-                if v_updates:
-                    ent_reg.async_update_entity(primary, **v_updates)
+                ent_reg.async_update_entity(primary, area_id=area_id if area_id else None)
             except Exception as e:
-                _LOGGER.warning("Could not update virtual entity registry for %s: %s", primary, e)
+                _LOGGER.warning("Could not update virtual entity area for %s: %s", primary, e)
     else:
-        try:
-            updates = {}
-            if custom_name:
-                updates["name_by_user"] = custom_name
-            if area_id is not None:
-                updates["area_id"] = area_id if area_id else None
-            if updates:
-                dev_reg.async_update_device(device_id, **updates)
-        except Exception as e:
-            _LOGGER.warning("Could not update device registry for %s: %s", device_id, e)
+        if area_id is not None:
+            try:
+                dev_reg.async_update_device(device_id, area_id=area_id if area_id else None)
+            except Exception as e:
+                _LOGGER.warning("Could not update device area for %s: %s", device_id, e)
 
     # Apply per-channel room overrides when specified on multi-channel devices
     if isinstance(sub_entities_for_labels, dict):
@@ -268,6 +262,8 @@ async def handle_configure_device(hass, connection, msg):
                         ent_reg.async_update_entity(sub_eid, area_id=ch_area)
                 except Exception as e:
                     _LOGGER.warning("Could not update area for channel %s: %s", sub_eid, e)
+
+    sync_device_friendly_names(hass, device_id, devices[device_id], area_id=area_id)
 
     # Sync primary, channel, room-sensor, and ALL remaining sub-entity IDs of this device
     renamed_map = sync_device_entity_ids(

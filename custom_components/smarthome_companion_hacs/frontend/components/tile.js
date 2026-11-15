@@ -62,18 +62,26 @@ export class Tile {
       },
     }, this.nameEl, this.stateEl);
     this.btns = h('div', { class: 'tile-btns' });
+    this.dragHandle = h('button', {
+      type: 'button',
+      class: 'tile-drag-handle',
+      'aria-label': 'Kachel verschieben',
+      title: 'Kachel verschieben',
+      onClick: (e) => e.stopPropagation(),
+    }, icon('mdi:drag'));
     this.feature = h('div', { class: 'tile-feature', hidden: true });
 
     const wide = ['cover', 'media_player', 'climate'].includes(this.kind)
       || this.spec.wide === true
       || this.spec.force_own_row === true;
     this.el = h('div', { class: `tile ${this.kind}${wide ? ' wide' : ''}`, 'data-key': this.spec.key },
-      h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns),
+      h('div', { class: 'tile-main' }, this.dragHandle, this.iconBtn, this.info, this.btns),
       this.feature,
       editBorder(10));
 
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
+        if (e.target.closest('.tile-drag-handle')) return;
         e.stopPropagation();
         e.preventDefault();
         const targetId = this.deviceId || this.spec?.device_id || this.entityId;
@@ -442,12 +450,14 @@ export class GroupTile {
           else this.ctx.onOpenGroup?.(this.spec.group_id);
           return;
         }
-        this._toggleMaster();
+        const targetEid = this.groupEntityId || this.children[0]?.entityId;
+        if (targetEid) moreInfo(this.el, targetEid);
       },
     }, this.nameEl, this.stateEl);
 
     if (this.isSubGroup) {
       this.btns = h('div', { class: 'tile-btns' });
+      this.dragHandle = null;
     } else {
       this.chevron = icon('mdi:chevron-down');
       this.btnChevron = h('button', {
@@ -462,6 +472,13 @@ export class GroupTile {
         },
       }, this.chevron);
       this.btns = h('div', { class: 'tile-btns' }, this.btnChevron);
+      this.dragHandle = h('button', {
+        type: 'button',
+        class: 'tile-drag-handle',
+        'aria-label': 'Gruppe verschieben',
+        title: 'Gruppe verschieben',
+        onClick: (e) => e.stopPropagation(),
+      }, icon('mdi:drag'));
     }
 
     // Master brightness slider
@@ -493,9 +510,10 @@ export class GroupTile {
           else this.ctx.onOpenGroup?.(this.spec.group_id);
           return;
         }
-        this._toggleMaster();
+        const targetEid = this.groupEntityId || this.children[0]?.entityId;
+        if (targetEid) moreInfo(this.el, targetEid);
       },
-    }, this.iconBtn, this.info, this.btns);
+    }, this.dragHandle, this.iconBtn, this.info, this.btns);
 
     if (this.isSubGroup) {
       this.el = h('div', {
@@ -538,7 +556,7 @@ export class GroupTile {
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
         const closestTile = e.target.closest('.tile');
-        if (e.target.closest('.chevron-btn') || (closestTile && closestTile !== this.el) || (this.subBody && this.subBody.contains(e.target))) {
+        if (e.target.closest('.chevron-btn') || e.target.closest('.tile-drag-handle') || (closestTile && closestTile !== this.el) || (this.subBody && this.subBody.contains(e.target))) {
           return;
         }
         e.stopPropagation();

@@ -903,6 +903,124 @@ export function enablePointerReorder(listEl, { itemSelector = '[data-reorder-ite
   };
 }
 
+/**
+ * Pointer-based 2D grid drag-and-drop reordering for desktop & touch/mobile.
+ * Starts exclusively from `handleSelector` so scrolling and tile taps remain smooth.
+ */
+export function enableGridPointerReorder(gridEl, {
+  itemSelector = '.tile',
+  handleSelector = '.tile-drag-handle',
+  onReorder,
+} = {}) {
+  if (!gridEl || typeof onReorder !== 'function') return () => {};
+  let active = null;
+
+  const findTargetIdx = (x, y, items, skipIdx) => {
+    // 1. Direct bounding-box hit
+    for (let i = 0; i < items.length; i++) {
+      if (i === skipIdx) continue;
+      const r = items[i].getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return i;
+    }
+    // 2. Fallback: closest center
+    let bestIdx = skipIdx;
+    let bestDist = Infinity;
+    for (let i = 0; i < items.length; i++) {
+      const r = items[i].getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const d = (x - cx) ** 2 + (y - cy) ** 2;
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    }
+    return bestIdx;
+  };
+
+  const onPointerDown = (e) => {
+    if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
+    const handle = e.target.closest(handleSelector);
+    if (!handle || !gridEl.contains(handle)) return;
+    const item = handle.closest(itemSelector);
+    if (!item || item.parentElement !== gridEl) return;
+    const items = Array.from(gridEl.children).filter((el) => el.matches(itemSelector));
+    if (items.length < 2) return;
+    const startIdx = items.indexOf(item);
+    if (startIdx < 0) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    handle.setPointerCapture?.(e.pointerId);
+    item.setAttribute('data-dragging', '');
+    active = {
+      pointerId: e.pointerId,
+      handle,
+      item,
+      items,
+      startIdx,
+      targetIdx: startIdx,
+      startX: e.clientX,
+      startY: e.clientY,
+      lastX: e.clientX,
+      lastY: e.clientY,
+      raf: 0,
+    };
+  };
+
+  const updateDrag = () => {
+    if (!active) return;
+    active.raf = 0;
+    const dx = active.lastX - active.startX;
+    const dy = active.lastY - active.startY;
+    active.item.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.02)`;
+    const nextIdx = findTargetIdx(active.lastX, active.lastY, active.items, active.startIdx);
+    if (nextIdx !== active.targetIdx) {
+      active.items.forEach((el) => el.removeAttribute('data-drop-target'));
+      if (nextIdx !== active.startIdx && active.items[nextIdx]) {
+        active.items[nextIdx].setAttribute('data-drop-target', '');
+      }
+      active.targetIdx = nextIdx;
+    }
+  };
+
+  const onPointerMove = (e) => {
+    if (!active || e.pointerId !== active.pointerId) return;
+    e.preventDefault();
+    active.lastX = e.clientX;
+    active.lastY = e.clientY;
+    if (!active.raf) active.raf = requestAnimationFrame(updateDrag);
+  };
+
+  const cleanup = (commit) => {
+    if (!active) return;
+    if (active.raf) cancelAnimationFrame(active.raf);
+    try { active.handle.releasePointerCapture?.(active.pointerId); } catch {}
+    active.item.removeAttribute('data-dragging');
+    active.item.style.transform = '';
+    active.items.forEach((el) => el.removeAttribute('data-drop-target'));
+    const from = active.startIdx;
+    const to = active.targetIdx;
+    active = null;
+    if (commit && from !== to) onReorder(from, to);
+  };
+
+  const onPointerUp = (e) => { if (active && e.pointerId === active.pointerId) cleanup(true); };
+  const onPointerCancel = (e) => { if (active && e.pointerId === active.pointerId) cleanup(false); };
+
+  gridEl.addEventListener('pointerdown', onPointerDown);
+  gridEl.addEventListener('pointermove', onPointerMove);
+  gridEl.addEventListener('pointerup', onPointerUp);
+  gridEl.addEventListener('pointercancel', onPointerCancel);
+  return () => {
+    cleanup(false);
+    gridEl.removeEventListener('pointerdown', onPointerDown);
+    gridEl.removeEventListener('pointermove', onPointerMove);
+    gridEl.removeEventListener('pointerup', onPointerUp);
+    gridEl.removeEventListener('pointercancel', onPointerCancel);
+  };
+}
+
 /** Formats countdown milliseconds cleanly as mm:ss or hh:mm:ss. */
 export function formatCountdownMs(ms) {
   const totalSec = Math.max(0, Math.ceil((ms || 0) / 1000));

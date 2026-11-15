@@ -9,7 +9,7 @@ const DOMAIN_LABELS_DE = {
 };
 
 export class EntityPicker {
-  constructor({ hass, value = '', onChange, filter, domain, placeholder = 'Entität suchen', allowClear = true }) {
+  constructor({ hass, value = '', onChange, filter, domain, placeholder = 'Entität suchen', allowClear = true, priorityEntityIds = null }) {
     this.hass = hass;
     this.value = value || '';
     this.onChange = onChange;
@@ -17,6 +17,9 @@ export class EntityPicker {
     this.domains = domain ? (Array.isArray(domain) ? domain : [domain]) : null;
     this.placeholder = placeholder;
     this.allowClear = allowClear;
+    this.prioritySet = priorityEntityIds instanceof Set
+      ? priorityEntityIds
+      : (Array.isArray(priorityEntityIds) ? new Set(priorityEntityIds) : null);
 
     this.isOpen = false;
     this.searchQuery = '';
@@ -233,7 +236,7 @@ export class EntityPicker {
       return;
     }
 
-    filtered.sort((a, b) => {
+    const sortGroup = (items) => items.sort((a, b) => {
       if (a.entityId === this.value) return -1;
       if (b.entityId === this.value) return 1;
       const an = (a.st?.attributes?.friendly_name || a.entityId).toLowerCase();
@@ -246,7 +249,7 @@ export class EntityPicker {
       return an.localeCompare(bn);
     });
 
-    this.listEl.replaceChildren(...filtered.slice(0, 80).map(({ entityId, st }) => {
+    const renderItem = ({ entityId, st }) => {
       const isSel = entityId === this.value;
       const name = st?.attributes?.friendly_name || entityId;
       const ic = entityIcon(entityId, st);
@@ -266,7 +269,25 @@ export class EntityPicker {
         h('div', { class: 'ep-sub' }, entityId)),
       stateTxt ? h('span', { class: 'item-state' }, stateTxt) : null,
       isSel ? icon('mdi:check', 'ep-check') : null);
-    }));
+    };
+
+    const nodes = [];
+    if (this.prioritySet && this.prioritySet.size > 0) {
+      const own = sortGroup(filtered.filter((it) => this.prioritySet.has(it.entityId)));
+      const rest = sortGroup(filtered.filter((it) => !this.prioritySet.has(it.entityId)));
+      const ownSlice = own.slice(0, 40);
+      const restSlice = rest.slice(0, Math.max(0, 80 - ownSlice.length));
+      nodes.push(...ownSlice.map(renderItem));
+      if (ownSlice.length > 0 && restSlice.length > 0) {
+        nodes.push(h('div', { class: 'ep-divider', role: 'separator' }));
+      }
+      nodes.push(...restSlice.map(renderItem));
+    } else {
+      sortGroup(filtered);
+      nodes.push(...filtered.slice(0, 80).map(renderItem));
+    }
+
+    this.listEl.replaceChildren(...nodes);
   }
 
   _focusFirstItem() {

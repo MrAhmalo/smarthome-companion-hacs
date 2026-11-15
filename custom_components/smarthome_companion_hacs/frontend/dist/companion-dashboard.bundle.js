@@ -837,6 +837,7 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 }
 .ep-item[data-active] { background: rgba(3, 169, 244, 0.18); background: color-mix(in srgb, var(--cd-accent) 22%, transparent); }
 .ep-item .item-state { flex: none; font-size: 11px; color: var(--cd-secondary); background: rgba(128,128,128,.15); padding: 2px 6px; border-radius: 6px; }
+.ep-divider { height: 1px; margin: 6px 10px; background: var(--cd-border); opacity: 0.9; }
 .ep-check { flex: none; color: var(--cd-accent); }
 
 /* ── Color Picker ── */
@@ -1795,6 +1796,20 @@ details.adv-options summary {
 }
 .drag-handle.small { width: 28px; height: 32px; }
 .drag-handle:active { cursor: grabbing; color: var(--cd-accent); background: rgba(128,128,128,.14); }
+.tile-drag-handle {
+  display: none;
+  flex: none; align-items: center; justify-content: center;
+  width: 22px; height: 28px; margin-left: -4px; margin-right: -2px;
+  border-radius: 6px; border: 0; padding: 0;
+  background: transparent; color: var(--cd-secondary); cursor: grab;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.page[data-edit-mode] .tile-drag-handle { display: inline-flex; }
+.tile-drag-handle:active { cursor: grabbing; color: var(--cd-accent); }
+.tile[data-drop-target] {
+  outline: 2px dashed var(--cd-accent);
+  outline-offset: 2px;
+}
 [data-dragging] {
   position: relative; z-index: 20; opacity: 0.92;
   box-shadow: 0 10px 28px rgba(0,0,0,.45), 0 0 0 1.5px var(--cd-accent);
@@ -3154,6 +3169,124 @@ function enablePointerReorder(listEl, { itemSelector = '[data-reorder-item]', ha
   };
 }
 
+/**
+ * Pointer-based 2D grid drag-and-drop reordering for desktop & touch/mobile.
+ * Starts exclusively from `handleSelector` so scrolling and tile taps remain smooth.
+ */
+function enableGridPointerReorder(gridEl, {
+  itemSelector = '.tile',
+  handleSelector = '.tile-drag-handle',
+  onReorder,
+} = {}) {
+  if (!gridEl || typeof onReorder !== 'function') return () => {};
+  let active = null;
+
+  const findTargetIdx = (x, y, items, skipIdx) => {
+    // 1. Direct bounding-box hit
+    for (let i = 0; i < items.length; i++) {
+      if (i === skipIdx) continue;
+      const r = items[i].getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return i;
+    }
+    // 2. Fallback: closest center
+    let bestIdx = skipIdx;
+    let bestDist = Infinity;
+    for (let i = 0; i < items.length; i++) {
+      const r = items[i].getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const d = (x - cx) ** 2 + (y - cy) ** 2;
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    }
+    return bestIdx;
+  };
+
+  const onPointerDown = (e) => {
+    if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
+    const handle = e.target.closest(handleSelector);
+    if (!handle || !gridEl.contains(handle)) return;
+    const item = handle.closest(itemSelector);
+    if (!item || item.parentElement !== gridEl) return;
+    const items = Array.from(gridEl.children).filter((el) => el.matches(itemSelector));
+    if (items.length < 2) return;
+    const startIdx = items.indexOf(item);
+    if (startIdx < 0) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    handle.setPointerCapture?.(e.pointerId);
+    item.setAttribute('data-dragging', '');
+    active = {
+      pointerId: e.pointerId,
+      handle,
+      item,
+      items,
+      startIdx,
+      targetIdx: startIdx,
+      startX: e.clientX,
+      startY: e.clientY,
+      lastX: e.clientX,
+      lastY: e.clientY,
+      raf: 0,
+    };
+  };
+
+  const updateDrag = () => {
+    if (!active) return;
+    active.raf = 0;
+    const dx = active.lastX - active.startX;
+    const dy = active.lastY - active.startY;
+    active.item.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.02)`;
+    const nextIdx = findTargetIdx(active.lastX, active.lastY, active.items, active.startIdx);
+    if (nextIdx !== active.targetIdx) {
+      active.items.forEach((el) => el.removeAttribute('data-drop-target'));
+      if (nextIdx !== active.startIdx && active.items[nextIdx]) {
+        active.items[nextIdx].setAttribute('data-drop-target', '');
+      }
+      active.targetIdx = nextIdx;
+    }
+  };
+
+  const onPointerMove = (e) => {
+    if (!active || e.pointerId !== active.pointerId) return;
+    e.preventDefault();
+    active.lastX = e.clientX;
+    active.lastY = e.clientY;
+    if (!active.raf) active.raf = requestAnimationFrame(updateDrag);
+  };
+
+  const cleanup = (commit) => {
+    if (!active) return;
+    if (active.raf) cancelAnimationFrame(active.raf);
+    try { active.handle.releasePointerCapture?.(active.pointerId); } catch {}
+    active.item.removeAttribute('data-dragging');
+    active.item.style.transform = '';
+    active.items.forEach((el) => el.removeAttribute('data-drop-target'));
+    const from = active.startIdx;
+    const to = active.targetIdx;
+    active = null;
+    if (commit && from !== to) onReorder(from, to);
+  };
+
+  const onPointerUp = (e) => { if (active && e.pointerId === active.pointerId) cleanup(true); };
+  const onPointerCancel = (e) => { if (active && e.pointerId === active.pointerId) cleanup(false); };
+
+  gridEl.addEventListener('pointerdown', onPointerDown);
+  gridEl.addEventListener('pointermove', onPointerMove);
+  gridEl.addEventListener('pointerup', onPointerUp);
+  gridEl.addEventListener('pointercancel', onPointerCancel);
+  return () => {
+    cleanup(false);
+    gridEl.removeEventListener('pointerdown', onPointerDown);
+    gridEl.removeEventListener('pointermove', onPointerMove);
+    gridEl.removeEventListener('pointerup', onPointerUp);
+    gridEl.removeEventListener('pointercancel', onPointerCancel);
+  };
+}
+
 /** Formats countdown milliseconds cleanly as mm:ss or hh:mm:ss. */
 function formatCountdownMs(ms) {
   const totalSec = Math.max(0, Math.ceil((ms || 0) / 1000));
@@ -3874,7 +4007,7 @@ const DOMAIN_LABELS_DE = {
   person: 'Personen', weather: 'Wetter', fan: 'Lüfter', valve: 'Ventile',
 };
 class EntityPicker {
-  constructor({ hass, value = '', onChange, filter, domain, placeholder = 'Entität suchen', allowClear = true }) {
+  constructor({ hass, value = '', onChange, filter, domain, placeholder = 'Entität suchen', allowClear = true, priorityEntityIds = null }) {
     this.hass = hass;
     this.value = value || '';
     this.onChange = onChange;
@@ -3882,6 +4015,9 @@ class EntityPicker {
     this.domains = domain ? (Array.isArray(domain) ? domain : [domain]) : null;
     this.placeholder = placeholder;
     this.allowClear = allowClear;
+    this.prioritySet = priorityEntityIds instanceof Set
+      ? priorityEntityIds
+      : (Array.isArray(priorityEntityIds) ? new Set(priorityEntityIds) : null);
 
     this.isOpen = false;
     this.searchQuery = '';
@@ -4098,7 +4234,7 @@ class EntityPicker {
       return;
     }
 
-    filtered.sort((a, b) => {
+    const sortGroup = (items) => items.sort((a, b) => {
       if (a.entityId === this.value) return -1;
       if (b.entityId === this.value) return 1;
       const an = (a.st?.attributes?.friendly_name || a.entityId).toLowerCase();
@@ -4111,7 +4247,7 @@ class EntityPicker {
       return an.localeCompare(bn);
     });
 
-    this.listEl.replaceChildren(...filtered.slice(0, 80).map(({ entityId, st }) => {
+    const renderItem = ({ entityId, st }) => {
       const isSel = entityId === this.value;
       const name = st?.attributes?.friendly_name || entityId;
       const ic = entityIcon(entityId, st);
@@ -4131,7 +4267,25 @@ class EntityPicker {
         h('div', { class: 'ep-sub' }, entityId)),
       stateTxt ? h('span', { class: 'item-state' }, stateTxt) : null,
       isSel ? icon('mdi:check', 'ep-check') : null);
-    }));
+    };
+
+    const nodes = [];
+    if (this.prioritySet && this.prioritySet.size > 0) {
+      const own = sortGroup(filtered.filter((it) => this.prioritySet.has(it.entityId)));
+      const rest = sortGroup(filtered.filter((it) => !this.prioritySet.has(it.entityId)));
+      const ownSlice = own.slice(0, 40);
+      const restSlice = rest.slice(0, Math.max(0, 80 - ownSlice.length));
+      nodes.push(...ownSlice.map(renderItem));
+      if (ownSlice.length > 0 && restSlice.length > 0) {
+        nodes.push(h('div', { class: 'ep-divider', role: 'separator' }));
+      }
+      nodes.push(...restSlice.map(renderItem));
+    } else {
+      sortGroup(filtered);
+      nodes.push(...filtered.slice(0, 80).map(renderItem));
+    }
+
+    this.listEl.replaceChildren(...nodes);
   }
 
   _focusFirstItem() {
@@ -4157,6 +4311,7 @@ const DEVICE_CATEGORIES = [
   { id: 'raummessgeraet', name: 'Raummessgerät', icon: 'mdi:thermometer-lines', color: '#ff5722', desc: 'Temperatur & Klima' },
   { id: 'kamera', name: 'Kamera', icon: 'mdi:cctv', color: '#03a9f4', desc: 'Überwachungskameras' },
   { id: 'alarmanlage', name: 'Alarmanlage', icon: 'mdi:shield-home', color: '#4caf50', desc: 'Alarm-Zentrale' },
+  { id: 'solar', name: 'Solar', icon: 'mdi:solar-power-variant', color: '#f59e0b', desc: 'PV, Speicher & Netz' },
 ];
 
 const CONTROLLABLE_DOMAINS = new Set([
@@ -4259,8 +4414,9 @@ function isIrrelevantDeviceOrIntegration(d, devEntities = []) {
     return true;
   }
 
-  // Host/container CPU, RAM, Disk & system stats (when device carries no smart-home actuators)
-  const isSystemText = (
+  // Host/container CPU, RAM, Disk & system stats (only when device carries no smart-home actuators)
+  const hasRealActuator = devEntities.some((e) => !e.disabled_by && !e.hidden_by && isControllableActuator(e));
+  const isSystemText = !hasRealActuator && (
     name.includes('hacs') || mfg.includes('hacs') ||
     name.includes('forecast') || mfg.includes('met.no') ||
     name.includes('bluetooth') || mfg.includes('bluetooth') || name.startsWith('hci') ||
@@ -4333,6 +4489,7 @@ function isControllableActuator(e) {
 
   const domain = domainOf(e.entity_id);
   if (!CONTROLLABLE_DOMAINS.has(domain)) return false;
+  if (domain === 'light') return true;
 
   const id = (e.entity_id || '').toLowerCase();
   const name = (e.name || e.original_name || '').toLowerCase();
@@ -4605,18 +4762,26 @@ class Tile {
       },
     }, this.nameEl, this.stateEl);
     this.btns = h('div', { class: 'tile-btns' });
+    this.dragHandle = h('button', {
+      type: 'button',
+      class: 'tile-drag-handle',
+      'aria-label': 'Kachel verschieben',
+      title: 'Kachel verschieben',
+      onClick: (e) => e.stopPropagation(),
+    }, icon('mdi:drag'));
     this.feature = h('div', { class: 'tile-feature', hidden: true });
 
     const wide = ['cover', 'media_player', 'climate'].includes(this.kind)
       || this.spec.wide === true
       || this.spec.force_own_row === true;
     this.el = h('div', { class: `tile ${this.kind}${wide ? ' wide' : ''}`, 'data-key': this.spec.key },
-      h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns),
+      h('div', { class: 'tile-main' }, this.dragHandle, this.iconBtn, this.info, this.btns),
       this.feature,
       editBorder(10));
 
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
+        if (e.target.closest('.tile-drag-handle')) return;
         e.stopPropagation();
         e.preventDefault();
         const targetId = this.deviceId || this.spec?.device_id || this.entityId;
@@ -4985,12 +5150,14 @@ class GroupTile {
           else this.ctx.onOpenGroup?.(this.spec.group_id);
           return;
         }
-        this._toggleMaster();
+        const targetEid = this.groupEntityId || this.children[0]?.entityId;
+        if (targetEid) moreInfo(this.el, targetEid);
       },
     }, this.nameEl, this.stateEl);
 
     if (this.isSubGroup) {
       this.btns = h('div', { class: 'tile-btns' });
+      this.dragHandle = null;
     } else {
       this.chevron = icon('mdi:chevron-down');
       this.btnChevron = h('button', {
@@ -5005,6 +5172,13 @@ class GroupTile {
         },
       }, this.chevron);
       this.btns = h('div', { class: 'tile-btns' }, this.btnChevron);
+      this.dragHandle = h('button', {
+        type: 'button',
+        class: 'tile-drag-handle',
+        'aria-label': 'Gruppe verschieben',
+        title: 'Gruppe verschieben',
+        onClick: (e) => e.stopPropagation(),
+      }, icon('mdi:drag'));
     }
 
     // Master brightness slider
@@ -5036,9 +5210,10 @@ class GroupTile {
           else this.ctx.onOpenGroup?.(this.spec.group_id);
           return;
         }
-        this._toggleMaster();
+        const targetEid = this.groupEntityId || this.children[0]?.entityId;
+        if (targetEid) moreInfo(this.el, targetEid);
       },
-    }, this.iconBtn, this.info, this.btns);
+    }, this.dragHandle, this.iconBtn, this.info, this.btns);
 
     if (this.isSubGroup) {
       this.el = h('div', {
@@ -5081,7 +5256,7 @@ class GroupTile {
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
         const closestTile = e.target.closest('.tile');
-        if (e.target.closest('.chevron-btn') || (closestTile && closestTile !== this.el) || (this.subBody && this.subBody.contains(e.target))) {
+        if (e.target.closest('.chevron-btn') || e.target.closest('.tile-drag-handle') || (closestTile && closestTile !== this.el) || (this.subBody && this.subBody.contains(e.target))) {
           return;
         }
         e.stopPropagation();
@@ -5258,58 +5433,35 @@ function average(hass, ids) {
 function applySmartTileLayout(tiles, grid = null) {
   if (!tiles || !tiles.length) return;
 
-  const priorityTiles = [];
-  const topWide = [];
-  const compactTiles = [];
-  const sliderTiles = [];
-  const bottomWide = [];
-
+  // Preserve the exact tile order (pinned + drag-and-drop) while pairing consecutive
+  // compact tiles 2-up (left/right) and promoting lone compact tiles before wide rows or at end.
+  let pendingCompact = null;
   for (const t of tiles) {
     const isGroup = t.spec?.is_group || t.is_group === true || t.constructor?.name === 'GroupTile';
-    const effCat = t.spec ? effectiveCategory(t.spec) : effectiveCategory(t);
-    if (!isGroup && effCat === 'rauchmelder') {
-      priorityTiles.push(t);
-    } else if (isGroup) {
-      bottomWide.push(t);
-    } else if (t.isForceOwnRow) {
-      sliderTiles.push(t);
-    } else if (t.isAlwaysWide) {
-      topWide.push(t);
-    } else if (t.hasSlider) {
-      sliderTiles.push(t);
+    const isWide = isGroup || t.isForceOwnRow || t.isAlwaysWide || t.hasSlider;
+    if (isWide) {
+      if (pendingCompact) {
+        pendingCompact.setWide(true);
+        pendingCompact = null;
+      }
+      t.setWide(true);
+    } else if (!pendingCompact) {
+      pendingCompact = t;
     } else {
-      compactTiles.push(t);
+      pendingCompact.setWide(false);
+      t.setWide(false);
+      pendingCompact = null;
     }
   }
-
-  if (priorityTiles.length % 2 === 1) {
-    for (let i = 0; i < priorityTiles.length - 1; i++) {
-      priorityTiles[i].setWide(false);
-    }
-    priorityTiles[priorityTiles.length - 1].setWide(true);
-  } else {
-    priorityTiles.forEach((t) => t.setWide(false));
-  }
-
-  topWide.forEach((t) => t.setWide(true));
-  sliderTiles.forEach((t) => t.setWide(true));
-  bottomWide.forEach((t) => t.setWide(true));
-
-  if (compactTiles.length % 2 === 1) {
-    for (let i = 0; i < compactTiles.length - 1; i++) {
-      compactTiles[i].setWide(false);
-    }
-    compactTiles[compactTiles.length - 1].setWide(true);
-  } else {
-    compactTiles.forEach((t) => t.setWide(false));
+  if (pendingCompact) {
+    pendingCompact.setWide(true);
   }
 
   if (grid) {
-    const ordered = [...priorityTiles, ...topWide, ...compactTiles, ...sliderTiles, ...bottomWide];
     const current = Array.from(grid.children);
-    const changed = current.length !== ordered.length || ordered.some((t, i) => current[i] !== t.el);
+    const changed = current.length !== tiles.length || tiles.some((t, i) => current[i] !== t.el);
     if (changed) {
-      grid.replaceChildren(...ordered.map((t) => t.el));
+      grid.replaceChildren(...tiles.map((t) => t.el));
     }
   }
 }
@@ -5380,14 +5532,23 @@ class GroupedCoverTile {
     }, icon('mdi:arrow-right'));
 
     this.btns = h('div', { class: 'tile-btns' }, this.btnUp, this.btnStop, this.btnDown, this.btnDetail);
+    this.dragHandle = h('button', {
+      type: 'button',
+      class: 'tile-drag-handle',
+      'aria-label': 'Kachel verschieben',
+      title: 'Kachel verschieben',
+      onClick: (e) => e.stopPropagation(),
+    }, icon('mdi:drag'));
 
     this.el = h('div', {
       class: 'tile grouped-cover wide',
       'data-active': 'true',
-    }, h('div', { class: 'tile-main' }, this.iconBtn, this.info, this.btns), editBorder(10));
+      'data-key': this.coverSpecs[0]?.key || `cover-group:${this.roomSpec.area_id}`,
+    }, h('div', { class: 'tile-main' }, this.dragHandle, this.iconBtn, this.info, this.btns), editBorder(10));
 
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
+        if (e.target.closest('.tile-drag-handle')) return;
         e.stopPropagation();
         e.preventDefault();
         const firstCover = this.coverSpecs[0];
@@ -5454,29 +5615,25 @@ class Room {
     };
 
     // Smart Rollladen Gruppierung:
-    // If room has > 1 cover, group them into a single master GroupedCoverTile
+    // Group covers only when there are >= 2 covers AND the room has >= 3 tiles total.
     const covers = spec.tiles.filter((t) => effectiveCategory(t) === 'cover');
-    if (covers.length > 1) {
+    if (covers.length > 1 && spec.tiles.length >= 3) {
       this.groupedCover = new GroupedCoverTile(spec, covers, ctx);
-      const nonCovers = spec.tiles.filter((t) => effectiveCategory(t) !== 'cover');
-      this.tiles = [this.groupedCover, ...nonCovers.map(makeTileInstance)];
+      let insertedCover = false;
+      this.tiles = [];
+      for (const t of spec.tiles) {
+        if (effectiveCategory(t) === 'cover') {
+          if (!insertedCover) {
+            this.tiles.push(this.groupedCover);
+            insertedCover = true;
+          }
+        } else {
+          this.tiles.push(makeTileInstance(t));
+        }
+      }
     } else {
       this.tiles = spec.tiles.map(makeTileInstance);
     }
-
-    // Strict priority in room: 0. Rauchmelder, 1. Jalousien (Rollläden), 2. Medien / TV, 3. Der Rest
-    const tileWeight = (t) => {
-      if (t instanceof GroupedCoverTile) return 1;
-      const cat = effectiveCategory(t);
-      if (cat === 'rauchmelder' || cat === 'smoke') return 0;
-      if (cat === 'cover') return 1;
-      if (cat === 'media_player') return 2;
-      if (cat === 'light') return 3;
-      if (cat === 'outlet') return 4;
-      if (cat === 'switch') return 5;
-      return 6;
-    };
-    this.tiles.sort((a, b) => tileWeight(a) - tileWeight(b));
 
     this._build();
   }
@@ -5583,6 +5740,34 @@ class Room {
       h('div', { class: 'room-body' }, h('div', { class: 'room-body-inner' }, this.grid)));
     this._applyOpen();
     applySmartTileLayout(this.tiles, this.grid);
+
+    enableGridPointerReorder(this.grid, {
+      itemSelector: '.tile',
+      handleSelector: '.tile-drag-handle',
+      onReorder: (from, to) => {
+        if (!this.ctx?.isEditMode?.()) return;
+        const [moved] = this.tiles.splice(from, 1);
+        if (!moved) return;
+        this.tiles.splice(to, 0, moved);
+        applySmartTileLayout(this.tiles, this.grid);
+
+        const nextOrder = [];
+        for (const t of this.tiles) {
+          if (t instanceof GroupedCoverTile) {
+            for (const c of (t.coverSpecs || [])) {
+              if (c.key) nextOrder.push(c.key);
+            }
+          } else if (t.spec?.key) {
+            nextOrder.push(t.spec.key);
+          }
+        }
+        this.ctx?.hass?.callWS({
+          type: 'smarthome_companion/dashboard/tile_order',
+          area_id: this.spec.area_id,
+          tile_order: nextOrder,
+        }).catch(() => {});
+      },
+    });
   }
 
   _applyOpen() {
@@ -9071,7 +9256,7 @@ class DeviceWizard {
     const areaMap = new Map(this.areas.map((a) => [a.area_id, a.name]));
 
     const searchInput = h('input', {
-      type: 'text', placeholder: 'Gerät, Raum oder Funkstandard suchen', value: this.searchQuery,
+      type: 'text', placeholder: 'Gerät, Raum, Zigbee oder WLAN suchen', value: this.searchQuery,
       onInput: (e) => {
         this.searchQuery = e.target.value.toLowerCase().trim();
         if (this.searchQuery && this.preFilterMode === null) {
@@ -9108,7 +9293,7 @@ class DeviceWizard {
 
       const grid = h('div', { class: 'wizard-prefilter-grid' },
         mkPrefilterCard('room', 'mdi:floor-plan', 'Nach Raum', 'Nach Home-Assistant-Bereichen filtern', `${roomIds.size} ${roomIds.size === 1 ? 'Raum' : 'Räume'}`),
-        mkPrefilterCard('protocol', 'mdi:zigbee', 'Nach Funkstandard', 'Zigbee vs. WLAN / Sonstige', `${zigbeeCount} Zigbee · ${wifiCount} WLAN/Sonst.`),
+        mkPrefilterCard('protocol', 'mdi:zigbee', 'Nach Verbindung', 'Zigbee vs. WLAN', `${zigbeeCount} Zigbee · ${wifiCount} WLAN`),
         mkPrefilterCard('all', 'mdi:devices', 'Alle unterstützten Geräte', 'Komplette bereinigte Geräteliste', `${candidates.length} Geräte`));
 
       this.deviceListEl = h('div', { class: 'device-list' });
@@ -9135,7 +9320,7 @@ class DeviceWizard {
       }, icon('mdi:arrow-left'), ' Vorfilter'),
       ...[
         ['room', 'Nach Raum', 'mdi:floor-plan'],
-        ['protocol', 'Funkstandard', 'mdi:zigbee'],
+        ['protocol', 'Zigbee / WLAN', 'mdi:zigbee'],
         ['all', 'Alle Geräte', 'mdi:devices'],
       ].map(([mId, mLabel, mIcon]) => h('button', {
         type: 'button',
@@ -9169,15 +9354,15 @@ class DeviceWizard {
       const wifiCount = candidates.length - zigbeeCount;
       subFilterRow = h('div', { class: 'filter-chips', style: { marginBottom: '8px' } },
         ...[
-          ['all', `Alle (${candidates.length})`],
-          ['zigbee', `Zigbee (${zigbeeCount})`],
-          ['wifi_other', `WLAN / Sonstige (${wifiCount})`],
-        ].map(([pid, plabel]) => h('button', {
+          ['all', `Alle (${candidates.length})`, 'mdi:devices'],
+          ['zigbee', `Zigbee (${zigbeeCount})`, 'mdi:zigbee'],
+          ['wifi_other', `WLAN (${wifiCount})`, 'mdi:wifi'],
+        ].map(([pid, plabel, pIcon]) => h('button', {
           type: 'button',
           class: 'filter-chip',
           ...(this.protocolFilter === pid ? { 'data-active': '' } : {}),
           onClick: () => { this.protocolFilter = pid; this._renderStep0(); },
-        }, plabel)));
+        }, icon(pIcon), ' ', plabel)));
     }
 
     const baseFiltered = this._getModeFilteredCandidates(candidates);
@@ -10017,6 +10202,9 @@ class DeviceWizard {
     this.roomIcon = this._isNewRoomForDevice(this.selectedAreaId) ? this._getRoomIcon(this.selectedAreaId) : '';
     this.customIcon = existing?.icon || '';
     this.forceOwnRow = !!existing?.options?.force_own_row;
+    const pinnedList = this._dashboardConfig?.pinned_tiles || [];
+    const devTileKey = d.isVirtualEntity ? d.id : `dev:${d.id}`;
+    this.pinned = pinnedList.includes(devTileKey) || pinnedList.some((k) => String(k).startsWith(`d:${d.id}:`)) || !!existing?.options?.pinned;
     this.displayMode = existing?.options?.display_mode || 'individual';
     this.sensorPlacement = existing?.options?.sensor_placement || 'tile';
     let rawName = existing?.custom_name || d.name_by_user || d.name || '';
@@ -10266,6 +10454,22 @@ class DeviceWizard {
       h('div', { class: 'feature-desc' }, 'Nicht kompakt gruppieren · Volle Breite')),
     h('div', { class: 'switch-ui' }));
 
+    const pinCard = h('div', {
+      class: `feature-card${this.pinned ? ' active' : ''}`,
+      style: { '--feat-color': 'var(--cd-accent, #29b6f6)', cursor: 'pointer', marginTop: '8px' },
+      ...(this.pinned ? { 'data-active': '' } : {}),
+      onClick: () => {
+        this.pinned = !this.pinned;
+        pinCard.toggleAttribute('data-active', this.pinned);
+        pinCard.classList.toggle('active', this.pinned);
+      },
+    },
+    h('div', { class: 'feature-icon' }, icon('mdi:pin-outline')),
+    h('div', { class: 'feature-info' },
+      h('div', { class: 'feature-title' }, 'Anpinnen'),
+      h('div', { class: 'feature-desc' }, 'Am Anfang der Kategorie anzeigen')),
+    h('div', { class: 'switch-ui' }));
+
     let soilPlacementBlock = null;
     if (this.selectedCategory === 'bodenmessgeraet' || this.selectedCategory === 'rauchmelder') {
       const isSmoke = this.selectedCategory === 'rauchmelder';
@@ -10307,6 +10511,7 @@ class DeviceWizard {
           roomIconField,
           h('div', { class: 'field' }, 'Icon', devIconPicker.el)),
         ownRowCard,
+        pinCard,
         soilPlacementBlock,
         h('div', { class: 'section-title', style: { marginTop: '12px' } }, 'Kategorie'),
         catGrid,
@@ -10455,6 +10660,22 @@ class DeviceWizard {
       return;
     }
 
+    const devEntityIds = new Set(
+      (this.entities || [])
+        .filter((e) => (this.selectedDevice?.isVirtualEntity ? e.entity_id === this.selectedDevice.entity_id : e.device_id === this.selectedDevice?.id))
+        .map((e) => e.entity_id),
+    );
+    const isPowerSensor = (_eid, st) => {
+      const dc = String(st?.attributes?.device_class || '').toLowerCase();
+      const u = String(st?.attributes?.unit_of_measurement || '').toLowerCase();
+      return dc === 'power' || ['w', 'kw', 'mw'].includes(u);
+    };
+    const isEnergySensor = (_eid, st) => {
+      const dc = String(st?.attributes?.device_class || '').toLowerCase();
+      const u = String(st?.attributes?.unit_of_measurement || '').toLowerCase();
+      return dc === 'energy' || ['kwh', 'wh', 'mwh'].includes(u);
+    };
+
     if (!isMulti) {
       const ch = this.channels[0];
 
@@ -10463,6 +10684,8 @@ class DeviceWizard {
         value: ch.power || '',
         placeholder: 'Watt-Sensor (optional)',
         domain: 'sensor',
+        priorityEntityIds: devEntityIds,
+        filter: isPowerSensor,
         onChange: (val) => {
           ch.power = val;
           this.powerEntityId = val;
@@ -10489,6 +10712,8 @@ class DeviceWizard {
         value: ch.energy || '',
         placeholder: 'kWh-Sensor (optional)',
         domain: 'sensor',
+        priorityEntityIds: devEntityIds,
+        filter: isEnergySensor,
         onChange: (val) => {
           ch.energy = val;
           this.energyEntityId = val;
@@ -10595,6 +10820,8 @@ class DeviceWizard {
         value: ch.power || '',
         placeholder: 'Watt-Sensor (optional)',
         domain: 'sensor',
+        priorityEntityIds: devEntityIds,
+        filter: isPowerSensor,
         onChange: (val) => { ch.power = val; },
       });
       this._dropdowns.push(powerPicker);
@@ -10604,6 +10831,8 @@ class DeviceWizard {
         value: ch.energy || '',
         placeholder: 'kWh-Sensor (optional)',
         domain: 'sensor',
+        priorityEntityIds: devEntityIds,
+        filter: isEnergySensor,
         onChange: (val) => { ch.energy = val; },
       });
       this._dropdowns.push(energyPicker);
@@ -10903,6 +11132,7 @@ class DeviceWizard {
         const primary = activeChannels[0] || this.channels[0];
         const fallbackPrimaryId = primary?.entity_id
           || (this.selectedCategory === 'rauchmelder' ? (this.primaryEntityId || this.smokeEntityId) : undefined)
+          || (this.selectedCategory === 'solar' ? (this.powerEntityId || this.energyEntityId || this.sensorEntities.find((s) => s.type !== 'ignore')?.entity_id) : undefined)
           || (this.selectedCategory === 'bodenmessgeraet' && this.sensorPlacement === 'tile'
             ? (this.sensorEntities.find((s) => s.type === 'moisture')?.entity_id || this.sensorEntities.find((s) => s.type !== 'ignore')?.entity_id)
             : undefined);
@@ -10932,6 +11162,7 @@ class DeviceWizard {
       const nextOptions = {
         ...existingOpts,
         force_own_row: !!this.forceOwnRow,
+        pinned: !!this.pinned,
       };
       if (isMultiDevice) {
         nextOptions.display_mode = this.displayMode;
@@ -10964,6 +11195,26 @@ class DeviceWizard {
       });
 
       if (res?.save_failed) throw new Error('Speichern im Backend fehlgeschlagen');
+
+      // Persist pin state on dashboard config (for dev:<id> or entity:<id>)
+      const pinKey = d.isVirtualEntity ? d.id : `dev:${d.id}`;
+      try {
+        await this.hass.callWS({
+          type: 'smarthome_companion/dashboard/tile_order',
+          area_id: this.selectedAreaId || '__none__',
+          pin_key: pinKey,
+          pinned: !!this.pinned,
+        });
+        const curPins = Array.isArray(this._dashboardConfig?.pinned_tiles) ? [...this._dashboardConfig.pinned_tiles] : [];
+        if (this.pinned && !curPins.includes(pinKey)) curPins.push(pinKey);
+        if (!this.pinned) {
+          this._dashboardConfig = { ...(this._dashboardConfig || {}), pinned_tiles: curPins.filter((k) => k !== pinKey) };
+        } else {
+          this._dashboardConfig = { ...(this._dashboardConfig || {}), pinned_tiles: curPins };
+        }
+      } catch (pinErr) {
+        console.warn('[wizard] pin update failed', pinErr);
+      }
 
       // Optimistic cache update so returning to Step 0 immediately reflects the configured device
       this.configuredDevices[d.id] = {

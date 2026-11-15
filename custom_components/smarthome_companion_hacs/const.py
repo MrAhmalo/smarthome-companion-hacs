@@ -1,7 +1,7 @@
 DOMAIN = "smarthome_companion_hacs"
 STORAGE_KEY = "smarthome_companion_hacs.configuration"
 STORAGE_VERSION = 1
-VERSION = "2.10.3"
+VERSION = "2.10.4"
 
 DEFAULT_CATEGORIES = {
     "leuchte": {
@@ -78,6 +78,11 @@ DEFAULT_CATEGORIES = {
         "icon": "mdi:shield-home",
         "color": "#4CAF50",
         "display_name": "Alarmanlagen",
+    },
+    "solar": {
+        "icon": "mdi:solar-power-variant",
+        "color": "#F59E0B",
+        "display_name": "Solar",
     },
 }
 

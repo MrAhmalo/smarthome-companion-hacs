@@ -15,6 +15,7 @@ export const DEVICE_CATEGORIES = [
   { id: 'raummessgeraet', name: 'Raummessgerät', icon: 'mdi:thermometer-lines', color: '#ff5722', desc: 'Temperatur & Klima' },
   { id: 'kamera', name: 'Kamera', icon: 'mdi:cctv', color: '#03a9f4', desc: 'Überwachungskameras' },
   { id: 'alarmanlage', name: 'Alarmanlage', icon: 'mdi:shield-home', color: '#4caf50', desc: 'Alarm-Zentrale' },
+  { id: 'solar', name: 'Solar', icon: 'mdi:solar-power-variant', color: '#f59e0b', desc: 'PV, Speicher & Netz' },
 ];
 
 const CONTROLLABLE_DOMAINS = new Set([
@@ -119,8 +120,9 @@ export function isIrrelevantDeviceOrIntegration(d, devEntities = []) {
     return true;
   }
 
-  // Host/container CPU, RAM, Disk & system stats (when device carries no smart-home actuators)
-  const isSystemText = (
+  // Host/container CPU, RAM, Disk & system stats (only when device carries no smart-home actuators)
+  const hasRealActuator = devEntities.some((e) => !e.disabled_by && !e.hidden_by && isControllableActuator(e));
+  const isSystemText = !hasRealActuator && (
     name.includes('hacs') || mfg.includes('hacs') ||
     name.includes('forecast') || mfg.includes('met.no') ||
     name.includes('bluetooth') || mfg.includes('bluetooth') || name.startsWith('hci') ||
@@ -193,6 +195,7 @@ export function isControllableActuator(e) {
 
   const domain = domainOf(e.entity_id);
   if (!CONTROLLABLE_DOMAINS.has(domain)) return false;
+  if (domain === 'light') return true;
 
   const id = (e.entity_id || '').toLowerCase();
   const name = (e.name || e.original_name || '').toLowerCase();
