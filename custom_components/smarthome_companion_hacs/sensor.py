@@ -11,9 +11,16 @@ from homeassistant.core import callback
 # pyrefly: ignore [missing-import]
 from homeassistant.components.sensor import SensorEntity
 # pyrefly: ignore [missing-import]
+from homeassistant.helpers import device_registry as dr
+# pyrefly: ignore [missing-import]
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
+from .device_helpers import (
+    build_blind_device_info,
+    build_hub_device_info,
+    build_irrigation_zone_device_info,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +36,10 @@ class IntegrationInfoSensor(SensorEntity):
             self._attr_unique_id = f"smarthome_companion_integration_info_{module}"
         self._attr_icon = "mdi:home-assistant"
         self._version = version
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return build_hub_device_info(self._module)
 
     @property
     def native_value(self):
@@ -91,15 +102,29 @@ async def async_setup_entry(hass, entry, async_add_entities):
         ])
 
     simulation_manager = hass.data[DOMAIN].get("simulation_manager")
-    if store and simulation_manager:
+    if store and simulation_manager and module in ("hub", "legacy"):
         if "presence_simulation_sensor_added" not in hass.data[DOMAIN]:
-            has_blinds = any(
-                e.data.get("module") in ("blinds", "legacy")
-                for e in hass.config_entries.async_entries(DOMAIN)
-            )
-            if module in ("blinds", "legacy") or not has_blinds:
-                entities.append(PresenceSimulationActiveSensor(hass, store, simulation_manager))
-                hass.data[DOMAIN]["presence_simulation_sensor_added"] = True
+            entities.append(PresenceSimulationActiveSensor(hass, store, simulation_manager))
+            hass.data[DOMAIN]["presence_simulation_sensor_added"] = True
+
+    if module in ("blinds", "legacy"):
+        dev_reg = dr.async_get(hass)
+        dev_reg.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, "hub")},
+            name="SmartHome Rollläden (Steuerung)",
+            manufacturer="SmartHome Companion",
+            model="Rollläden · Steuerung",
+        )
+    if module in ("irrigation", "legacy"):
+        dev_reg = dr.async_get(hass)
+        dev_reg.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, "irrigation_hub")},
+            name="SmartHome Bewässerung",
+            manufacturer="SmartHome Companion",
+            model="Bewässerung · Steuerung",
+        )
 
     if entities:
         async_add_entities(entities)
@@ -249,12 +274,7 @@ class ConfiguredBlindsSensor(_BaseBlindsSensor):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, "hub")},
-            name="SmartHome Companion",
-            manufacturer="SmartHome Companion",
-            model="Hub & Einstellungen",
-        )
+        return build_hub_device_info("blinds")
 
     @property
     def native_value(self):
@@ -288,12 +308,7 @@ class UnconfiguredBlindsSensor(_BaseBlindsSensor):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, "hub")},
-            name="SmartHome Companion",
-            manufacturer="SmartHome Companion",
-            model="Hub & Einstellungen",
-        )
+        return build_hub_device_info("blinds")
 
     @property
     def native_value(self):
@@ -361,12 +376,7 @@ class ConfiguredIrrigationSensor(_BaseIrrigationSensor):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, "irrigation_hub")},
-            name="SmartHome Bewässerung",
-            manufacturer="SmartHome Companion",
-            model="Bewässerungssystem",
-        )
+        return build_hub_device_info("irrigation")
 
     @property
     def native_value(self):
@@ -397,12 +407,7 @@ class UnconfiguredIrrigationSensor(_BaseIrrigationSensor):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, "irrigation_hub")},
-            name="SmartHome Bewässerung",
-            manufacturer="SmartHome Companion",
-            model="Bewässerungssystem",
-        )
+        return build_hub_device_info("irrigation")
 
     @property
     def native_value(self):
@@ -438,12 +443,7 @@ class IrrigationMaxManualRuntimeSensor(_BaseIrrigationSensor):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, "irrigation_hub")},
-            name="SmartHome Bewässerung",
-            manufacturer="SmartHome Companion",
-            model="Bewässerungssystem",
-        )
+        return build_hub_device_info("irrigation")
 
     @property
     def native_value(self):
@@ -461,12 +461,7 @@ class IrrigationSimultaneousModeSensor(_BaseIrrigationSensor):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, "irrigation_hub")},
-            name="SmartHome Bewässerung",
-            manufacturer="SmartHome Companion",
-            model="Bewässerungssystem",
-        )
+        return build_hub_device_info("irrigation")
 
     @property
     def native_value(self):
@@ -488,12 +483,7 @@ class FassadeSunSensor(SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, "hub")},
-            name="SmartHome Companion",
-            manufacturer="SmartHome Companion",
-            model="Hub & Einstellungen",
-        )
+        return build_hub_device_info("blinds")
 
     @property
     def native_value(self):
@@ -521,12 +511,7 @@ class FassadeSunForecastSensor(SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, "hub")},
-            name="SmartHome Companion",
-            manufacturer="SmartHome Companion",
-            model="Hub & Einstellungen",
-        )
+        return build_hub_device_info("blinds")
 
     @property
     def native_value(self):
@@ -552,12 +537,7 @@ class GlobalShadingNeededSensor(SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, "hub")},
-            name="SmartHome Companion",
-            manufacturer="SmartHome Companion",
-            model="Hub & Einstellungen",
-        )
+        return build_hub_device_info("blinds")
 
     @property
     def native_value(self):
@@ -585,12 +565,7 @@ class FassadeSunForecastTomorrowSensor(SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, "hub")},
-            name="SmartHome Companion",
-            manufacturer="SmartHome Companion",
-            model="Hub & Einstellungen",
-        )
+        return build_hub_device_info("blinds")
 
     @property
     def native_value(self):
@@ -616,12 +591,7 @@ class GlobalShadingNeededTomorrowSensor(SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, "hub")},
-            name="SmartHome Companion",
-            manufacturer="SmartHome Companion",
-            model="Hub & Einstellungen",
-        )
+        return build_hub_device_info("blinds")
 
     @property
     def native_value(self):
@@ -659,13 +629,7 @@ class _BlindBaseSensor(SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        cover_name = self._cover_label(self._blind_id)
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._blind_id)},
-            name=cover_name,
-            manufacturer="SmartHome Companion",
-            model="Rollladen-Automat",
-        )
+        return build_blind_device_info(self.hass, self._blind_id)
 
     def _cover_label(self, entity_id):
         state = self.hass.states.get(entity_id)
@@ -1015,13 +979,7 @@ class _IrrigationZoneBaseSensor(SensorEntity):
     def device_info(self) -> DeviceInfo:
         zone = self._get_zone()
         name = zone.get("name", "Unbekannte Zone") if zone else "Bewässerungszone"
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"irrigation_zone_{self._clean_zone_id}")},
-            name=f"Bewässerung {name}",
-            manufacturer="SmartHome Companion",
-            model="Bewässerungskreis",
-            via_device=(DOMAIN, "irrigation_hub"),
-        )
+        return build_irrigation_zone_device_info(self.hass, self._clean_zone_id, name)
 
     async def async_added_to_hass(self):
         self.async_on_remove(
@@ -1275,12 +1233,7 @@ class PresenceSimulationActiveSensor(SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, "hub")},
-            name="SmartHome Companion",
-            manufacturer="SmartHome Companion",
-            model="Hub & Einstellungen",
-        )
+        return build_hub_device_info("hub")
 
     @property
     def native_value(self):

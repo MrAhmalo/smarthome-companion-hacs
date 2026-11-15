@@ -1,7 +1,7 @@
 // Special cards: header badges, smoke alerts, weather warning, trash, persons, announcement, bottom navigation.
 import {
   h, icon, domainOf, entityIcon, isUnavailable, stateLabel, numeric, moreInfo, navigate, resolveColor, renderTrashBin,
-  resolveInternalView,
+  resolveInternalView, isActive, toggleEntity,
 } from '../lib/util.js';
 
 const allowed = (users, userId) => !users || users.length === 0 || users.includes(userId);
@@ -25,11 +25,127 @@ function bindPress(el, onTap, onHold) {
 
 // ═══════════════ Header badges ═══════════════
 export class Badges {
-  constructor(badges, user, onNavigate = null) {
+  constructor(badges, user, onNavigate = null, { layout = null, config = null } = {}) {
     this.user = user;
     this.onNavigate = onNavigate;
-    this.items = (badges || []).filter((b) => b && b.entity_id).map((cfg) => this._make(cfg));
-    this.el = h('div', { class: 'badges' }, this.items.map((i) => i.el));
+    this._layout = layout;
+    this._config = config;
+    this._lightCounterKey = null;
+    // Filter out legacy external sensor.lichter_zahler when built-in counter is active
+    const lightCounterEnabled = config?.light_counter?.enabled !== false;
+    this.items = (badges || [])
+      .filter((b) => b && b.entity_id && !(lightCounterEnabled && b.entity_id === 'sensor.lichter_zahler'))
+      .map((cfg) => this._make(cfg));
+    this.lightCounterEl = h('button', {
+      class: 'badge',
+      type: 'button',
+      hidden: true,
+      onClick: () => this._openActiveLightsPopup(),
+    });
+    this.el = h('div', { class: 'badges' }, this.lightCounterEl, ...this.items.map((i) => i.el));
+  }
+
+  _getConfiguredLights() {
+    const map = new Map();
+    for (const item of (this._layout?.configured?.lights || [])) {
+      if (item?.entity_id && !map.has(item.entity_id)) {
+        map.set(item.entity_id, {
+          entity_id: item.entity_id,
+          name: item.name || item.entity_id,
+          area_name: item.area_name || '',
+        });
+      }
+    }
+    if (map.size === 0) {
+      const walk = (tiles, areaName) => {
+        for (const t of (tiles || [])) {
+          if (t.children?.length) walk(t.children, areaName);
+          if ((t.category === 'leuchte' || t.category === 'light') && t.entity_id && !t.is_group && !map.has(t.entity_id)) {
+            map.set(t.entity_id, {
+              entity_id: t.entity_id,
+              name: t.name || t.entity_id,
+              area_name: areaName || '',
+            });
+          }
+        }
+      };
+      for (const r of (this._layout?.rooms || [])) walk(r.tiles, r.name);
+    }
+    return Array.from(map.values());
+  }
+
+  _openActiveLightsPopup() {
+    if (!this.hass) return;
+    const lights = this._getConfiguredLights();
+    const active = lights.filter((l) => isActive(this.hass.states[l.entity_id]));
+    const root = this.el.getRootNode();
+    const host = root instanceof ShadowRoot ? root : document.body;
+
+    const close = () => overlay.remove();
+    const listEl = h('div', { style: { display: 'grid', gap: '8px', maxHeight: '55vh', overflowY: 'auto' } });
+
+    const renderList = () => {
+      const curActive = lights.filter((l) => isActive(this.hass.states[l.entity_id]));
+      if (!curActive.length) {
+        listEl.replaceChildren(
+          h('div', { class: 'hint', style: { padding: '12px 4px', textAlign: 'center' } }, 'Alle eingerichteten Lichter sind aus.'),
+        );
+        allOffBtn.hidden = true;
+        return;
+      }
+      allOffBtn.hidden = false;
+      listEl.replaceChildren(...curActive.map((l) => h('div', {
+        class: 'row-card',
+        style: { padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' },
+      },
+      h('div', { style: { minWidth: '0', flex: '1' } },
+        h('div', { style: { fontWeight: '600', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, l.name),
+        l.area_name ? h('div', { class: 'hint', style: { fontSize: '11px' } }, l.area_name) : null),
+      h('button', {
+        type: 'button',
+        class: 'btn secondary small',
+        onClick: async () => {
+          await toggleEntity(this.hass, l.entity_id);
+          setTimeout(() => { this.update(this.hass); renderList(); }, 180);
+        },
+      }, icon('mdi:power'), ' Aus'))));
+    };
+
+    const allOffBtn = h('button', {
+      type: 'button',
+      class: 'btn danger small',
+      hidden: !active.length,
+      onClick: async () => {
+        const curActive = lights.filter((l) => isActive(this.hass.states[l.entity_id]));
+        await Promise.all(curActive.map((l) => {
+          const dom = domainOf(l.entity_id);
+          const svcDom = ['light', 'switch', 'input_boolean', 'fan'].includes(dom) ? dom : 'homeassistant';
+          return this.hass.callService(svcDom, 'turn_off', { entity_id: l.entity_id });
+        }));
+        close();
+      },
+    }, icon('mdi:lightbulb-off-outline'), ' Alle ausschalten');
+
+    const dlg = h('div', {
+      class: 'dialog',
+      style: { maxWidth: '400px', width: '92vw' },
+      onClick: (e) => e.stopPropagation(),
+    },
+    h('div', { class: 'dialog-head' },
+      h('div', { class: 'dialog-title', style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+        icon('mdi:lightbulb-on-outline'), `Aktive Lichter (${active.length})`),
+      h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Schließen', onClick: close }, icon('mdi:close'))),
+    h('div', { class: 'dialog-body' }, listEl),
+    h('div', { class: 'dialog-foot', style: { justifyContent: 'space-between' } },
+      allOffBtn,
+      h('button', { type: 'button', class: 'btn secondary', onClick: close }, 'Schließen')));
+
+    const overlay = h('div', {
+      class: 'overlay',
+      onClick: (e) => { if (e.target === overlay) close(); },
+    }, dlg);
+    renderList();
+    host.append(overlay);
   }
 
   _make(cfg) {
@@ -63,6 +179,28 @@ export class Badges {
 
   update(hass) {
     this.hass = hass;
+    const lcCfg = this._config?.light_counter || {};
+    const lcEnabled = lcCfg.enabled !== false;
+    if (!lcEnabled) {
+      this.lightCounterEl.hidden = true;
+    } else {
+      const lights = this._getConfiguredLights();
+      const activeCount = lights.reduce((acc, l) => acc + (isActive(hass.states[l.entity_id]) ? 1 : 0), 0);
+      const showZero = lcCfg.show_zero !== false;
+      const show = activeCount > 0 || showZero;
+      this.lightCounterEl.hidden = !show;
+      if (show) {
+        const ic = activeCount > 0 ? 'mdi:lightbulb' : 'mdi:lightbulb-outline';
+        const label = `${activeCount} ${activeCount === 1 ? 'Licht' : 'Lichter'} an`;
+        const col = activeCount > 0 ? resolveColor('amber') : 'var(--cd-secondary)';
+        const key = `${ic}|${label}|${col}`;
+        if (this._lightCounterKey !== key) {
+          this._lightCounterKey = key;
+          this.lightCounterEl.style.setProperty('--badge-color', col);
+          this.lightCounterEl.replaceChildren(icon(ic), h('span', {}, label));
+        }
+      }
+    }
     for (const item of this.items) {
       const { cfg, el } = item;
       const st = hass.states[cfg.entity_id];

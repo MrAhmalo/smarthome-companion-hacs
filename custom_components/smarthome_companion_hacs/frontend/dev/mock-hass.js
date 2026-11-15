@@ -11,7 +11,35 @@ export class MockHass {
     this.locale = { language: 'de' };
     this.config = { version: '2026.11.0' };
     this.groups = JSON.parse(JSON.stringify(MOCK_DATA.groups));
+    this.areas = JSON.parse(JSON.stringify(MOCK_DATA.areas || []));
+    this.deviceRegistry = JSON.parse(JSON.stringify(MOCK_DATA.devices || []));
+    this.entityRegistry = JSON.parse(JSON.stringify(MOCK_DATA.entities || []));
+    this.configData = JSON.parse(JSON.stringify(MOCK_DATA.config));
+    this.configData.pinned_tiles ||= [];
+    this.configData.tile_order ||= {};
+    this.configData.tile_layout ||= {};
+    this.configuredDevices = {};
     this.layout = JSON.parse(JSON.stringify(MOCK_DATA.layout));
+    for (const room of (this.layout.rooms || [])) {
+      for (const t of (room.tiles || [])) {
+        if (t.is_group) continue;
+        const keyStr = String(t.key || '');
+        const devId = t.device_id || (keyStr.includes(':') ? keyStr.split(':')[0] : '');
+        if (devId && !t.device_id) t.device_id = devId;
+        if (devId && !this.configuredDevices[devId]) {
+          this.configuredDevices[devId] = {
+            device_id: devId,
+            category: t.category || 'leuchte',
+            custom_name: t.name || devId,
+            area_id: room.area_id || '',
+            icon: t.icon,
+            options: { pinned: !!t.pinned, force_own_row: !!t.force_own_row },
+            entities: t.entity_id ? { primary: t.entity_id } : {},
+          };
+        }
+      }
+    }
+    this._rebuildRoomTileOrder();
 
     this.connection = {
       subscribeMessage: (callback) => {
@@ -35,37 +63,290 @@ export class MockHass {
       return { users: [this.user] };
     }
     if (msg.type === 'config/device_registry/list') {
-      return JSON.parse(JSON.stringify(MOCK_DATA.devices));
+      return JSON.parse(JSON.stringify(this.deviceRegistry));
     }
     if (msg.type === 'config/entity_registry/list') {
-      return JSON.parse(JSON.stringify(MOCK_DATA.entities));
+      return JSON.parse(JSON.stringify(this.entityRegistry));
     }
     if (msg.type === 'config/area_registry/list') {
-      return JSON.parse(JSON.stringify(MOCK_DATA.areas));
+      return JSON.parse(JSON.stringify(this.areas));
+    }
+    if (msg.type === 'smarthome_companion/groups/list') {
+      return { groups: JSON.parse(JSON.stringify(this.groups)) };
     }
     if (msg.type === 'smarthome_companion/devices/get') {
       return {
-        devices: {},
+        devices: JSON.parse(JSON.stringify(this.configuredDevices)),
         categories: {},
-        groups: this.groups,
+        groups: JSON.parse(JSON.stringify(this.groups)),
       };
     }
+    if (msg.type === 'smarthome_companion/devices/configure') {
+      const devId = msg.device_id;
+      const prevArea = this.configuredDevices[devId]?.area_id || '';
+      const nextArea = msg.area_id !== undefined ? (msg.area_id || '') : prevArea;
+      this.configuredDevices[devId] = {
+        device_id: devId,
+        category: msg.category,
+        custom_name: msg.custom_name,
+        area_id: nextArea,
+        icon: msg.icon,
+        options: msg.options || {},
+        entities: msg.entities || {},
+      };
+      const devReg = this.deviceRegistry.find((d) => d.id === devId);
+      if (devReg && msg.area_id !== undefined) devReg.area_id = nextArea || null;
+
+      const areaObj = this.areas.find((a) => a.area_id === nextArea);
+      const areaName = (areaObj?.name || '').trim();
+      const slugify = (s) => String(s || '').toLowerCase()
+        .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+        .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      const areaSlug = slugify(areaName);
+      const renamed = {};
+
+      const movedTiles = [];
+      for (const room of (this.layout.rooms || [])) {
+        const remaining = [];
+        for (const t of (room.tiles || [])) {
+          const matchesDev = t.device_id === devId || (typeof t.key === 'string' && (t.key.startsWith(`${devId}:`) || t.key.startsWith(`d:${devId}:`) || t.key === `bundled:${devId}`));
+          if (matchesDev) {
+            if (msg.custom_name) t.name = msg.custom_name;
+            if (msg.category) t.category = msg.category;
+            if (msg.icon) t.icon = msg.icon;
+            if (msg.options) {
+              t.pinned = !!msg.options.pinned;
+              t.force_own_row = !!msg.options.force_own_row;
+            }
+            if (t.entity_id && msg.area_id !== undefined) {
+              const oldEid = t.entity_id;
+              const dom = oldEid.split('.')[0];
+              const baseName = t.name || msg.custom_name || devId;
+              const nameSlug = slugify(baseName);
+              const targetSlug = (areaSlug && nameSlug && !nameSlug.startsWith(`${areaSlug}_`))
+                ? `${areaSlug}_${nameSlug}` : nameSlug;
+              const newEid = targetSlug ? `${dom}.${targetSlug}` : oldEid;
+              const expectedFriendly = (areaName && baseName && !baseName.toLowerCase().startsWith(areaName.toLowerCase()))
+                ? `${areaName} ${baseName}` : baseName;
+              if (newEid !== oldEid && this.states[oldEid]) {
+                this.states[newEid] = JSON.parse(JSON.stringify(this.states[oldEid]));
+                delete this.states[oldEid];
+                renamed[oldEid] = newEid;
+                t.entity_id = newEid;
+                if (typeof t.key === 'string' && t.key.endsWith(`:${oldEid}`)) {
+                  t.key = t.key.slice(0, t.key.length - oldEid.length) + newEid;
+                }
+                if (this.configuredDevices[devId].entities?.primary === oldEid) {
+                  this.configuredDevices[devId].entities.primary = newEid;
+                }
+                const erEntry = this.entityRegistry.find((e) => e.entity_id === oldEid);
+                if (erEntry) { erEntry.entity_id = newEid; erEntry.area_id = nextArea || null; erEntry.name = expectedFriendly; }
+              } else {
+                const erEntry = this.entityRegistry.find((e) => e.entity_id === oldEid);
+                if (erEntry) { erEntry.area_id = nextArea || null; erEntry.name = expectedFriendly; }
+              }
+              if (this.states[t.entity_id]?.attributes) {
+                this.states[t.entity_id].attributes.friendly_name = expectedFriendly;
+              }
+            }
+            if (nextArea && room.area_id !== nextArea) {
+              movedTiles.push(t);
+              continue;
+            }
+          }
+          remaining.push(t);
+        }
+        room.tiles = remaining;
+      }
+      if (movedTiles.length && nextArea) {
+        const destRoom = (this.layout.rooms || []).find((r) => r.area_id === nextArea);
+        if (destRoom) destRoom.tiles.push(...movedTiles);
+      }
+      this._rebuildRoomTileOrder();
+      return { success: true, renamed };
+    }
     if (msg.type === 'smarthome_companion/groups/save') {
-      const g = msg.group;
+      const g = JSON.parse(JSON.stringify(msg.group));
       const gid = g.id || `group_${Date.now()}`;
       g.id = gid;
       this.groups[gid] = g;
+      const nextArea = g.area_id || '';
+      const areaObj = this.areas.find((a) => a.area_id === nextArea);
+      const areaName = (areaObj?.name || '').trim();
+      const slugify = (s) => String(s || '').toLowerCase()
+        .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+        .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      const areaSlug = slugify(areaName);
+      const cleanSlug = slugify(g.name || 'gruppe');
+      const fullSlug = (areaSlug && cleanSlug && !cleanSlug.startsWith(`${areaSlug}_`)) ? `${areaSlug}_${cleanSlug}` : cleanSlug;
+      const expectedFriendly = (areaName && g.name && !g.name.toLowerCase().startsWith(areaName.toLowerCase()))
+        ? `${areaName} ${g.name}` : (g.name || 'Gruppe');
+
+      const movedGroups = [];
+      for (const room of (this.layout.rooms || [])) {
+        const remaining = [];
+        for (const t of (room.tiles || [])) {
+          if (t.is_group && t.group_id === gid) {
+            t.name = g.name || t.name;
+            t.category = g.category || t.category;
+            t.icon = g.icon || t.icon;
+            t.pinned = !!g.pinned;
+            if (t.entity_id && nextArea) {
+              const oldEid = t.entity_id;
+              const targetEid = `light.${fullSlug}`;
+              if (targetEid !== oldEid && this.states[oldEid]) {
+                this.states[targetEid] = JSON.parse(JSON.stringify(this.states[oldEid]));
+                delete this.states[oldEid];
+                t.entity_id = targetEid;
+              }
+              if (this.states[t.entity_id]?.attributes) {
+                this.states[t.entity_id].attributes.friendly_name = expectedFriendly;
+              }
+            }
+            if (nextArea && room.area_id !== nextArea) {
+              movedGroups.push(t);
+              continue;
+            }
+          }
+          remaining.push(t);
+        }
+        room.tiles = remaining;
+      }
+      if (movedGroups.length && nextArea) {
+        const destRoom = (this.layout.rooms || []).find((r) => r.area_id === nextArea);
+        if (destRoom) destRoom.tiles.push(...movedGroups);
+      }
+      this._rebuildRoomTileOrder();
       return { success: true, group_id: gid, group: g };
     }
     if (msg.type === 'smarthome_companion/groups/delete') {
       delete this.groups[msg.group_id];
+      for (const room of (this.layout.rooms || [])) {
+        room.tiles = (room.tiles || []).filter((t) => !(t.is_group && t.group_id === msg.group_id));
+      }
+      return { success: true };
+    }
+    if (msg.type === 'smarthome_companion/dashboard/tile_order') {
+      const areaId = msg.area_id;
+      this.configData.tile_order ||= {};
+      this.configData.tile_layout ||= {};
+      this.configData.pinned_tiles ||= [];
+      if (Array.isArray(msg.tile_order)) {
+        if (msg.tile_order.length) {
+          this.configData.tile_order[areaId] = [...msg.tile_order];
+        } else {
+          delete this.configData.tile_order[areaId];
+        }
+      }
+      if (msg.tile_layout && typeof msg.tile_layout === 'object') {
+        const cleanLayout = {};
+        for (const [k, v] of Object.entries(msg.tile_layout)) {
+          if (v === 'compact' || v === 'wide') cleanLayout[k] = v;
+        }
+        if (Object.keys(cleanLayout).length) {
+          this.configData.tile_layout[areaId] = cleanLayout;
+        } else {
+          delete this.configData.tile_layout[areaId];
+        }
+      }
+      if (typeof msg.pin_key === 'string' && typeof msg.pinned === 'boolean') {
+        const pinKey = msg.pin_key.trim();
+        let pins = [...this.configData.pinned_tiles];
+        if (msg.pinned) {
+          if (pinKey && !pins.includes(pinKey)) pins.push(pinKey);
+          if (areaId && Array.isArray(this.configData.tile_order[areaId])) {
+            const devId = pinKey.startsWith('dev:') ? pinKey.slice(4) : '';
+            const grpId = pinKey.startsWith('g:') ? pinKey.slice(2) : (pinKey.startsWith('group:') ? pinKey.slice(6) : '');
+            const matchesPin = (k) => k === pinKey
+              || (devId && (k.startsWith(`${devId}:`) || k.startsWith(`d:${devId}:`) || k === `bundled:${devId}`))
+              || (grpId && (k === `g:${grpId}` || k === `group:${grpId}`));
+            const filtered = this.configData.tile_order[areaId].filter((k) => !matchesPin(k));
+            if (filtered.length) this.configData.tile_order[areaId] = filtered;
+            else delete this.configData.tile_order[areaId];
+          }
+        } else {
+          pins = pins.filter((k) => k !== pinKey);
+        }
+        this.configData.pinned_tiles = pins;
+      }
+      this._rebuildRoomTileOrder(areaId);
       return { success: true };
     }
     if (msg.type === 'smarthome_companion/dashboard/save') {
-      this.layout.config = msg.config;
+      this.configData = JSON.parse(JSON.stringify(msg.config));
+      this.layout.config = JSON.parse(JSON.stringify(msg.config));
+      this._rebuildRoomTileOrder();
       return { success: true, config: msg.config };
     }
     return {};
+  }
+
+  _rebuildRoomTileOrder(targetAreaId = null) {
+    const CATEGORY_WEIGHT = {
+      heating: 10, climate: 10, heizung: 10,
+      door_window: 20, window: 20, door: 20, tuer_fenster: 20,
+      lock: 30, schloss: 30,
+      media_player: 40, tv: 40, fernseher: 40, speaker: 40, lautsprecher: 40,
+      appliance: 45, haushaltsgeraet: 45,
+      fan: 50, ventilator: 50,
+      light: 60, leuchte: 60,
+      switch: 65, schalter: 65,
+      outlet: 70, steckdose: 70,
+      valve: 75, ventil: 75, pumpe: 75,
+      cover: 80, rollladen: 80,
+      sensor: 90, bodenmessgeraet: 90, rauchmelder: 90,
+      solar: 95,
+    };
+    const pinnedSet = new Set(this.configData?.pinned_tiles || []);
+    for (const room of (this.layout.rooms || [])) {
+      if (targetAreaId && room.area_id !== targetAreaId) continue;
+      const tiles = room.tiles || [];
+      const roomLayout = (this.configData?.tile_layout || {})[room.area_id] || {};
+      for (const t of tiles) {
+        const keyStr = String(t.key || '');
+        const devId = t.device_id || (keyStr.includes(':') && !keyStr.startsWith('group:') && !keyStr.startsWith('g:') ? keyStr.split(':')[0] : '');
+        const gid = t.group_id || (keyStr.startsWith('group:') ? keyStr.slice(6) : (keyStr.startsWith('g:') ? keyStr.slice(2) : ''));
+        const devPinned = !!(devId && this.configuredDevices?.[devId]?.options?.pinned);
+        const grpPinned = !!(gid && (this.groups?.[gid]?.pinned || this.groups?.[gid]?.options?.pinned));
+        t.pinned = !!(
+          pinnedSet.has(keyStr)
+          || (devId && pinnedSet.has(`dev:${devId}`))
+          || (gid && (pinnedSet.has(`g:${gid}`) || pinnedSet.has(`group:${gid}`)))
+          || devPinned
+          || grpPinned
+        );
+        const lm = roomLayout[t.key];
+        t.layout_mode = (lm === 'compact' || lm === 'wide') ? lm : null;
+      }
+      const customOrder = (this.configData?.tile_order || {})[room.area_id] || [];
+      const pos = new Map(customOrder.map((k, i) => [k, i]));
+      const getSortPos = (t) => {
+        if (pos.has(t.key)) return pos.get(t.key);
+        if (t.pinned) {
+          const w = CATEGORY_WEIGHT[t.category] ?? 50;
+          const candidates = tiles
+            .filter((o) => pos.has(o.key) && ((CATEGORY_WEIGHT[o.category] ?? 50) > w || ((CATEGORY_WEIGHT[o.category] ?? 50) === w && !o.pinned)))
+            .map((o) => pos.get(o.key));
+          if (candidates.length) return Math.min(...candidates) - 0.5;
+          return pos.size ? pos.size - 0.5 : -0.5;
+        }
+        return 10000;
+      };
+      tiles.sort((a, b) => {
+        if (customOrder.length) {
+          const pa = getSortPos(a);
+          const pb = getSortPos(b);
+          if (pa !== pb) return pa - pb;
+        }
+        const wa = CATEGORY_WEIGHT[a.category] ?? 50;
+        const wb = CATEGORY_WEIGHT[b.category] ?? 50;
+        if (wa !== wb) return wa - wb;
+        const pina = a.pinned ? 0 : 1;
+        const pinb = b.pinned ? 0 : 1;
+        if (pina !== pinb) return pina - pinb;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'de');
+      });
+    }
   }
 
   async callService(domain, service, data = {}) {

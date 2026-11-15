@@ -3,7 +3,7 @@
 // so renamed entities / re-configured devices never leave dead tiles behind.
 import { STYLES } from './lib/styles.js';
 import {
-  h, icon, debounce, showToast, navigate, resolveInternalView,
+  h, icon, debounce, showToast, navigate, resolveInternalView, parseChannelKey,
 } from './lib/util.js';
 import { Room } from './components/room.js';
 import { RoomDetailView } from './components/room_detail.js';
@@ -337,6 +337,7 @@ class CompanionDashboardPanel extends HTMLElement {
     this._destroyComponents();
     const { config, layout, user } = this._data;
     const ctx = {
+      hass: this._hass,
       presets: config.color_presets || [],
       openState: this._openState,
       onOpenRoom: (areaId) => this._openRoom(areaId),
@@ -347,6 +348,7 @@ class CompanionDashboardPanel extends HTMLElement {
       onOpenGroup: (groupId) => {
         this._openWizard(null, groupId);
       },
+      onMoveTileToRoom: (payload) => this._moveTileToRoom(payload),
       onOpenSettings: () => this._openSettings(),
       isEditMode: () => !!this._editMode,
     };
@@ -447,7 +449,7 @@ class CompanionDashboardPanel extends HTMLElement {
 
     // Greeting + badges
     this._greeting = h('h1', {});
-    this._badges = new Badges(config.badges, user, (target) => this._navigate(target));
+    this._badges = new Badges(config.badges, user, (target) => this._navigate(target), { layout, config });
 
     // Smoke alert banner right under status badges (configured smoke detectors only)
     this._smoke = new SmokeAlerts({
@@ -692,6 +694,117 @@ class CompanionDashboardPanel extends HTMLElement {
       },
     });
     this.shadowRoot.append(this._wizard.el);
+  }
+
+  async _moveTileToRoom({ tile, fromAreaId, toAreaId, sourceOrder, sourceLayout, targetOrder, targetLayout }) {
+    if (!this._hass || !tile || !toAreaId || fromAreaId === toAreaId) return;
+    const hass = this._hass;
+    const nextAreaVal = toAreaId === '__no_area__' ? '' : toAreaId;
+    const spec = tile.spec || {};
+    const renamed = {};
+
+    try {
+      if (spec.group_id) {
+        const gRes = await hass.callWS({ type: 'smarthome_companion/groups/list' });
+        const groupCfg = (gRes?.groups || {})[spec.group_id];
+        if (groupCfg) {
+          await hass.callWS({
+            type: 'smarthome_companion/groups/save',
+            group: { ...groupCfg, area_id: nextAreaVal },
+          });
+        }
+      } else {
+        const keys = tile.coverSpecs?.length
+          ? tile.coverSpecs.map((c) => ({ key: c.key, device_id: c.device_id, entity_id: c.entity_id }))
+          : [{ key: spec.key, device_id: spec.device_id, entity_id: spec.entity_id }];
+
+        const devRes = await hass.callWS({ type: 'smarthome_companion/devices/get' });
+        const devices = devRes?.devices || {};
+        const seenDevices = new Set();
+
+        for (const item of keys) {
+          const parsed = parseChannelKey(item.key);
+          const devId = item.device_id || parsed.deviceId || item.entity_id;
+          if (!devId || seenDevices.has(devId)) continue;
+          const devCfg = devices[devId];
+          if (!devCfg) continue;
+
+          const entities = JSON.parse(JSON.stringify(devCfg.entities || {}));
+          const subEnts = entities.sub_entities;
+          const isChannelTile = String(item.key || '').startsWith('d:')
+            && subEnts && typeof subEnts === 'object'
+            && Object.keys(subEnts).length > 1
+            && item.entity_id && subEnts[item.entity_id];
+
+          let deviceAreaArg = nextAreaVal;
+          if (isChannelTile) {
+            subEnts[item.entity_id] = { ...subEnts[item.entity_id], area_id: nextAreaVal };
+            deviceAreaArg = devCfg.area_id ?? undefined;
+          } else {
+            seenDevices.add(devId);
+            if (subEnts && typeof subEnts === 'object') {
+              for (const k of Object.keys(subEnts)) {
+                if (subEnts[k] && typeof subEnts[k] === 'object' && 'area_id' in subEnts[k]) {
+                  subEnts[k] = { ...subEnts[k], area_id: nextAreaVal };
+                }
+              }
+            }
+          }
+
+          const cfgRes = await hass.callWS({
+            type: 'smarthome_companion/devices/configure',
+            device_id: devId,
+            category: devCfg.category || 'sonstiges',
+            entities,
+            custom_name: devCfg.custom_name ?? null,
+            area_id: deviceAreaArg,
+            options: devCfg.options || {},
+            icon: devCfg.icon ?? null,
+          });
+          if (cfgRes?.renamed && typeof cfgRes.renamed === 'object') {
+            Object.assign(renamed, cfgRes.renamed);
+          }
+        }
+      }
+
+      const rewriteKey = (k) => {
+        let out = k;
+        for (const [oldEid, newEid] of Object.entries(renamed)) {
+          if (out === oldEid || out.endsWith(`:${oldEid}`)) {
+            out = out.slice(0, out.length - oldEid.length) + newEid;
+          }
+        }
+        return out;
+      };
+      const cleanTargetOrder = (targetOrder || []).map(rewriteKey);
+      const cleanTargetLayout = {};
+      for (const [k, v] of Object.entries(targetLayout || {})) {
+        cleanTargetLayout[rewriteKey(k)] = v;
+      }
+
+      await Promise.all([
+        hass.callWS({
+          type: 'smarthome_companion/dashboard/tile_order',
+          area_id: fromAreaId,
+          tile_order: sourceOrder || [],
+          tile_layout: sourceLayout || {},
+        }),
+        hass.callWS({
+          type: 'smarthome_companion/dashboard/tile_order',
+          area_id: toAreaId,
+          tile_order: cleanTargetOrder,
+          tile_layout: cleanTargetLayout,
+        }),
+      ]);
+
+      this._toast('In neuen Raum verschoben');
+      this._serialized = null;
+      await this._load();
+    } catch (err) {
+      this._toast(`Verschieben fehlgeschlagen: ${err.message || err}`, true);
+      this._serialized = null;
+      await this._load();
+    }
   }
 
   // ── settings ──

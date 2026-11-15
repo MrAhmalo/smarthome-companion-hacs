@@ -5,6 +5,8 @@
         "title": "SmartHome Companion Backend",
         "description": "Welches Modul möchtest du einrichten?",
         "menu_options": {
+          "hub": "System-Hub & Anwesenheitssimulation",
+          "groups": "SmartHome Gruppen",
           "blinds": "Rollladen & Sonnenschutz",
           "irrigation": "Bewässerungssystem"
         }

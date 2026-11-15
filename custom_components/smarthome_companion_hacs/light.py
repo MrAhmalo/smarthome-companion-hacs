@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import re
 # pyrefly: ignore [missing-import]
 from homeassistant.components.light import (
     LightEntity,
@@ -11,39 +10,65 @@ from homeassistant.components.light import (
     ATTR_TRANSITION,
 )
 # pyrefly: ignore [missing-import]
-from homeassistant.helpers.entity import DeviceInfo
-# pyrefly: ignore [missing-import]
-from homeassistant.helpers import entity_registry as er, device_registry as dr
+from homeassistant.helpers import entity_registry as er
 # pyrefly: ignore [missing-import]
 from homeassistant.helpers.event import async_track_state_change_event
 # pyrefly: ignore [missing-import]
 from homeassistant.core import callback
 
 from .const import DOMAIN
+from .device_helpers import (
+    build_group_device_info,
+    cleanup_duplicated_group_entity_id,
+    resolve_group_child_entities,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    store = hass.data[DOMAIN].get("store")
+    store = hass.data.get(DOMAIN, {}).get("store")
     if not store:
         return
+
+    module = (getattr(entry, "data", None) or {}).get("module", "legacy")
+    if module not in ("groups", "legacy"):
+        return
+
+    entry_id = getattr(entry, "entry_id", "default")
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    owner_entry_id = domain_data.get("_light_groups_entry_id")
+    if owner_entry_id and owner_entry_id != entry_id:
+        return
+    domain_data["_light_groups_entry_id"] = entry_id
 
     existing_entities: dict[str, CompanionGroupLight] = {}
 
     @callback
     def sync_group_lights(event=None):
-        groups = store.get_groups()
+        groups = store.get_groups() or {}
         new_entities = []
+        active_light_ids: set[str] = set()
         for group_id, g_cfg in groups.items():
+            if not isinstance(g_cfg, dict):
+                continue
             cat = g_cfg.get("category") or "leuchte"
             if cat in ("leuchte", "light"):
+                active_light_ids.add(group_id)
                 if group_id not in existing_entities:
                     entity = CompanionGroupLight(hass, store, group_id)
                     existing_entities[group_id] = entity
                     new_entities.append(entity)
                 else:
                     existing_entities[group_id].async_refresh_group()
+        # Clean up deleted or recategorized groups so stale entities don't throw on refresh
+        for stale_id in [gid for gid in existing_entities if gid not in active_light_ids]:
+            stale_ent = existing_entities.pop(stale_id)
+            if stale_ent._unsub_tracker:
+                stale_ent._unsub_tracker()
+                stale_ent._unsub_tracker = None
+            if stale_ent._added and stale_ent.hass and stale_ent.platform is not None:
+                hass.async_create_task(stale_ent.async_remove())
         if new_entities:
             async_add_entities(new_entities)
 
@@ -54,6 +79,17 @@ async def async_setup_entry(hass, entry, async_add_entities):
     entry.async_on_unload(
         hass.bus.async_listen(f"{DOMAIN}_dashboard_updated", sync_group_lights)
     )
+
+    @callback
+    def _cleanup_owner():
+        if domain_data.get("_light_groups_entry_id") == entry_id:
+            domain_data.pop("_light_groups_entry_id", None)
+        for ent in existing_entities.values():
+            if ent._unsub_tracker:
+                ent._unsub_tracker()
+                ent._unsub_tracker = None
+
+    entry.async_on_unload(_cleanup_owner)
 
 
 class CompanionGroupLight(LightEntity):
@@ -67,6 +103,7 @@ class CompanionGroupLight(LightEntity):
         self._store = store
         self._group_id = group_id
         self._unsub_tracker = None
+        self._added = False
         self._update_attrs()
 
     def _update_attrs(self) -> None:
@@ -77,53 +114,21 @@ class CompanionGroupLight(LightEntity):
         # so HA names the entity after device in area without suffix duplication!
         self._attr_name = None
         self._attr_unique_id = f"smarthome_companion_group_light_{self._group_id}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"group_{self._group_id}")},
-            name=self._name,
-            manufacturer="SmartHome Companion",
-            model="Lichtgruppe (Companion)",
-            suggested_area=self._area_id,
-        )
+        self._attr_device_info = build_group_device_info(self._group_id, g, self._store)
         self._attr_supported_color_modes = {ColorMode.BRIGHTNESS}
         self._attr_color_mode = ColorMode.BRIGHTNESS
 
     @callback
     def async_refresh_group(self) -> None:
+        if not self.hass:
+            return
         self._update_attrs()
         self._update_tracking()
-        if self.hass:
+        if self._added and self.hass and self.entity_id and self.platform is not None:
             self.async_write_ha_state()
 
     def _get_child_entities(self) -> list[str]:
-        groups = self._store.get_groups()
-        g = groups.get(self._group_id, {})
-        ent_reg = er.async_get(self.hass)
-        dev_reg = dr.async_get(self.hass)
-
-        eids = []
-        visited = {self._group_id}
-
-        def resolve(children):
-            for ref in children:
-                if ref in groups and ref not in visited:
-                    visited.add(ref)
-                    resolve(groups[ref].get("children", []))
-                elif ref.startswith("d:"):
-                    parts = ref.split(":", 2)
-                    if len(parts) >= 3 and self.hass.states.get(parts[2]):
-                        eids.append(parts[2])
-                elif self.hass.states.get(ref):
-                    eids.append(ref)
-                elif dev_reg.async_get(ref):
-                    dev_ents = [
-                        e.entity_id for e in ent_reg.entities.values()
-                        if e.device_id == ref and not e.disabled_by
-                        and e.domain in ("light", "switch")
-                    ]
-                    eids.extend(dev_ents)
-
-        resolve(g.get("children", []))
-        return list(dict.fromkeys(eids))
+        return resolve_group_child_entities(self.hass, self._store, self._group_id, domains=("light", "switch"))
 
     @property
     def is_on(self) -> bool:
@@ -209,32 +214,29 @@ class CompanionGroupLight(LightEntity):
         self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
+        self._added = True
         self._update_tracking()
-        # Self-healing: if an older version registered entity with duplicated suffix (e.g. light.julian_licht_licht),
-        # clean it up in entity registry to light.julian_licht
-        if self.entity_id and self.entity_id.endswith("_licht_licht"):
-            ent_reg = er.async_get(self.hass)
-            clean_eid = self.entity_id[:-6]
-            if not ent_reg.async_get(clean_eid):
-                try:
-                    ent_reg.async_update_entity(self.entity_id, new_entity_id=clean_eid)
-                    _LOGGER.info("Cleaned up duplicated entity_id: %s -> %s", self.entity_id, clean_eid)
-                except Exception as err:
-                    _LOGGER.debug("Could not rename duplicated entity_id: %s", err)
+        # Self-healing: clean up duplicated suffixes like light.julian_licht_licht or
+        # light.julian_lampen_rechts_lampen_rechts -> light.julian_lampen_rechts.
+        cleanup_duplicated_group_entity_id(self.hass, self.entity_id)
 
     def _update_tracking(self) -> None:
         if self._unsub_tracker:
             self._unsub_tracker()
             self._unsub_tracker = None
+        if not self._added or not self.hass:
+            return
         eids = self._get_child_entities()
         if eids:
             @callback
             def _state_changed(event):
-                self.async_write_ha_state()
+                if self._added and self.hass and self.entity_id and self.platform is not None:
+                    self.async_write_ha_state()
 
             self._unsub_tracker = async_track_state_change_event(self.hass, eids, _state_changed)
 
     async def async_will_remove_from_hass(self) -> None:
+        self._added = False
         if self._unsub_tracker:
             self._unsub_tracker()
             self._unsub_tracker = None

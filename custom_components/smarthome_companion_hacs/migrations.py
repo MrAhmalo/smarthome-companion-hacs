@@ -285,12 +285,13 @@ async def async_migrate_energy_sensors(hass, store) -> bool:
 
         for energy_eid, cat in labels_to_sync:
             cat_info = categories.get(cat, {})
-            _ensure_label_exists(
+            e_lbl = _ensure_label_exists(
                 hass,
                 f"{cat}_energy",
                 name=f"{cat_info.get('display_name', cat)} Energy",
             )
-            _sync_entity_labels(hass, energy_eid, [f"{cat}_energy"])
+            if e_lbl:
+                _sync_entity_labels(hass, energy_eid, [e_lbl])
 
         if changed:
             _LOGGER.info(

@@ -5,6 +5,8 @@
         "title": "SmartHome Companion Backend",
         "description": "Select the module you want to configure:",
         "menu_options": {
+          "hub": "System Hub & Presence Simulation",
+          "groups": "SmartHome Groups",
           "blinds": "Blinds & Solar Shading",
           "irrigation": "Irrigation System"
         }

@@ -905,119 +905,516 @@ export function enablePointerReorder(listEl, { itemSelector = '[data-reorder-ite
 
 /**
  * Pointer-based 2D grid drag-and-drop reordering for desktop & touch/mobile.
- * Starts exclusively from `handleSelector` so scrolling and tile taps remain smooth.
+ * Cross-room & within-grid drag-and-drop reordering in Edit Mode.
+ * Supports:
+ * - Immediate drag from handle OR press-and-hold anywhere on a tile (~180ms mouse / ~220ms touch)
+ * - Floating ghost attached outside container-query ancestors (ShadowRoot) so fixed coords stay exact
+ * - Live FLIP reflow preview, including horizontal left/right 2-column compact pairing
+ * - Cross-room dragging (auto-expanding collapsed target rooms on brief hover) & edge auto-scroll
  */
 export function enableGridPointerReorder(gridEl, {
   itemSelector = '.tile',
   handleSelector = '.tile-drag-handle',
+  roomSelector = '.room[data-area-id]',
+  roomGridSelector = '.tile-grid',
+  isEnabled,
+  onDragStart,
+  onPreview,
+  onCancel,
   onReorder,
 } = {}) {
   if (!gridEl || typeof onReorder !== 'function') return () => {};
   let active = null;
+  let suppressClickUntil = 0;
 
-  const findTargetIdx = (x, y, items, skipIdx) => {
-    // 1. Direct bounding-box hit
-    for (let i = 0; i < items.length; i++) {
-      if (i === skipIdx) continue;
-      const r = items[i].getBoundingClientRect();
-      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return i;
+  const getItems = (g = active?.currentGrid || gridEl) =>
+    Array.from(g.children).filter((el) => el.matches(itemSelector));
+
+  const findTopTile = (el, g = gridEl) => {
+    let item = el?.closest?.(itemSelector);
+    while (item && item.parentElement !== g) {
+      item = item.parentElement?.closest(itemSelector) || null;
     }
-    // 2. Fallback: closest center
-    let bestIdx = skipIdx;
-    let bestDist = Infinity;
-    for (let i = 0; i < items.length; i++) {
-      const r = items[i].getBoundingClientRect();
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
-      const d = (x - cx) ** 2 + (y - cy) ** 2;
-      if (d < bestDist) {
-        bestDist = d;
-        bestIdx = i;
+    return item && item.parentElement === g ? item : null;
+  };
+
+  const getRootScope = () => {
+    const root = gridEl.getRootNode?.();
+    return root && typeof root.querySelectorAll === 'function' ? root : document;
+  };
+
+  const flipAnimate = (targetGrid, beforeRects, mutateFn) => {
+    mutateFn();
+    const afterItems = getItems(targetGrid);
+    for (const el of afterItems) {
+      if (active && el === active.item) continue;
+      const oldRect = beforeRects.get(el);
+      if (!oldRect) continue;
+      const newRect = el.getBoundingClientRect();
+      const dx = oldRect.left - newRect.left;
+      const dy = oldRect.top - newRect.top;
+      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+        el.style.transition = 'none';
+        el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+        el.getBoundingClientRect(); // force reflow
+        el.style.transition = 'transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)';
+        el.style.transform = '';
       }
     }
-    return bestIdx;
+  };
+
+  const computeDropTarget = (x, y, targetGrid, draggedItem) => {
+    const items = getItems(targetGrid);
+    const currentIdx = items.indexOf(draggedItem);
+    if (!items.length) {
+      return { currentIdx, toIdx: 0, intent: 'auto', partnerEl: null, noop: false };
+    }
+
+    const slotEl = currentIdx >= 0 ? items[currentIdx] : null;
+    if (slotEl) {
+      const sr = slotEl.getBoundingClientRect();
+      if (x >= sr.left && x <= sr.right && y >= sr.top && y <= sr.bottom) {
+        return { currentIdx, toIdx: currentIdx, intent: null, partnerEl: null, noop: true };
+      }
+    }
+
+    // 1. Direct bounding-box hit on another tile
+    let hitIdx = -1;
+    for (let i = 0; i < items.length; i++) {
+      if (i === currentIdx) continue;
+      const r = items[i].getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        hitIdx = i;
+        break;
+      }
+    }
+
+    // 2. Fallback: closest bounding box distance (tiebreak: center distance)
+    if (hitIdx < 0) {
+      let bestBoxDist = Infinity;
+      let bestCenterDist = Infinity;
+      for (let i = 0; i < items.length; i++) {
+        if (i === currentIdx) continue;
+        const r = items[i].getBoundingClientRect();
+        const bx = x < r.left ? r.left - x : (x > r.right ? x - r.right : 0);
+        const by = y < r.top ? r.top - y : (y > r.bottom ? y - r.bottom : 0);
+        const bd = bx * bx + by * by;
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const cd = (x - cx) ** 2 + (y - cy) ** 2;
+        if (bd < bestBoxDist - 0.5 || (Math.abs(bd - bestBoxDist) <= 0.5 && cd < bestCenterDist)) {
+          bestBoxDist = bd;
+          bestCenterDist = cd;
+          hitIdx = i;
+        }
+      }
+    }
+
+    if (hitIdx < 0) {
+      return { currentIdx, toIdx: Math.max(0, currentIdx), intent: null, partnerEl: null, noop: true };
+    }
+
+    const hitEl = items[hitIdx];
+    const r = hitEl.getBoundingClientRect();
+    const relX = (x - r.left) / Math.max(1, r.width);
+    const relY = (y - r.top) / Math.max(1, r.height);
+    const draggedHardWide = draggedItem.classList.contains('group') || draggedItem.classList.contains('grouped-cover');
+    const hitHardWide = hitEl.classList.contains('group') || hitEl.classList.contains('grouped-cover');
+
+    let placeAfter = false;
+    let intent = 'auto';
+    let partnerEl = null;
+
+    const firstOtherIdx = currentIdx === 0 ? 1 : 0;
+    const lastOtherIdx = currentIdx === items.length - 1 ? items.length - 2 : items.length - 1;
+
+    if (hitIdx === firstOtherIdx && y < r.top - 4) {
+      placeAfter = false;
+      intent = 'wide';
+    } else if (hitIdx === lastOtherIdx && y > r.bottom + 4) {
+      placeAfter = true;
+      intent = 'wide';
+    } else if (draggedHardWide || hitHardWide) {
+      placeAfter = relY >= 0.5;
+      intent = 'wide';
+    } else if (hitEl.classList.contains('wide')) {
+      if (relY < 0.22) {
+        placeAfter = false;
+        intent = 'wide';
+      } else if (relY > 0.78) {
+        placeAfter = true;
+        intent = 'wide';
+      } else {
+        placeAfter = relX >= 0.5;
+        intent = 'compact';
+        partnerEl = hitEl;
+      }
+    } else {
+      // Hit tile is already compact (1-column): insert to its left or right cleanly
+      placeAfter = relX >= 0.5;
+      intent = 'compact';
+      partnerEl = hitEl;
+    }
+
+    let toIdx;
+    if (currentIdx >= 0) {
+      toIdx = placeAfter
+        ? (currentIdx < hitIdx ? hitIdx : hitIdx + 1)
+        : (currentIdx < hitIdx ? hitIdx - 1 : hitIdx);
+      toIdx = Math.max(0, Math.min(items.length - 1, toIdx));
+    } else {
+      toIdx = placeAfter ? hitIdx + 1 : hitIdx;
+      toIdx = Math.max(0, Math.min(items.length, toIdx));
+    }
+
+    return { currentIdx, toIdx, intent, partnerEl, noop: false };
+  };
+
+  const createGhost = (item) => {
+    const rect = item.getBoundingClientRect();
+    const ghost = item.cloneNode(true);
+    ghost.classList.add('tile-drag-ghost');
+    ghost.removeAttribute('data-dragging');
+    ghost.classList.remove('tile-drag-slot');
+    ghost.style.left = '0px';
+    ghost.style.top = '0px';
+    ghost.style.width = `${rect.width}px`;
+    ghost.style.height = `${rect.height}px`;
+    const root = gridEl.getRootNode?.();
+    const host = (root && root !== document) ? root : document.body;
+    host.appendChild(ghost);
+    // Compensate for any containing block offset on host/shadow-host so ghost sits at exact rect
+    const gr = ghost.getBoundingClientRect();
+    ghost.style.left = `${rect.left - gr.left}px`;
+    ghost.style.top = `${rect.top - gr.top}px`;
+    return ghost;
+  };
+
+  const clearRoomHighlight = () => {
+    const scope = getRootScope();
+    for (const el of scope.querySelectorAll(`${roomSelector}[data-drop-room]`)) {
+      el.removeAttribute('data-drop-room');
+    }
+  };
+
+  const stopAutoScroll = () => {
+    if (active?.scrollInterval) {
+      clearInterval(active.scrollInterval);
+      active.scrollInterval = 0;
+    }
+  };
+
+  const updateAutoScroll = (y) => {
+    if (!active || !active.started) return;
+    const edge = 76;
+    const vh = window.innerHeight || document.documentElement.clientHeight || 800;
+    let delta = 0;
+    if (y < edge) delta = -Math.max(4, Math.round(((edge - y) / edge) * 14));
+    else if (y > vh - edge) delta = Math.max(4, Math.round(((y - (vh - edge)) / edge) * 14));
+    active.scrollDelta = delta;
+    if (delta !== 0 && !active.scrollInterval) {
+      active.scrollInterval = setInterval(() => {
+        if (!active || !active.started || !active.scrollDelta) return;
+        window.scrollBy(0, active.scrollDelta);
+      }, 16);
+    } else if (delta === 0 && active.scrollInterval) {
+      clearInterval(active.scrollInterval);
+      active.scrollInterval = 0;
+    }
+  };
+
+  const findRoomUnderPointer = (x, y) => {
+    const scope = getRootScope();
+    const rooms = Array.from(scope.querySelectorAll(roomSelector));
+    for (const rm of rooms) {
+      const rr = rm.getBoundingClientRect();
+      if (rr.width > 0 && rr.height > 0 && x >= rr.left && x <= rr.right && y >= rr.top && y <= rr.bottom) {
+        return rm;
+      }
+    }
+    return null;
+  };
+
+  const activateDrag = () => {
+    if (!active || active.started) return;
+    active.started = true;
+    active.moved = true;
+    if (active.holdTimer) { clearTimeout(active.holdTimer); active.holdTimer = 0; }
+    try { active.captureTarget.setPointerCapture?.(active.pointerId); } catch {}
+    onDragStart?.({ itemEl: active.item, sourceGrid: active.sourceGrid });
+    active.ghost = createGhost(active.item);
+    active.item.setAttribute('data-dragging', '');
+    active.item.classList.add('tile-drag-slot');
+    updateDrag();
   };
 
   const onPointerDown = (e) => {
+    if (isEnabled && !isEnabled()) return;
     if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
-    const handle = e.target.closest(handleSelector);
-    if (!handle || !gridEl.contains(handle)) return;
-    const item = handle.closest(itemSelector);
-    if (!item || item.parentElement !== gridEl) return;
-    const items = Array.from(gridEl.children).filter((el) => el.matches(itemSelector));
-    if (items.length < 2) return;
+    if (e.target.closest?.('.chevron-btn')) return;
+
+    const handle = e.target.closest?.(handleSelector);
+    const isHandle = !!(handle && gridEl.contains(handle));
+    const item = findTopTile(isHandle ? handle : e.target);
+    if (!item) return;
+
+    // Don't hijack clicks on nested sub-tiles inside an expanded GroupTile
+    if (!isHandle && e.target.closest?.('.sub-body .tile')) return;
+
+    const items = getItems(gridEl);
+    if (!items.length) return;
     const startIdx = items.indexOf(item);
     if (startIdx < 0) return;
 
-    e.preventDefault();
-    e.stopPropagation();
-    handle.setPointerCapture?.(e.pointerId);
-    item.setAttribute('data-dragging', '');
+    if (isHandle) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
     active = {
       pointerId: e.pointerId,
-      handle,
+      pointerType: e.pointerType || 'mouse',
+      isHandle,
+      captureTarget: isHandle ? handle : item,
       item,
-      items,
+      ghost: null,
+      sourceGrid: gridEl,
+      currentGrid: gridEl,
       startIdx,
-      targetIdx: startIdx,
+      currentIdx: startIdx,
+      lastIntent: 'auto',
+      lastPartnerEl: null,
       startX: e.clientX,
       startY: e.clientY,
       lastX: e.clientX,
       lastY: e.clientY,
+      started: false,
+      moved: false,
+      holdTimer: 0,
       raf: 0,
+      lastSwapAt: 0,
+      scrollInterval: 0,
+      scrollDelta: 0,
+      pendingExpandRoom: null,
+      expandTimer: 0,
     };
+
+    if (isHandle) {
+      activateDrag();
+    } else {
+      const holdMs = active.pointerType === 'mouse' ? 180 : 220;
+      active.holdTimer = setTimeout(() => {
+        activateDrag();
+      }, holdMs);
+    }
   };
 
-  const updateDrag = () => {
-    if (!active) return;
+  const updateDrag = (force = false) => {
+    if (!active || !active.started) return;
     active.raf = 0;
     const dx = active.lastX - active.startX;
     const dy = active.lastY - active.startY;
-    active.item.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.02)`;
-    const nextIdx = findTargetIdx(active.lastX, active.lastY, active.items, active.startIdx);
-    if (nextIdx !== active.targetIdx) {
-      active.items.forEach((el) => el.removeAttribute('data-drop-target'));
-      if (nextIdx !== active.startIdx && active.items[nextIdx]) {
-        active.items[nextIdx].setAttribute('data-drop-target', '');
-      }
-      active.targetIdx = nextIdx;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) active.moved = true;
+    if (active.ghost) {
+      active.ghost.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.02)`;
     }
+    updateAutoScroll(active.lastY);
+
+    const now = Date.now();
+    const hoverRoom = findRoomUnderPointer(active.lastX, active.lastY);
+
+    // Highlight destination room if dragging outside source room
+    clearRoomHighlight();
+    const srcRoomEl = active.sourceGrid.closest(roomSelector);
+    if (hoverRoom && hoverRoom !== srcRoomEl) {
+      hoverRoom.setAttribute('data-drop-room', '');
+    }
+
+    // Auto-expand collapsed room after brief hover (~180ms), or immediately on forced drop
+    if (hoverRoom && !hoverRoom.hasAttribute('data-open')) {
+      if (force) {
+        if (active.expandTimer) { clearTimeout(active.expandTimer); active.expandTimer = 0; }
+        active.pendingExpandRoom = null;
+        hoverRoom.__roomInstance?.setOpen?.(true);
+      } else {
+        if (active.pendingExpandRoom !== hoverRoom) {
+          if (active.expandTimer) clearTimeout(active.expandTimer);
+          active.pendingExpandRoom = hoverRoom;
+          active.expandTimer = setTimeout(() => {
+            if (!active || !active.started) return;
+            hoverRoom.__roomInstance?.setOpen?.(true);
+            active.pendingExpandRoom = null;
+            active.expandTimer = 0;
+            active.lastSwapAt = 0;
+            updateDrag(true);
+          }, 180);
+        }
+        return;
+      }
+    }
+    if (active.expandTimer) {
+      clearTimeout(active.expandTimer);
+      active.expandTimer = 0;
+    }
+    active.pendingExpandRoom = null;
+
+    if (!force && now - active.lastSwapAt < 85) return;
+
+    let targetGrid = active.currentGrid;
+    if (hoverRoom) {
+      const candidateGrid = hoverRoom.querySelector(roomGridSelector);
+      if (candidateGrid) targetGrid = candidateGrid;
+    }
+
+    const fromGrid = active.currentGrid;
+    const isCrossRoom = targetGrid !== fromGrid;
+    const targetDrop = computeDropTarget(active.lastX, active.lastY, targetGrid, active.item);
+    if (!isCrossRoom && targetDrop.noop) return;
+
+    const intentKey = `${targetGrid.dataset.areaId || ''}|${targetDrop.toIdx}|${targetDrop.intent}|${targetDrop.partnerEl?.dataset?.key || ''}`;
+    const changed = isCrossRoom
+      || targetDrop.toIdx !== targetDrop.currentIdx
+      || (targetDrop.intent && targetDrop.intent !== 'auto' && intentKey !== active.lastPreviewKey);
+
+    if (!changed) return;
+
+    active.lastSwapAt = now;
+    active.lastPreviewKey = intentKey;
+
+    const beforeRects = new Map();
+    for (const el of getItems(targetGrid)) {
+      beforeRects.set(el, el.getBoundingClientRect());
+    }
+
+    flipAnimate(targetGrid, beforeRects, () => {
+      if (typeof onPreview === 'function') {
+        onPreview({
+          itemEl: active.item,
+          fromGrid,
+          targetGrid,
+          toIdx: targetDrop.toIdx,
+          intent: targetDrop.intent || 'auto',
+          partnerEl: targetDrop.partnerEl,
+        });
+      } else {
+        const curItems = getItems(targetGrid);
+        const ref = curItems[Math.min(targetDrop.toIdx, curItems.length - 1)];
+        if (!ref) targetGrid.appendChild(active.item);
+        else if (!isCrossRoom && targetDrop.currentIdx < targetDrop.toIdx) ref.after(active.item);
+        else ref.before(active.item);
+      }
+    });
+
+    active.currentGrid = targetGrid;
+    active.currentIdx = getItems(targetGrid).indexOf(active.item);
+    if (targetDrop.intent) active.lastIntent = targetDrop.intent;
+    active.lastPartnerEl = targetDrop.partnerEl;
   };
 
   const onPointerMove = (e) => {
     if (!active || e.pointerId !== active.pointerId) return;
-    e.preventDefault();
     active.lastX = e.clientX;
     active.lastY = e.clientY;
-    if (!active.raf) active.raf = requestAnimationFrame(updateDrag);
+    const dx = active.lastX - active.startX;
+    const dy = active.lastY - active.startY;
+    const dist = Math.hypot(dx, dy);
+
+    if (!active.started) {
+      if (active.pointerType === 'mouse') {
+        if (dist > 6) activateDrag();
+      } else if (dist > 8) {
+        cleanup(false);
+        return;
+      }
+      if (!active.started) return;
+    }
+
+    e.preventDefault();
+    if (!active.raf) {
+      updateDrag(false);
+      active.raf = requestAnimationFrame(() => updateDrag(false));
+    }
+  };
+
+  const onTouchMove = (e) => {
+    if (active && active.started) {
+      e.preventDefault();
+    }
   };
 
   const cleanup = (commit) => {
     if (!active) return;
+    if (active.holdTimer) clearTimeout(active.holdTimer);
+    if (active.expandTimer) clearTimeout(active.expandTimer);
     if (active.raf) cancelAnimationFrame(active.raf);
-    try { active.handle.releasePointerCapture?.(active.pointerId); } catch {}
-    active.item.removeAttribute('data-dragging');
-    active.item.style.transform = '';
-    active.items.forEach((el) => el.removeAttribute('data-drop-target'));
+    if (commit && active.started) {
+      updateDrag(true);
+    }
+    stopAutoScroll();
+    clearRoomHighlight();
+    const wasStarted = active.started;
+    const moved = active.moved;
+    const itemEl = active.item;
+    const sourceGrid = active.sourceGrid;
+    const targetGrid = active.currentGrid;
     const from = active.startIdx;
-    const to = active.targetIdx;
+    const to = active.currentIdx;
+    const intent = active.lastIntent;
+    const partnerEl = active.lastPartnerEl;
+    if (wasStarted) {
+      try { active.captureTarget.releasePointerCapture?.(active.pointerId); } catch {}
+      active.item.removeAttribute('data-dragging');
+      active.item.classList.remove('tile-drag-slot');
+      active.ghost?.remove();
+      const scope = getRootScope();
+      scope.querySelectorAll(itemSelector).forEach((el) => {
+        el.removeAttribute('data-drop-target');
+        el.style.transition = '';
+        el.style.transform = '';
+      });
+    }
+    if (wasStarted || moved) suppressClickUntil = Date.now() + 300;
     active = null;
-    if (commit && from !== to) onReorder(from, to);
+    if (wasStarted) {
+      if (!commit) {
+        onCancel?.({ itemEl, sourceGrid, currentGrid: targetGrid, startIdx: from });
+      } else if (sourceGrid !== targetGrid || from !== to || moved) {
+        onReorder({ itemEl, sourceGrid, targetGrid, fromIdx: from, toIdx: to, intent, partnerEl });
+      }
+    }
   };
 
-  const onPointerUp = (e) => { if (active && e.pointerId === active.pointerId) cleanup(true); };
+  const onPointerUp = (e) => {
+    if (active && e.pointerId === active.pointerId) {
+      if (typeof e.clientX === 'number' && typeof e.clientY === 'number') {
+        active.lastX = e.clientX;
+        active.lastY = e.clientY;
+      }
+      cleanup(true);
+    }
+  };
   const onPointerCancel = (e) => { if (active && e.pointerId === active.pointerId) cleanup(false); };
+  const onSuppressClick = (e) => {
+    if (Date.now() < suppressClickUntil) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  };
 
   gridEl.addEventListener('pointerdown', onPointerDown);
-  gridEl.addEventListener('pointermove', onPointerMove);
-  gridEl.addEventListener('pointerup', onPointerUp);
-  gridEl.addEventListener('pointercancel', onPointerCancel);
+  gridEl.addEventListener('touchmove', onTouchMove, { passive: false });
+  gridEl.addEventListener('click', onSuppressClick, true);
+  window.addEventListener('pointermove', onPointerMove, { passive: false });
+  window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', onPointerCancel);
   return () => {
     cleanup(false);
     gridEl.removeEventListener('pointerdown', onPointerDown);
-    gridEl.removeEventListener('pointermove', onPointerMove);
-    gridEl.removeEventListener('pointerup', onPointerUp);
-    gridEl.removeEventListener('pointercancel', onPointerCancel);
+    gridEl.removeEventListener('touchmove', onTouchMove);
+    gridEl.removeEventListener('click', onSuppressClick, true);
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerCancel);
   };
 }
 

@@ -695,6 +695,9 @@ export class Settings {
   _tabHome() {
     const d = this.draft;
     d.badges ||= [];
+    d.light_counter ||= { enabled: true, show_zero: true };
+    if (d.light_counter.enabled === undefined) d.light_counter.enabled = true;
+    if (d.light_counter.show_zero === undefined) d.light_counter.show_zero = true;
     d.greetings ||= {};
     if (d.greetings.morning === undefined) d.greetings.morning = 'Guten Morgen';
     if (d.greetings.day === undefined) d.greetings.day = 'Guten Tag';
@@ -707,6 +710,12 @@ export class Settings {
         this._text(d.greetings, 'morning', 'Morgens (05:00 – 11:00)', { placeholder: 'Guten Morgen' }),
         this._text(d.greetings, 'day', 'Tagsüber (11:00 – 18:00)', { placeholder: 'Guten Tag' }),
         this._text(d.greetings, 'evening', 'Abends (18:00 – 05:00)', { placeholder: 'Guten Abend' })),
+
+      this._title('Lichter-Zähler (integriert)'),
+      this._hint('• Zählt aktive eingerichtete Geräte der Kategorie „Leuchte“\n• Keine externe HA-Entität nötig'),
+      h('div', { class: 'fields' },
+        this._check(d.light_counter, 'enabled', 'Lichter-Zähler auf Startseite anzeigen'),
+        this._check(d.light_counter, 'show_zero', 'Auch anzeigen, wenn 0 Lichter an sind')),
 
       this._title('Status-Badges'),
       this._hint('• Kompakte Status-Chips unter Begrüßung\n• Tippen zum Bearbeiten & Sortieren'),

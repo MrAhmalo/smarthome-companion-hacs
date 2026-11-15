@@ -1,9 +1,17 @@
+import asyncio
 import logging
 from homeassistant.core import callback
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.event import async_track_state_change_event
 
 from .const import DOMAIN
+from .device_helpers import (
+    build_blind_device_info,
+    build_group_device_info,
+    cleanup_duplicated_group_entity_id,
+    resolve_group_child_entities,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -12,7 +20,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     store = hass.data[DOMAIN].get("store")
     blinds_manager = hass.data[DOMAIN].get("blinds_manager")
     
-    module = entry.data.get("module", "legacy")
+    module = (getattr(entry, "data", None) or {}).get("module", "legacy")
+    entry_id = getattr(entry, "entry_id", "default")
 
     added_blind_entities = set()
 
@@ -51,6 +60,57 @@ async def async_setup_entry(hass, entry, async_add_entities):
             )
         )
 
+    if module in ("groups", "legacy") and store:
+        domain_data = hass.data.setdefault(DOMAIN, {})
+        owner_entry_id = domain_data.get("_switch_groups_entry_id")
+        if not owner_entry_id or owner_entry_id == entry_id:
+            domain_data["_switch_groups_entry_id"] = entry_id
+            existing_switch_groups: dict[str, CompanionGroupSwitch] = {}
+
+            @callback
+            def sync_group_switches(event=None):
+                groups = store.get_groups() or {}
+                new_group_entities = []
+                active_switch_ids: set[str] = set()
+                for group_id, g_cfg in groups.items():
+                    if not isinstance(g_cfg, dict):
+                        continue
+                    cat = (g_cfg.get("category") or "leuchte").strip()
+                    if cat in ("leuchte", "light"):
+                        continue
+                    active_switch_ids.add(group_id)
+                    if group_id not in existing_switch_groups:
+                        ent = CompanionGroupSwitch(hass, store, group_id)
+                        existing_switch_groups[group_id] = ent
+                        new_group_entities.append(ent)
+                    else:
+                        existing_switch_groups[group_id].async_refresh_group()
+                for stale_id in [gid for gid in existing_switch_groups if gid not in active_switch_ids]:
+                    stale_ent = existing_switch_groups.pop(stale_id)
+                    if stale_ent._unsub_tracker:
+                        stale_ent._unsub_tracker()
+                        stale_ent._unsub_tracker = None
+                    if stale_ent._added and stale_ent.hass and stale_ent.platform is not None:
+                        hass.async_create_task(stale_ent.async_remove())
+                if new_group_entities:
+                    async_add_entities(new_group_entities)
+
+            sync_group_switches()
+            entry.async_on_unload(
+                hass.bus.async_listen(f"{DOMAIN}_dashboard_updated", sync_group_switches)
+            )
+
+            @callback
+            def _cleanup_switch_groups_owner():
+                if domain_data.get("_switch_groups_entry_id") == entry_id:
+                    domain_data.pop("_switch_groups_entry_id", None)
+                for ent in existing_switch_groups.values():
+                    if ent._unsub_tracker:
+                        ent._unsub_tracker()
+                        ent._unsub_tracker = None
+
+            entry.async_on_unload(_cleanup_switch_groups_owner)
+
 
 class _BlindBaseGenericSwitch(SwitchEntity):
     # Prevent HA state restore from calling async_turn_on/off after restart
@@ -75,13 +135,7 @@ class _BlindBaseGenericSwitch(SwitchEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        cover_name = self._cover_label(self._blind_id)
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._blind_id)},
-            name=cover_name,
-            manufacturer="SmartHome Companion",
-            model="Rollladen-Automat",
-        )
+        return build_blind_device_info(self.hass, self._blind_id)
 
     def _cover_label(self, entity_id):
         state = self.hass.states.get(entity_id)
@@ -124,6 +178,7 @@ class _BlindBaseGenericSwitch(SwitchEntity):
     def _handle_update(self, event):
         self.async_write_ha_state()
 
+
 class _SleepInTomorrowSwitch(SwitchEntity):
     # Prevent HA state restore from interfering with live store values.
     _attr_should_poll = False
@@ -144,18 +199,7 @@ class _SleepInTomorrowSwitch(SwitchEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        state = self.hass.states.get(self._blind_id)
-        if state and state.attributes.get("friendly_name"):
-            name = state.attributes["friendly_name"]
-        else:
-            name = self._blind_id.split(".")[-1].replace("_", " ").title()
-        cover_name = name.replace("Eg", "EG").replace("Og", "OG").replace("Hacs", "HACS")
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._blind_id)},
-            name=cover_name,
-            manufacturer="SmartHome Companion",
-            model="Rollladen-Automat",
-        )
+        return build_blind_device_info(self.hass, self._blind_id)
 
     def _get_target_date(self):
         import homeassistant.util.dt as dt_util
@@ -287,3 +331,109 @@ class _SleepInTomorrowSwitch(SwitchEntity):
     @callback
     def _handle_update(self, event):
         self.async_write_ha_state()
+
+
+class CompanionGroupSwitch(SwitchEntity):
+    """Native Home Assistant Switch Entity for non-light SmartHome Companion groups."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(self, hass, store, group_id: str) -> None:
+        self.hass = hass
+        self._store = store
+        self._group_id = group_id
+        self._unsub_tracker = None
+        self._added = False
+        self._update_attrs()
+
+    def _update_attrs(self) -> None:
+        g = (self._store.get_groups() or {}).get(self._group_id, {})
+        self._name = g.get("name") or "Schaltgruppe"
+        self._attr_name = None
+        self._attr_unique_id = f"smarthome_companion_group_switch_{self._group_id}"
+        self._attr_icon = g.get("icon") or "mdi:power-socket-eu"
+        self._attr_device_info = build_group_device_info(self._group_id, g, self._store)
+
+    @callback
+    def async_refresh_group(self) -> None:
+        if not self.hass:
+            return
+        self._update_attrs()
+        self._update_tracking()
+        if self._added and self.hass and self.entity_id and self.platform is not None:
+            self.async_write_ha_state()
+
+    def _get_child_entities(self) -> list[str]:
+        return resolve_group_child_entities(
+            self.hass,
+            self._store,
+            self._group_id,
+            domains=("switch", "light", "fan", "input_boolean", "valve", "cover"),
+        )
+
+    @property
+    def is_on(self) -> bool:
+        if not self.hass:
+            return False
+        for eid in self._get_child_entities():
+            st = self.hass.states.get(eid)
+            if st and st.state in ("on", "open", "opening"):
+                return True
+        return False
+
+    async def async_turn_on(self, **kwargs) -> None:
+        eids = self._get_child_entities()
+        if not eids:
+            return
+        by_domain: dict[str, list[str]] = {}
+        for eid in eids:
+            by_domain.setdefault(eid.split(".", 1)[0], []).append(eid)
+        calls = [
+            self.hass.services.async_call(dom, "turn_on", {"entity_id": dom_eids}, blocking=False)
+            for dom, dom_eids in by_domain.items()
+        ]
+        if calls:
+            await asyncio.gather(*calls)
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        eids = self._get_child_entities()
+        if not eids:
+            return
+        by_domain: dict[str, list[str]] = {}
+        for eid in eids:
+            by_domain.setdefault(eid.split(".", 1)[0], []).append(eid)
+        calls = [
+            self.hass.services.async_call(dom, "turn_off", {"entity_id": dom_eids}, blocking=False)
+            for dom, dom_eids in by_domain.items()
+        ]
+        if calls:
+            await asyncio.gather(*calls)
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        self._added = True
+        self._update_tracking()
+        cleanup_duplicated_group_entity_id(self.hass, self.entity_id)
+
+    def _update_tracking(self) -> None:
+        if self._unsub_tracker:
+            self._unsub_tracker()
+            self._unsub_tracker = None
+        if not self._added or not self.hass:
+            return
+        eids = self._get_child_entities()
+        if eids:
+            @callback
+            def _state_changed(event):
+                if self._added and self.hass and self.entity_id and self.platform is not None:
+                    self.async_write_ha_state()
+
+            self._unsub_tracker = async_track_state_change_event(self.hass, eids, _state_changed)
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._added = False
+        if self._unsub_tracker:
+            self._unsub_tracker()
+            self._unsub_tracker = None

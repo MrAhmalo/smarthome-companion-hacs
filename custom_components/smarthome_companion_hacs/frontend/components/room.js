@@ -30,14 +30,20 @@ export function average(hass, ids) {
  * - Group tiles sit at the bottom in full width.
  */
 export function applySmartTileLayout(tiles, grid = null) {
-  if (!tiles || !tiles.length) return;
+  if (!tiles || !tiles.length) {
+    if (grid && grid.children.length) grid.replaceChildren();
+    return;
+  }
 
   // Preserve the exact tile order (pinned + drag-and-drop) while pairing consecutive
-  // compact tiles 2-up (left/right) and promoting lone compact tiles before wide rows or at end.
+  // compact tiles 2-up (left/right). Explicit layoutMode ('compact' | 'wide') overrides
+  // automatic hasSlider / isAlwaysWide defaults (except groups & grouped covers which stay wide).
   let pendingCompact = null;
   for (const t of tiles) {
     const isGroup = t.spec?.is_group || t.is_group === true || t.constructor?.name === 'GroupTile';
-    const isWide = isGroup || t.isForceOwnRow || t.isAlwaysWide || t.hasSlider;
+    const hardWide = isGroup || t.isForceOwnRow || t.constructor?.name === 'GroupedCoverTile';
+    const mode = t.layoutMode ?? t.spec?.layout_mode ?? null;
+    const isWide = hardWide || (mode === 'wide' ? true : mode === 'compact' ? false : (t.isAlwaysWide || t.hasSlider));
     if (isWide) {
       if (pendingCompact) {
         pendingCompact.setWide(true);
@@ -144,6 +150,7 @@ export class GroupedCoverTile {
       'data-active': 'true',
       'data-key': this.coverSpecs[0]?.key || `cover-group:${this.roomSpec.area_id}`,
     }, h('div', { class: 'tile-main' }, this.dragHandle, this.iconBtn, this.info, this.btns), editBorder(10));
+    this.el.__tileInstance = this;
 
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
@@ -334,40 +341,185 @@ export class Room {
       }
     }, true);
 
-    this.grid = h('div', { class: 'tile-grid' }, this.tiles.map((t) => t.el));
-    this.el = h('div', { class: 'card room' },
+    this.grid = h('div', {
+      class: 'tile-grid',
+      'data-area-id': spec.area_id,
+    }, this.tiles.map((t) => t.el));
+    this.grid.__roomInstance = this;
+    this.el = h('div', {
+      class: 'card room',
+      'data-area-id': spec.area_id,
+    },
       this.head,
       h('div', { class: 'room-body' }, h('div', { class: 'room-body-inner' }, this.grid)));
+    this.el.__roomInstance = this;
     this._applyOpen();
     applySmartTileLayout(this.tiles, this.grid);
+
+    const serializeTiles = (tiles) => {
+      const order = [];
+      const layout = {};
+      for (const t of tiles) {
+        if (t instanceof GroupedCoverTile) {
+          for (const c of (t.coverSpecs || [])) {
+            if (c.key) {
+              order.push(c.key);
+              if (t.layoutMode === 'compact' || t.layoutMode === 'wide') layout[c.key] = t.layoutMode;
+            }
+          }
+        } else if (t.spec?.key) {
+          order.push(t.spec.key);
+          if (t.layoutMode === 'compact' || t.layoutMode === 'wide') layout[t.spec.key] = t.layoutMode;
+        }
+      }
+      return { order, layout };
+    };
+
+    let dragBaseline = null;
+    const captureBaseline = () => {
+      const root = this.grid.getRootNode?.() || document;
+      const roomEls = Array.from(root.querySelectorAll('.room[data-area-id]'));
+      const rooms = [];
+      const modes = new Map();
+      const wideBefore = new Map();
+      const origTiles = new Map();
+      for (const rEl of roomEls) {
+        const rm = rEl.__roomInstance;
+        if (!rm) continue;
+        rooms.push(rm);
+        origTiles.set(rm, [...rm.tiles]);
+        for (const t of rm.tiles) {
+          modes.set(t, t.layoutMode ?? null);
+          wideBefore.set(t, !!t.isWide);
+        }
+      }
+      return { rooms, modes, wideBefore, origTiles };
+    };
+
+    const restoreBaseline = (baseline) => {
+      if (!baseline) return;
+      for (const [t, mode] of baseline.modes.entries()) {
+        t.layoutMode = mode;
+      }
+    };
 
     enableGridPointerReorder(this.grid, {
       itemSelector: '.tile',
       handleSelector: '.tile-drag-handle',
-      onReorder: (from, to) => {
+      isEnabled: () => !!this.ctx?.isEditMode?.(),
+      onDragStart: () => {
+        dragBaseline = captureBaseline();
+      },
+      onPreview: ({ itemEl, fromGrid, targetGrid, toIdx, intent, partnerEl }) => {
         if (!this.ctx?.isEditMode?.()) return;
-        const [moved] = this.tiles.splice(from, 1);
-        if (!moved) return;
-        this.tiles.splice(to, 0, moved);
-        applySmartTileLayout(this.tiles, this.grid);
+        const itemTile = itemEl?.__tileInstance;
+        const fromRoom = fromGrid?.__roomInstance || this;
+        const toRoom = targetGrid?.__roomInstance || this;
+        if (!itemTile || !fromRoom || !toRoom) return;
 
-        const nextOrder = [];
-        for (const t of this.tiles) {
-          if (t instanceof GroupedCoverTile) {
-            for (const c of (t.coverSpecs || [])) {
-              if (c.key) nextOrder.push(c.key);
-            }
-          } else if (t.spec?.key) {
-            nextOrder.push(t.spec.key);
-          }
+        if (!dragBaseline) dragBaseline = captureBaseline();
+        restoreBaseline(dragBaseline);
+
+        // Remove itemTile from whichever room currently holds it
+        for (const rm of dragBaseline.rooms) {
+          const idx = rm.tiles.indexOf(itemTile);
+          if (idx >= 0) rm.tiles.splice(idx, 1);
         }
-        this.ctx?.hass?.callWS({
-          type: 'smarthome_companion/dashboard/tile_order',
-          area_id: this.spec.area_id,
-          tile_order: nextOrder,
-        }).catch(() => {});
+
+        const safeIdx = Math.max(0, Math.min(toRoom.tiles.length, toIdx));
+        toRoom.tiles.splice(safeIdx, 0, itemTile);
+
+        const isDragGroup = itemTile.spec?.is_group || itemTile.is_group === true || itemTile.constructor?.name === 'GroupTile' || itemTile instanceof GroupedCoverTile;
+        const partnerTile = partnerEl?.__tileInstance || null;
+        const isPartnerGroup = !partnerTile || partnerTile.spec?.is_group || partnerTile.is_group === true || partnerTile.constructor?.name === 'GroupTile' || partnerTile instanceof GroupedCoverTile;
+
+        if (intent === 'compact' && !isDragGroup && !isPartnerGroup && partnerTile !== itemTile) {
+          itemTile.layoutMode = 'compact';
+          partnerTile.layoutMode = 'compact';
+          const wasPartnerWide = dragBaseline.wideBefore.get(partnerTile) === true;
+          if (wasPartnerWide) {
+            const pairStart = Math.min(toRoom.tiles.indexOf(itemTile), toRoom.tiles.indexOf(partnerTile));
+            let compactRun = 0;
+            for (let i = 0; i < pairStart; i++) {
+              const t = toRoom.tiles[i];
+              const tGroup = t.spec?.is_group || t.is_group === true || t.constructor?.name === 'GroupTile' || t instanceof GroupedCoverTile;
+              const m = t.layoutMode ?? null;
+              const tWide = tGroup || (m === 'wide' ? true : m === 'compact' ? false : (t.isAlwaysWide || t.hasSlider));
+              if (tWide) compactRun = 0;
+              else compactRun += 1;
+            }
+            if (compactRun % 2 === 1 && pairStart > 0) {
+              for (let i = pairStart - 1; i >= 0; i--) {
+                const t = toRoom.tiles[i];
+                if ((t.layoutMode ?? null) !== 'compact') {
+                  t.layoutMode = 'wide';
+                  break;
+                }
+              }
+            }
+          }
+        } else if (intent === 'wide' && !isDragGroup) {
+          itemTile.layoutMode = 'wide';
+        }
+
+        if (fromRoom !== toRoom) {
+          applySmartTileLayout(fromRoom.tiles, fromRoom.grid);
+        }
+        applySmartTileLayout(toRoom.tiles, toRoom.grid);
+      },
+      onCancel: () => {
+        if (!dragBaseline) return;
+        for (const [t, mode] of dragBaseline.modes.entries()) {
+          t.layoutMode = mode;
+        }
+        for (const rm of dragBaseline.rooms) {
+          const orig = dragBaseline.origTiles.get(rm);
+          if (orig) rm.tiles = [...orig];
+          applySmartTileLayout(rm.tiles, rm.grid);
+        }
+        dragBaseline = null;
+      },
+      onReorder: ({ itemEl, sourceGrid, targetGrid }) => {
+        const baseline = dragBaseline;
+        dragBaseline = null;
+        if (!this.ctx?.isEditMode?.()) return;
+        const sourceRoom = sourceGrid?.__roomInstance || this;
+        const targetRoom = targetGrid?.__roomInstance || this;
+        const itemTile = itemEl?.__tileInstance;
+
+        if (sourceRoom === targetRoom) {
+          applySmartTileLayout(targetRoom.tiles, targetRoom.grid);
+          const { order, layout } = serializeTiles(targetRoom.tiles);
+          this.ctx?.hass?.callWS({
+            type: 'smarthome_companion/dashboard/tile_order',
+            area_id: targetRoom.spec.area_id,
+            tile_order: order,
+            tile_layout: layout,
+          }).catch(() => {});
+          return;
+        }
+
+        applySmartTileLayout(sourceRoom.tiles, sourceRoom.grid);
+        applySmartTileLayout(targetRoom.tiles, targetRoom.grid);
+        const srcSer = serializeTiles(sourceRoom.tiles);
+        const dstSer = serializeTiles(targetRoom.tiles);
+        this.ctx?.onMoveTileToRoom?.({
+          tile: itemTile,
+          fromAreaId: sourceRoom.spec.area_id,
+          toAreaId: targetRoom.spec.area_id,
+          sourceOrder: srcSer.order,
+          sourceLayout: srcSer.layout,
+          targetOrder: dstSer.order,
+          targetLayout: dstSer.layout,
+        });
       },
     });
+  }
+
+  setOpen(open) {
+    if (this.spec.always_open && !open) return;
+    this.ctx.openState.set(this.spec.area_id, !!open);
+    this._applyOpen();
   }
 
   _applyOpen() {

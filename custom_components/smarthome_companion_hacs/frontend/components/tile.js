@@ -74,10 +74,14 @@ export class Tile {
     const wide = ['cover', 'media_player', 'climate'].includes(this.kind)
       || this.spec.wide === true
       || this.spec.force_own_row === true;
+    this._layoutMode = this.spec?.layout_mode === 'compact' || this.spec?.layout_mode === 'wide'
+      ? this.spec.layout_mode
+      : null;
     this.el = h('div', { class: `tile ${this.kind}${wide ? ' wide' : ''}`, 'data-key': this.spec.key },
       h('div', { class: 'tile-main' }, this.dragHandle, this.iconBtn, this.info, this.btns),
       this.feature,
       editBorder(10));
+    this.el.__tileInstance = this;
 
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
@@ -144,6 +148,15 @@ export class Tile {
     return this.el.classList.contains('wide');
   }
 
+  get layoutMode() {
+    return this._layoutMode ?? this.spec?.layout_mode ?? null;
+  }
+
+  set layoutMode(mode) {
+    this._layoutMode = mode === 'compact' || mode === 'wide' ? mode : null;
+    if (this.spec) this.spec.layout_mode = this._layoutMode;
+  }
+
   setWide(wide) {
     this.el.classList.toggle('wide', !!wide);
   }
@@ -166,7 +179,7 @@ export class Tile {
       this._dragging = false;
       this._service('light', 'turn_on', { brightness_pct: Number(this.slider.value) });
     });
-    this.swatches = h('div', { style: { display: 'flex', gap: '8px' } });
+    this.swatches = h('div', { class: 'tile-swatches', style: { display: 'flex', gap: '8px' } });
     this.feature.append(this.slider, this.swatches);
   }
 
@@ -414,6 +427,31 @@ export class GroupTile {
     return !this.isSubGroup;
   }
 
+  get groupEntityId() {
+    if (this.spec.entity_id) return this.spec.entity_id;
+    if (this.hass && this.spec.group_id) {
+      const safeGid = String(this.spec.group_id).replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+      for (const dom of ['light', 'switch', 'group']) {
+        if (this.hass.states[`${dom}.${safeGid}`]) return `${dom}.${safeGid}`;
+      }
+    }
+    return this.children[0]?.entityId || this.entityIds[0] || null;
+  }
+
+  get entityId() {
+    return this.groupEntityId;
+  }
+
+  _handleInfoOrRowClick(e) {
+    if (this.ctx?.isEditMode?.()) {
+      if (this.spec.device_id && !this.spec.group_id) this.ctx.onOpenDevice?.(this.spec.device_id);
+      else this.ctx.onOpenGroup?.(this.spec.group_id);
+      return;
+    }
+    const targetEid = this.groupEntityId;
+    if (targetEid) moreInfo(this.el, targetEid);
+  }
+
   setWide(wide) {
     this.el.classList.toggle('wide', !!wide);
   }
@@ -445,13 +483,7 @@ export class GroupTile {
       class: 'tile-info',
       onClick: (e) => {
         e.stopPropagation();
-        if (this.ctx?.isEditMode?.()) {
-          if (this.spec.device_id && !this.spec.group_id) this.ctx.onOpenDevice?.(this.spec.device_id);
-          else this.ctx.onOpenGroup?.(this.spec.group_id);
-          return;
-        }
-        const targetEid = this.groupEntityId || this.children[0]?.entityId;
-        if (targetEid) moreInfo(this.el, targetEid);
+        this._handleInfoOrRowClick(e);
       },
     }, this.nameEl, this.stateEl);
 
@@ -505,13 +537,7 @@ export class GroupTile {
       class: 'tile-main',
       onClick: (e) => {
         if (e.target.closest('button')) return;
-        if (this.ctx?.isEditMode?.()) {
-          if (this.spec.device_id && !this.spec.group_id) this.ctx.onOpenDevice?.(this.spec.device_id);
-          else this.ctx.onOpenGroup?.(this.spec.group_id);
-          return;
-        }
-        const targetEid = this.groupEntityId || this.children[0]?.entityId;
-        if (targetEid) moreInfo(this.el, targetEid);
+        this._handleInfoOrRowClick(e);
       },
     }, this.dragHandle, this.iconBtn, this.info, this.btns);
 
@@ -551,6 +577,7 @@ export class GroupTile {
         'data-group': 'true',
       }, mainRow, this.feature, this.subBody, editBorder(10));
     }
+    this.el.__tileInstance = this;
 
     // Edit Mode click interception (allow chevron toggle & child/subgroup tile clicks)
     this.el.addEventListener('click', (e) => {

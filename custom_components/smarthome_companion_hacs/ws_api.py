@@ -13,6 +13,7 @@ from homeassistant.helpers import (
     area_registry as ar,
 )
 from .const import DOMAIN
+from .device_helpers import get_device_by_identifier_compat
 from .util import safe_fire_event
 from .entity_sync import (
     async_sync_renamed_entities,
@@ -59,20 +60,38 @@ def async_register_websockets(hass):
 
 # ── Helpers ──
 
-def _ensure_label_exists(hass, label_id: str, name: str | None = None, icon: str | None = None, color: str | None = None):
-    """Ensure a label exists in HA's label registry. Create if missing."""
+def _ensure_label_exists(hass, label_id: str, name: str | None = None, icon: str | None = None, color: str | None = None) -> str | None:
+    """Ensure a label exists in HA's label registry and return its actual label_id."""
     label_reg = lr.async_get(hass)
     existing = label_reg.async_get_label(label_id)
-    if existing is None:
-        try:
-            label_reg.async_create(
-                name=name or label_id,
-                icon=icon,
-                color=color,
-            )
-            _LOGGER.info("Created HA label: %s", label_id)
-        except Exception as e:
-            _LOGGER.warning("Could not create label '%s': %s", label_id, e)
+    if existing is not None:
+        return existing.label_id
+
+    target_name = (name or label_id).strip()
+    # HA slugifies label names into label_id (e.g. 'Steckdosen' -> 'steckdosen'),
+    # so lookup by name prevents duplicate-name ValueErrors when label_id != slug(name).
+    if hasattr(label_reg, "async_get_label_by_name"):
+        by_name = label_reg.async_get_label_by_name(target_name)
+        if by_name is not None:
+            return by_name.label_id
+    if hasattr(label_reg, "async_list_labels"):
+        target_lower = target_name.lower()
+        for lbl in label_reg.async_list_labels():
+            if lbl.label_id == label_id or (lbl.name and lbl.name.strip().lower() == target_lower):
+                return lbl.label_id
+
+    try:
+        created = label_reg.async_create(
+            name=target_name,
+            icon=icon,
+            color=color,
+        )
+        created_id = getattr(created, "label_id", label_id)
+        _LOGGER.info("Created HA label: %s (%s)", target_name, created_id)
+        return created_id
+    except Exception as e:
+        _LOGGER.warning("Could not create label '%s': %s", label_id, e)
+        return None
 
 def _sync_entity_labels(hass, entity_id: str, labels_to_add: list[str]):
     """Add labels to an entity without removing existing ones."""
@@ -193,24 +212,26 @@ async def handle_configure_device(hass, connection, msg):
 
     # Ensure HA labels exist
     cat_info = categories.get(category, {})
-    _ensure_label_exists(hass, category, name=cat_info.get("display_name", category), icon=cat_info.get("icon"), color=cat_info.get("color"))
+    cat_label_id = _ensure_label_exists(hass, category, name=cat_info.get("display_name", category), icon=cat_info.get("icon"), color=cat_info.get("color"))
+    power_label_id = None
     if entities.get("power"):
-        _ensure_label_exists(hass, f"{category}_power", name=f"{cat_info.get('display_name', category)} Power")
+        power_label_id = _ensure_label_exists(hass, f"{category}_power", name=f"{cat_info.get('display_name', category)} Power")
+    energy_label_id = None
     if entities.get("energy"):
-        _ensure_label_exists(hass, f"{category}_energy", name=f"{cat_info.get('display_name', category)} Energy")
+        energy_label_id = _ensure_label_exists(hass, f"{category}_energy", name=f"{cat_info.get('display_name', category)} Energy")
 
     # Sync labels onto entities
     primary = entities.get("primary")
-    if primary:
-        _sync_entity_labels(hass, primary, [category])
+    if primary and cat_label_id:
+        _sync_entity_labels(hass, primary, [cat_label_id])
 
     power = entities.get("power")
-    if power:
-        _sync_entity_labels(hass, power, [f"{category}_power"])
+    if power and power_label_id:
+        _sync_entity_labels(hass, power, [power_label_id])
 
     energy = entities.get("energy")
-    if energy:
-        _sync_entity_labels(hass, energy, [f"{category}_energy"])
+    if energy and energy_label_id:
+        _sync_entity_labels(hass, energy, [energy_label_id])
 
     sub_entities_for_labels = entities.get("sub_entities") if isinstance(entities, dict) else None
     if isinstance(sub_entities_for_labels, dict):
@@ -220,19 +241,21 @@ async def handle_configure_device(hass, connection, msg):
             sub_cat = sub_data.get("category") or category
             sub_cat_info = categories.get(sub_cat, {})
             if sub_data.get("power"):
-                _ensure_label_exists(
+                sub_p_lbl = _ensure_label_exists(
                     hass,
                     f"{sub_cat}_power",
                     name=f"{sub_cat_info.get('display_name', sub_cat)} Power",
                 )
-                _sync_entity_labels(hass, sub_data["power"], [f"{sub_cat}_power"])
+                if sub_p_lbl:
+                    _sync_entity_labels(hass, sub_data["power"], [sub_p_lbl])
             if sub_data.get("energy"):
-                _ensure_label_exists(
+                sub_e_lbl = _ensure_label_exists(
                     hass,
                     f"{sub_cat}_energy",
                     name=f"{sub_cat_info.get('display_name', sub_cat)} Energy",
                 )
-                _sync_entity_labels(hass, sub_data["energy"], [f"{sub_cat}_energy"])
+                if sub_e_lbl:
+                    _sync_entity_labels(hass, sub_data["energy"], [sub_e_lbl])
 
     # Update area in HA registry, then apply '<Raumname> <Gerätename>' friendly names
     is_virtual_entity = str(device_id).startswith("entity:")
@@ -385,35 +408,58 @@ async def handle_save_group(hass, connection, msg):
         area_id = group.get("area_id")
 
         # 1. Update group device in device registry
-        dev_entry = dev_reg.async_get_device(identifiers={(DOMAIN, f"group_{group_id}")})
+        dev_entry = get_device_by_identifier_compat(dev_reg, (DOMAIN, f"group_{group_id}"))
         if dev_entry:
             dev_reg.async_update_device(dev_entry.id, name_by_user=group_name, area_id=area_id or None)
 
-        # 2. Update group entity in entity registry (clean slug, no duplicated suffixes)
-        unique_id = f"smarthome_companion_group_light_{group_id}"
-        current_eid = ent_reg.async_get_entity_id("light", DOMAIN, unique_id)
+        # 2. Update group entity in entity registry (light or switch, clean slug)
+        g_cat = (group.get("category") or "leuchte").strip()
+        target_domain = "light" if g_cat in ("leuchte", "light") else "switch"
+        unique_id = f"smarthome_companion_group_{target_domain}_{group_id}"
+        current_eid = ent_reg.async_get_entity_id(target_domain, DOMAIN, unique_id)
+        if not current_eid:
+            alt_dom = "switch" if target_domain == "light" else "light"
+            alt_uid = f"smarthome_companion_group_{alt_dom}_{group_id}"
+            alt_eid = ent_reg.async_get_entity_id(alt_dom, DOMAIN, alt_uid)
+            if alt_eid:
+                current_eid = alt_eid
+                target_domain = alt_dom
+                unique_id = alt_uid
         if current_eid:
             clean_name = slugify_ha(group_name)
+            area_name = ""
             area_slug = ""
             if area_id:
                 area_reg = ar.async_get(hass)
                 a_entry = area_reg.async_get_area(area_id)
                 if a_entry:
-                    area_slug = slugify_ha(a_entry.name)
+                    area_name = (a_entry.name or "").strip()
+                    area_slug = slugify_ha(area_name)
             if area_slug and clean_name and not clean_name.startswith(f"{area_slug}_") and clean_name != area_slug:
                 clean_slug = f"{area_slug}_{clean_name}"
             else:
                 clean_slug = clean_name
-            target_eid = f"light.{clean_slug}" if clean_slug else current_eid
+            target_eid = f"{target_domain}.{clean_slug}" if clean_slug else current_eid
+            expected_friendly = group_name
+            if area_name and group_name and not group_name.lower().startswith(area_name.lower()):
+                expected_friendly = f"{area_name} {group_name}"
+            update_kwargs: dict[str, Any] = {}
+            cur_entry = ent_reg.async_get(current_eid)
+            if expected_friendly and (not cur_entry or cur_entry.name != expected_friendly):
+                update_kwargs["name"] = expected_friendly
             if current_eid != target_eid:
                 existing = ent_reg.async_get(target_eid)
                 if not existing or existing.unique_id == unique_id:
-                    try:
-                        ent_reg.async_update_entity(current_eid, new_entity_id=target_eid, original_name=None)
+                    update_kwargs["new_entity_id"] = target_eid
+                    update_kwargs["original_name"] = None
+            if update_kwargs:
+                try:
+                    ent_reg.async_update_entity(current_eid, **update_kwargs)
+                    if "new_entity_id" in update_kwargs:
                         _LOGGER.info("Synchronized group entity ID: %s -> %s", current_eid, target_eid)
                         await async_sync_renamed_entities(hass, store, {current_eid: target_eid})
-                    except Exception as err:
-                        _LOGGER.warning("Could not rename group entity %s: %s", current_eid, err)
+                except Exception as err:
+                    _LOGGER.warning("Could not update group entity %s: %s", current_eid, err)
 
         if hass.services.has_service("group", "set"):
             eids = []
@@ -462,6 +508,20 @@ async def handle_delete_group(hass, connection, msg):
             if group_id in children:
                 children.remove(group_id)
         await store.save_groups(groups)
+
+        # Remove Companion group entities & device from HA registries cleanly
+        try:
+            ent_reg = er.async_get(hass)
+            for dom in ("light", "switch"):
+                eid = ent_reg.async_get_entity_id(dom, DOMAIN, f"smarthome_companion_group_{dom}_{group_id}")
+                if eid:
+                    ent_reg.async_remove(eid)
+            dev_reg = dr.async_get(hass)
+            dev_entry = get_device_by_identifier_compat(dev_reg, (DOMAIN, f"group_{group_id}"))
+            if dev_entry:
+                dev_reg.async_remove_device(dev_entry.id)
+        except Exception as err:
+            _LOGGER.debug("Could not clean up Companion group device %s: %s", group_id, err)
 
         # Remove native HA group entity if possible
         try:

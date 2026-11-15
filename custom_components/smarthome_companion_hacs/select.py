@@ -7,6 +7,7 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
+from .device_helpers import build_blind_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,13 +64,7 @@ class BlindCardinalDirectionSelect(SelectEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        cover_name = self._cover_label(self._blind_id)
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._blind_id)},
-            name=cover_name,
-            manufacturer="SmartHome Companion",
-            model="Rollladen-Automat",
-        )
+        return build_blind_device_info(self.hass, self._blind_id)
 
     def _cover_label(self, entity_id):
         state = self.hass.states.get(entity_id)

@@ -5,6 +5,7 @@ from homeassistant.components.text import TextEntity
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
+from .device_helpers import build_blind_device_info, build_hub_device_info
 from .util import safe_fire_event
 
 _LOGGER = logging.getLogger(__name__)
@@ -126,13 +127,7 @@ class BlindTimeText(TextEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        cover_name = self._cover_label(self._blind_id)
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._blind_id)},
-            name=cover_name,
-            manufacturer="SmartHome Companion",
-            model="Rollladen-Automat",
-        )
+        return build_blind_device_info(self.hass, self._blind_id)
 
     def _cover_label(self, entity_id):
         state = self.hass.states.get(entity_id)
@@ -195,12 +190,7 @@ class HubTextSetting(TextEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, "hub")},
-            name="SmartHome Companion",
-            manufacturer="SmartHome Companion",
-            model="Hub & Einstellungen",
-        )
+        return build_hub_device_info("blinds")
 
     @property
     def native_value(self):
@@ -262,12 +252,7 @@ class IrrigationTextSetting(TextEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, "irrigation_hub")},
-            name="SmartHome Bewässerung",
-            manufacturer="SmartHome Companion",
-            model="Bewässerungs-Steuerung",
-        )
+        return build_hub_device_info("irrigation")
 
     @property
     def native_value(self):

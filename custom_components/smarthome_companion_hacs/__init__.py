@@ -1,5 +1,7 @@
 import logging
 # pyrefly: ignore [missing-import]
+from homeassistant import config_entries
+# pyrefly: ignore [missing-import]
 from homeassistant.core import HomeAssistant, callback
 # pyrefly: ignore [missing-import]
 from homeassistant.config_entries import ConfigEntry
@@ -7,6 +9,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
+from .device_helpers import (
+    MODULE_PLATFORMS,
+    async_organize_and_cleanup_devices,
+)
 from .store import CompanionStore
 from .entity_sync import async_sync_renamed_entities
 from .ws_api import async_register_websockets
@@ -184,7 +190,42 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if cfg.get("enabled", False):
             await adaptive_light_mgr.start()
 
-    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "number", "button", "switch", "text", "select", "light"])
+    platforms = MODULE_PLATFORMS.get(module, MODULE_PLATFORMS["legacy"])
+    hass.data[DOMAIN].setdefault("entry_platforms", {})[entry.entry_id] = list(platforms)
+    await hass.config_entries.async_forward_entry_setups(entry, platforms)
+
+    # Auto-create split category entries ('hub', 'groups') for existing installs so devices
+    # in Settings -> Devices & Services are cleanly separated from Blinds & Irrigation.
+    if module != "legacy" and not hass.data[DOMAIN].get("_split_entries_checked"):
+        hass.data[DOMAIN]["_split_entries_checked"] = True
+        existing_modules = {
+            e.data.get("module")
+            for e in hass.config_entries.async_entries(DOMAIN)
+            if e.data.get("module")
+        }
+        flow_mgr = getattr(hass.config_entries, "flow", None)
+        if flow_mgr is not None and "legacy" not in existing_modules:
+            for auto_mod in ("groups", "hub"):
+                if auto_mod not in existing_modules:
+                    hass.async_create_task(
+                        flow_mgr.async_init(
+                            DOMAIN,
+                            context={"source": config_entries.SOURCE_IMPORT},
+                            data={"module": auto_mod},
+                        )
+                    )
+
+    async def _run_device_organization(_event=None):
+        await async_organize_and_cleanup_devices(hass, store)
+
+    if getattr(hass, "is_running", False):
+        hass.async_create_task(_run_device_organization())
+    elif not hass.data[DOMAIN].get("_device_org_scheduled"):
+        hass.data[DOMAIN]["_device_org_scheduled"] = True
+        # pyrefly: ignore [missing-import]
+        from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _run_device_organization)
 
     # Clean up obsolete entities from the registry
     # pyrefly: ignore [missing-import]
@@ -227,9 +268,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "number", "button", "switch", "text", "select", "light"])
+    domain_data = hass.data.get(DOMAIN, {})
+    entry_platforms = domain_data.get("entry_platforms", {})
+    platforms = entry_platforms.get(
+        entry.entry_id,
+        MODULE_PLATFORMS.get(entry.data.get("module", "legacy"), MODULE_PLATFORMS["legacy"]),
+    )
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:
-        async_remove_dashboard_panel(hass)
-        hass.data.pop(DOMAIN, None)
+        entry_platforms.pop(entry.entry_id, None)
+        if not entry_platforms:
+            async_remove_dashboard_panel(hass)
+            hass.data.pop(DOMAIN, None)
     return unload_ok
 

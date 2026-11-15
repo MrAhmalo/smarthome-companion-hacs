@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 from pathlib import Path
 
 # pyrefly: ignore [missing-import]
@@ -149,12 +150,11 @@ async def _async_default_config(hass) -> dict:
 
     return {
         "greeting_entity": "sensor.greeting_sensor",
+        "light_counter": {"enabled": True, "show_zero": True},
         "badges": [
             {"entity_id": "binary_sensor.fritz_box_7590_ax_verbindung", "name": "Offline",
              "icon": "mdi:cloud-off", "color": "red", "show_name": True, "show_state": False,
              "tap": "more-info", "visible_when": "state_in", "visible_value": "unavailable, off"},
-            {"entity_id": "sensor.lichter_zahler", "icon": "mdi:lightbulb", "color": "amber",
-             "show_state": True, "tap": "more-info"},
             {"entity_id": "sensor.einkaufsliste_zahl", "icon": "mdi:cart", "color": "green",
              "show_state": True, "tap": "navigate", "path": "/todo?entity_id=todo.cookidoo_zusatzliche_kaufe",
              "visible_when": "above", "visible_value": "0"},
@@ -222,6 +222,7 @@ async def _async_default_config(hass) -> dict:
             "garten": {"expanded": "expanded", "expanded_users": ids("Matilda")},
         },
         "tile_order": {},
+        "tile_layout": {},
         "pinned_tiles": [],
         "hidden_tiles": [],
         "tile_users": {},
@@ -238,7 +239,7 @@ _LEGACY_SEEDED_EXTRA_ENTITIES = {
 }
 
 _LIST_KEYS = ("badges", "nav", "persons", "color_presets", "room_order", "pinned_tiles", "hidden_tiles", "extra_tiles")
-_DICT_KEYS = ("greetings", "warning", "announce", "trash", "rooms", "tile_order", "tile_users", "views")
+_DICT_KEYS = ("light_counter", "greetings", "warning", "announce", "trash", "rooms", "tile_order", "tile_layout", "tile_users", "views")
 
 
 def _sanitize_config(raw: dict) -> dict:
@@ -360,6 +361,8 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
     seen_alarm_ids: set[str] = set()
     configured_cover_entries: list[dict] = []
     seen_cover_ids: set[str] = set()
+    configured_light_entries: list[dict] = []
+    seen_light_ids: set[str] = set()
 
     def _area_meta(aid: str | None) -> tuple[str, str, str]:
         va = valid_area(aid) or NO_AREA_ID
@@ -414,6 +417,15 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                 "area_id": va,
                 "area_name": a_name,
                 "area_icon": a_icon,
+            })
+        elif category in ("leuchte", "light") and entity_id not in seen_light_ids:
+            seen_light_ids.add(entity_id)
+            configured_light_entries.append({
+                "entity_id": entity_id,
+                "device_id": device_id,
+                "name": name or entity_id,
+                "area_id": va,
+                "area_name": a_name,
             })
 
     def add_tile(area_id, tile):
@@ -513,6 +525,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                 cat_info = categories.get(bundled_cat, {})
                 for _, ch_tile in child_pairs:
                     seen_entities.add(ch_tile["entity_id"])
+                    _record_configured_entity(ch_tile.get("entity_id"), device_id, ch_tile.get("category") or category, ch_tile.get("name"), bundled_area)
                 add_tile(bundled_area, {
                     "key": f"bundled:{device_id}",
                     "device_id": device_id,
@@ -800,12 +813,20 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                 first = child_specs[0]
                 area_id = valid_area(first.get("area_id"))
 
-            group_entry = by_uid.get(("light", f"smarthome_companion_group_light_{gid}"))
+            group_entry = (
+                by_uid.get(("light", f"smarthome_companion_group_light_{gid}"))
+                or by_uid.get(("switch", f"smarthome_companion_group_switch_{gid}"))
+            )
+            group_eid = group_entry.entity_id if group_entry else None
+            if not group_eid:
+                safe_gid = re.sub(r"[^a-zA-Z0-9_]", "_", str(gid)).lower()
+                if hass.states.get(f"group.{safe_gid}") is not None:
+                    group_eid = f"group.{safe_gid}"
             return {
                 "key": f"group:{gid}",
                 "is_group": True,
                 "group_id": gid,
-                "entity_id": group_entry.entity_id if group_entry else None,
+                "entity_id": group_eid,
                 "name": g.get("name") or "Gruppe",
                 "category": g_cat,
                 "icon": g.get("icon") or "mdi:lightbulb-group",
@@ -852,7 +873,8 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
     if NO_AREA_ID in all_ids and NO_AREA_ID not in ordered:
         ordered.append(NO_AREA_ID)
 
-    pinned_set = set(config.get("pinned_tiles", []))
+    pinned_set = set(str(k) for k in (config.get("pinned_tiles") or []) if k)
+    configured_devices = store.get_devices()
     rooms = []
     for area_id in ordered:
         rcfg = rooms_cfg.get(area_id, {}) if isinstance(rooms_cfg.get(area_id, {}), dict) else {}
@@ -863,19 +885,56 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
         all_room_sensors = configured_sensors.get(area_id, {})
         if (not edit or area_id == NO_AREA_ID) and not tiles and not all_room_sensors:
             continue
+        room_layout = config.get("tile_layout", {}).get(area_id, {})
+        if not isinstance(room_layout, dict):
+            room_layout = {}
         for t in tiles:
-            t["pinned"] = t["key"] in pinned_set
+            dev_id = t.get("device_id")
+            gid = t.get("group_id")
+            dev_pinned = bool((configured_devices.get(dev_id, {}).get("options") or {}).get("pinned")) if dev_id else False
+            grp_cfg = groups.get(gid, {}) if gid else {}
+            grp_pinned = bool(grp_cfg.get("pinned") or (grp_cfg.get("options") or {}).get("pinned")) if gid else False
+            t["pinned"] = bool(
+                t["key"] in pinned_set
+                or (dev_id and f"dev:{dev_id}" in pinned_set)
+                or (gid and (f"g:{gid}" in pinned_set or f"group:{gid}" in pinned_set))
+                or dev_pinned
+                or grp_pinned
+            )
+            layout_mode = room_layout.get(t["key"])
+            t["layout_mode"] = layout_mode if layout_mode in ("compact", "wide") else None
         custom_order = config.get("tile_order", {}).get(area_id, [])
         pos = {k: i for i, k in enumerate(custom_order)}
         if custom_order:
+            tiles_snapshot = list(tiles)
+
+            def _tile_sort_pos(t):
+                if t["key"] in pos:
+                    return float(pos[t["key"]])
+                if t.get("pinned"):
+                    w = _CATEGORY_WEIGHT.get(t["category"], 50)
+                    candidates = [
+                        float(pos[o["key"]])
+                        for o in tiles_snapshot
+                        if o["key"] in pos and (
+                            _CATEGORY_WEIGHT.get(o["category"], 50) > w
+                            or (_CATEGORY_WEIGHT.get(o["category"], 50) == w and not o.get("pinned"))
+                        )
+                    ]
+                    if candidates:
+                        return min(candidates) - 0.5
+                    # If all items in pos belong to lighter/same-pinned categories, place after them but before unpinned 10_000
+                    return float(len(pos)) - 0.5 if pos else -0.5
+                return 10_000.0
+
             tiles.sort(key=lambda t: (
-                pos.get(t["key"], 10_000),
+                _tile_sort_pos(t),
                 _CATEGORY_WEIGHT.get(t["category"], 50),
                 0 if t.get("pinned") else 1,
                 t["name"].lower(),
             ))
         else:
-            # Strict category hierarchy, with pinned devices at top of their own category.
+            # Strict category hierarchy, with pinned devices/groups at top of their own category.
             tiles.sort(key=lambda t: (
                 _CATEGORY_WEIGHT.get(t["category"], 50),
                 0 if t.get("pinned") else 1,
@@ -936,6 +995,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
             "entity_to_device": entity_to_device,
             "smoke": configured_smoke_entries,
             "cameras": configured_camera_entries,
+            "lights": configured_light_entries,
             "alarms": configured_alarm_entries,
             "covers": configured_cover_entries,
         },
@@ -1183,13 +1243,14 @@ async def handle_dashboard_set_room_expanded(hass, connection, msg):
     vol.Required("type"): "smarthome_companion/dashboard/tile_order",
     vol.Required("area_id"): str,
     vol.Optional("tile_order"): [str],
+    vol.Optional("tile_layout"): {str: vol.Any("compact", "wide", None)},
     vol.Optional("pin_key"): str,
     vol.Optional("pinned"): bool,
 })
 @websocket_api.require_admin
 @websocket_api.async_response
 async def handle_dashboard_tile_order(hass, connection, msg):
-    """Persist per-room drag-and-drop tile order and/or tile pin state."""
+    """Persist per-room drag-and-drop tile order, tile layout modes, and/or tile pin state."""
     store = hass.data[DOMAIN]["store"]
     config = _sanitize_config(await async_get_or_create_config(hass, store))
     area_id = msg["area_id"]
@@ -1201,12 +1262,42 @@ async def handle_dashboard_tile_order(hass, connection, msg):
         else:
             config["tile_order"].pop(area_id, None)
 
+    if "tile_layout" in msg:
+        raw_layout = msg.get("tile_layout") or {}
+        clean_layout = {
+            str(k): v
+            for k, v in raw_layout.items()
+            if isinstance(k, str) and k and v in ("compact", "wide")
+        }
+        all_layouts = config.setdefault("tile_layout", {})
+        if clean_layout:
+            all_layouts[area_id] = clean_layout
+        else:
+            all_layouts.pop(area_id, None)
+
     if "pin_key" in msg and "pinned" in msg:
         pin_key = str(msg["pin_key"]).strip()
         pinned_list = [str(k) for k in config.get("pinned_tiles", []) if isinstance(k, str) and k]
         if msg["pinned"]:
             if pin_key and pin_key not in pinned_list:
                 pinned_list.append(pin_key)
+            # Remove newly-pinned item from custom tile_order so build_layout promotes it to top of its category
+            if pin_key and area_id in config.get("tile_order", {}):
+                dev_id = pin_key[4:] if pin_key.startswith("dev:") else ""
+                grp_id = pin_key[2:] if pin_key.startswith("g:") else (pin_key[6:] if pin_key.startswith("group:") else "")
+                def _matches_pin(k: str) -> bool:
+                    if k == pin_key:
+                        return True
+                    if dev_id and (k.startswith(f"{dev_id}:") or k.startswith(f"d:{dev_id}:") or k == f"bundled:{dev_id}"):
+                        return True
+                    if grp_id and (k == f"g:{grp_id}" or k == f"group:{grp_id}"):
+                        return True
+                    return False
+                filtered_order = [k for k in config["tile_order"][area_id] if not _matches_pin(k)]
+                if filtered_order:
+                    config["tile_order"][area_id] = filtered_order
+                else:
+                    config["tile_order"].pop(area_id, None)
         else:
             pinned_list = [k for k in pinned_list if k != pin_key]
         config["pinned_tiles"] = pinned_list
@@ -1399,10 +1490,12 @@ async def async_register_dashboard_panel(hass):
     else:
         bundle_file = Path(__file__).parent / "frontend" / "dist" / "companion-dashboard.bundle.js"
         if bundle_file.exists():
-            module_url = f"{STATIC_URL}/dist/companion-dashboard.bundle.js?v={_frontend_asset_version(bundle_file)}"
+            ver = await hass.async_add_executor_job(_frontend_asset_version, bundle_file)
+            module_url = f"{STATIC_URL}/dist/companion-dashboard.bundle.js?v={ver}"
         else:
             entry_file = Path(__file__).parent / "frontend" / "companion-dashboard.js"
-            module_url = f"{STATIC_URL}/companion-dashboard.js?v={_frontend_asset_version(entry_file)}"
+            ver = await hass.async_add_executor_job(_frontend_asset_version, entry_file)
+            module_url = f"{STATIC_URL}/companion-dashboard.js?v={ver}"
 
     if await _async_ensure_lovelace_dashboard(hass, module_url):
         return

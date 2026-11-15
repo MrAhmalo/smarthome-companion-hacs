@@ -919,6 +919,28 @@ export class DeviceWizard {
 
     let selectedIcon = existingGroup?.icon || (selectedCat === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug');
     let isCustomIcon = !!existingGroup?.icon;
+    const pinnedList = Array.isArray(this._dashboardConfig?.pinned_tiles) ? this._dashboardConfig.pinned_tiles : [];
+    let isGroupPinned = !!(
+      existingGroup?.pinned
+      || existingGroup?.options?.pinned
+      || (existingGroup?.id && (pinnedList.includes(`g:${existingGroup.id}`) || pinnedList.includes(`group:${existingGroup.id}`)))
+    );
+
+    const groupPinCard = h('div', {
+      class: `feature-card${isGroupPinned ? ' active' : ''}`,
+      style: { '--feat-color': 'var(--cd-accent, #29b6f6)', cursor: 'pointer' },
+      ...(isGroupPinned ? { 'data-active': '' } : {}),
+      onClick: () => {
+        isGroupPinned = !isGroupPinned;
+        groupPinCard.toggleAttribute('data-active', isGroupPinned);
+        groupPinCard.classList.toggle('active', isGroupPinned);
+      },
+    },
+    h('div', { class: 'feature-icon' }, icon('mdi:pin-outline')),
+    h('div', { class: 'feature-info' },
+      h('div', { class: 'feature-title' }, 'Anpinnen'),
+      h('div', { class: 'feature-desc' }, 'Am Anfang der Kategorie anzeigen')),
+    h('div', { class: 'switch-ui' }));
 
     const iconPicker = new IconPicker({
       hass: this.hass,
@@ -1053,6 +1075,7 @@ export class DeviceWizard {
         h('div', { class: 'field' }, 'Raum', areaDd.el),
         h('div', { class: 'field' }, 'Kategorie', catDd.el),
         h('div', { class: 'field' }, 'Icon', iconPicker.el),
+        groupPinCard,
         h('div', {},
           countHeader,
           tagsContainer,
@@ -1080,7 +1103,7 @@ export class DeviceWizard {
               if (!groupName) { showToast(this.el, 'Name fehlt', { error: true }); return; }
               if (selectedIds.length === 0) { showToast(this.el, 'Mind. 1 Element wählen', { error: true }); return; }
               try {
-                await this.hass.callWS({
+                const saveRes = await this.hass.callWS({
                   type: 'smarthome_companion/groups/save',
                   group: {
                     ...(existingGroup ? { id: existingGroup.id } : {}),
@@ -1088,9 +1111,26 @@ export class DeviceWizard {
                     area_id: selectedArea,
                     category: selectedCat,
                     icon: selectedIcon || (selectedCat === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug'),
+                    pinned: !!isGroupPinned,
                     children: selectedIds,
                   },
                 });
+                const savedGid = saveRes?.group_id || saveRes?.group?.id || existingGroup?.id;
+                if (savedGid) {
+                  const gPinKey = `g:${savedGid}`;
+                  try {
+                    await this.hass.callWS({
+                      type: 'smarthome_companion/dashboard/tile_order',
+                      area_id: selectedArea || '__none__',
+                      pin_key: gPinKey,
+                      pinned: !!isGroupPinned,
+                    });
+                    const curPins = Array.isArray(this._dashboardConfig?.pinned_tiles) ? [...this._dashboardConfig.pinned_tiles] : [];
+                    const cleanedPins = curPins.filter((k) => k !== gPinKey && k !== `group:${savedGid}`);
+                    if (isGroupPinned) cleanedPins.push(gPinKey);
+                    this._dashboardConfig = { ...(this._dashboardConfig || {}), pinned_tiles: cleanedPins };
+                  } catch (_) { /* non-fatal */ }
+                }
                 overlay.remove();
                 destroyPickers();
                 this.selectedDevices.clear();

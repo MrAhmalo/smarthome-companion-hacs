@@ -98,8 +98,43 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .page[data-edit-mode] .tile,
 .page[data-edit-mode] .cover-detail-row,
 .page[data-edit-mode] .room-head {
-  cursor: pointer !important;
+  cursor: grab !important;
   position: relative !important;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.page[data-edit-mode] .tile[data-dragging],
+.tile-drag-slot {
+  cursor: grabbing !important;
+  touch-action: none;
+}
+.tile-drag-slot {
+  opacity: 0.35 !important;
+  outline: 2px dashed var(--cd-accent) !important;
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--cd-accent) 10%, transparent) !important;
+  pointer-events: none !important;
+}
+.tile-drag-slot > * {
+  opacity: 0.35;
+}
+.tile-drag-ghost {
+  position: fixed !important;
+  margin: 0 !important;
+  z-index: 9999 !important;
+  pointer-events: none !important;
+  box-shadow: 0 18px 42px rgba(0,0,0,.52), 0 0 0 2px var(--cd-accent) !important;
+  opacity: 0.96 !important;
+  transform: scale(1.02);
+  transform-origin: center;
+  transition: none !important;
+  border-radius: var(--cd-tile-radius, 14px);
+}
+.room[data-drop-room] {
+  outline: 2px solid color-mix(in srgb, var(--cd-accent) 75%, transparent) !important;
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--cd-accent) 6%, var(--cd-card-bg, rgba(255,255,255,.04))) !important;
 }
 .edit-march-svg {
   display: none;
@@ -375,6 +410,16 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .mini-btn ha-icon { --mdc-icon-size: 20px; }
 .tile-feature { display: flex; align-items: center; gap: 10px; padding: 0 2px 2px; flex-wrap: wrap; min-width: 0; }
 .tile-feature[hidden] { display: none; }
+.tile:not(.wide) .tile-feature { gap: 6px; padding-top: 2px; }
+.tile:not(.wide) input[type=range].slider { flex: 1 1 100%; height: 22px; border-radius: 11px; }
+.tile:not(.wide) input[type=range].slider::-webkit-slider-runnable-track { height: 22px; border-radius: 11px; }
+.tile:not(.wide) input[type=range].slider::-webkit-slider-thumb { height: 14px; margin-top: 4px; }
+.tile:not(.wide) input[type=range].slider::-moz-range-track { height: 22px; border-radius: 11px; }
+.tile:not(.wide) input[type=range].slider::-moz-range-thumb { height: 14px; }
+.tile:not(.wide) .tile-swatches { flex-wrap: wrap; gap: 6px !important; }
+.tile:not(.wide) .swatch { width: 22px; height: 22px; }
+.tile:not(.wide) .tile-btns { gap: 4px; flex-wrap: wrap; justify-content: flex-end; max-width: 96px; }
+.tile:not(.wide) .mini-btn { width: 30px; height: 30px; }
 .swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); cursor: pointer; flex: none; padding: 0; position: relative; }
 .swatch::after { content: ''; position: absolute; inset: -8px; }
 .swatch:active { transform: scale(0.9); }
@@ -3171,119 +3216,516 @@ function enablePointerReorder(listEl, { itemSelector = '[data-reorder-item]', ha
 
 /**
  * Pointer-based 2D grid drag-and-drop reordering for desktop & touch/mobile.
- * Starts exclusively from `handleSelector` so scrolling and tile taps remain smooth.
+ * Cross-room & within-grid drag-and-drop reordering in Edit Mode.
+ * Supports:
+ * - Immediate drag from handle OR press-and-hold anywhere on a tile (~180ms mouse / ~220ms touch)
+ * - Floating ghost attached outside container-query ancestors (ShadowRoot) so fixed coords stay exact
+ * - Live FLIP reflow preview, including horizontal left/right 2-column compact pairing
+ * - Cross-room dragging (auto-expanding collapsed target rooms on brief hover) & edge auto-scroll
  */
 function enableGridPointerReorder(gridEl, {
   itemSelector = '.tile',
   handleSelector = '.tile-drag-handle',
+  roomSelector = '.room[data-area-id]',
+  roomGridSelector = '.tile-grid',
+  isEnabled,
+  onDragStart,
+  onPreview,
+  onCancel,
   onReorder,
 } = {}) {
   if (!gridEl || typeof onReorder !== 'function') return () => {};
   let active = null;
+  let suppressClickUntil = 0;
 
-  const findTargetIdx = (x, y, items, skipIdx) => {
-    // 1. Direct bounding-box hit
-    for (let i = 0; i < items.length; i++) {
-      if (i === skipIdx) continue;
-      const r = items[i].getBoundingClientRect();
-      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return i;
+  const getItems = (g = active?.currentGrid || gridEl) =>
+    Array.from(g.children).filter((el) => el.matches(itemSelector));
+
+  const findTopTile = (el, g = gridEl) => {
+    let item = el?.closest?.(itemSelector);
+    while (item && item.parentElement !== g) {
+      item = item.parentElement?.closest(itemSelector) || null;
     }
-    // 2. Fallback: closest center
-    let bestIdx = skipIdx;
-    let bestDist = Infinity;
-    for (let i = 0; i < items.length; i++) {
-      const r = items[i].getBoundingClientRect();
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
-      const d = (x - cx) ** 2 + (y - cy) ** 2;
-      if (d < bestDist) {
-        bestDist = d;
-        bestIdx = i;
+    return item && item.parentElement === g ? item : null;
+  };
+
+  const getRootScope = () => {
+    const root = gridEl.getRootNode?.();
+    return root && typeof root.querySelectorAll === 'function' ? root : document;
+  };
+
+  const flipAnimate = (targetGrid, beforeRects, mutateFn) => {
+    mutateFn();
+    const afterItems = getItems(targetGrid);
+    for (const el of afterItems) {
+      if (active && el === active.item) continue;
+      const oldRect = beforeRects.get(el);
+      if (!oldRect) continue;
+      const newRect = el.getBoundingClientRect();
+      const dx = oldRect.left - newRect.left;
+      const dy = oldRect.top - newRect.top;
+      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+        el.style.transition = 'none';
+        el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+        el.getBoundingClientRect(); // force reflow
+        el.style.transition = 'transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)';
+        el.style.transform = '';
       }
     }
-    return bestIdx;
+  };
+
+  const computeDropTarget = (x, y, targetGrid, draggedItem) => {
+    const items = getItems(targetGrid);
+    const currentIdx = items.indexOf(draggedItem);
+    if (!items.length) {
+      return { currentIdx, toIdx: 0, intent: 'auto', partnerEl: null, noop: false };
+    }
+
+    const slotEl = currentIdx >= 0 ? items[currentIdx] : null;
+    if (slotEl) {
+      const sr = slotEl.getBoundingClientRect();
+      if (x >= sr.left && x <= sr.right && y >= sr.top && y <= sr.bottom) {
+        return { currentIdx, toIdx: currentIdx, intent: null, partnerEl: null, noop: true };
+      }
+    }
+
+    // 1. Direct bounding-box hit on another tile
+    let hitIdx = -1;
+    for (let i = 0; i < items.length; i++) {
+      if (i === currentIdx) continue;
+      const r = items[i].getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        hitIdx = i;
+        break;
+      }
+    }
+
+    // 2. Fallback: closest bounding box distance (tiebreak: center distance)
+    if (hitIdx < 0) {
+      let bestBoxDist = Infinity;
+      let bestCenterDist = Infinity;
+      for (let i = 0; i < items.length; i++) {
+        if (i === currentIdx) continue;
+        const r = items[i].getBoundingClientRect();
+        const bx = x < r.left ? r.left - x : (x > r.right ? x - r.right : 0);
+        const by = y < r.top ? r.top - y : (y > r.bottom ? y - r.bottom : 0);
+        const bd = bx * bx + by * by;
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const cd = (x - cx) ** 2 + (y - cy) ** 2;
+        if (bd < bestBoxDist - 0.5 || (Math.abs(bd - bestBoxDist) <= 0.5 && cd < bestCenterDist)) {
+          bestBoxDist = bd;
+          bestCenterDist = cd;
+          hitIdx = i;
+        }
+      }
+    }
+
+    if (hitIdx < 0) {
+      return { currentIdx, toIdx: Math.max(0, currentIdx), intent: null, partnerEl: null, noop: true };
+    }
+
+    const hitEl = items[hitIdx];
+    const r = hitEl.getBoundingClientRect();
+    const relX = (x - r.left) / Math.max(1, r.width);
+    const relY = (y - r.top) / Math.max(1, r.height);
+    const draggedHardWide = draggedItem.classList.contains('group') || draggedItem.classList.contains('grouped-cover');
+    const hitHardWide = hitEl.classList.contains('group') || hitEl.classList.contains('grouped-cover');
+
+    let placeAfter = false;
+    let intent = 'auto';
+    let partnerEl = null;
+
+    const firstOtherIdx = currentIdx === 0 ? 1 : 0;
+    const lastOtherIdx = currentIdx === items.length - 1 ? items.length - 2 : items.length - 1;
+
+    if (hitIdx === firstOtherIdx && y < r.top - 4) {
+      placeAfter = false;
+      intent = 'wide';
+    } else if (hitIdx === lastOtherIdx && y > r.bottom + 4) {
+      placeAfter = true;
+      intent = 'wide';
+    } else if (draggedHardWide || hitHardWide) {
+      placeAfter = relY >= 0.5;
+      intent = 'wide';
+    } else if (hitEl.classList.contains('wide')) {
+      if (relY < 0.22) {
+        placeAfter = false;
+        intent = 'wide';
+      } else if (relY > 0.78) {
+        placeAfter = true;
+        intent = 'wide';
+      } else {
+        placeAfter = relX >= 0.5;
+        intent = 'compact';
+        partnerEl = hitEl;
+      }
+    } else {
+      // Hit tile is already compact (1-column): insert to its left or right cleanly
+      placeAfter = relX >= 0.5;
+      intent = 'compact';
+      partnerEl = hitEl;
+    }
+
+    let toIdx;
+    if (currentIdx >= 0) {
+      toIdx = placeAfter
+        ? (currentIdx < hitIdx ? hitIdx : hitIdx + 1)
+        : (currentIdx < hitIdx ? hitIdx - 1 : hitIdx);
+      toIdx = Math.max(0, Math.min(items.length - 1, toIdx));
+    } else {
+      toIdx = placeAfter ? hitIdx + 1 : hitIdx;
+      toIdx = Math.max(0, Math.min(items.length, toIdx));
+    }
+
+    return { currentIdx, toIdx, intent, partnerEl, noop: false };
+  };
+
+  const createGhost = (item) => {
+    const rect = item.getBoundingClientRect();
+    const ghost = item.cloneNode(true);
+    ghost.classList.add('tile-drag-ghost');
+    ghost.removeAttribute('data-dragging');
+    ghost.classList.remove('tile-drag-slot');
+    ghost.style.left = '0px';
+    ghost.style.top = '0px';
+    ghost.style.width = `${rect.width}px`;
+    ghost.style.height = `${rect.height}px`;
+    const root = gridEl.getRootNode?.();
+    const host = (root && root !== document) ? root : document.body;
+    host.appendChild(ghost);
+    // Compensate for any containing block offset on host/shadow-host so ghost sits at exact rect
+    const gr = ghost.getBoundingClientRect();
+    ghost.style.left = `${rect.left - gr.left}px`;
+    ghost.style.top = `${rect.top - gr.top}px`;
+    return ghost;
+  };
+
+  const clearRoomHighlight = () => {
+    const scope = getRootScope();
+    for (const el of scope.querySelectorAll(`${roomSelector}[data-drop-room]`)) {
+      el.removeAttribute('data-drop-room');
+    }
+  };
+
+  const stopAutoScroll = () => {
+    if (active?.scrollInterval) {
+      clearInterval(active.scrollInterval);
+      active.scrollInterval = 0;
+    }
+  };
+
+  const updateAutoScroll = (y) => {
+    if (!active || !active.started) return;
+    const edge = 76;
+    const vh = window.innerHeight || document.documentElement.clientHeight || 800;
+    let delta = 0;
+    if (y < edge) delta = -Math.max(4, Math.round(((edge - y) / edge) * 14));
+    else if (y > vh - edge) delta = Math.max(4, Math.round(((y - (vh - edge)) / edge) * 14));
+    active.scrollDelta = delta;
+    if (delta !== 0 && !active.scrollInterval) {
+      active.scrollInterval = setInterval(() => {
+        if (!active || !active.started || !active.scrollDelta) return;
+        window.scrollBy(0, active.scrollDelta);
+      }, 16);
+    } else if (delta === 0 && active.scrollInterval) {
+      clearInterval(active.scrollInterval);
+      active.scrollInterval = 0;
+    }
+  };
+
+  const findRoomUnderPointer = (x, y) => {
+    const scope = getRootScope();
+    const rooms = Array.from(scope.querySelectorAll(roomSelector));
+    for (const rm of rooms) {
+      const rr = rm.getBoundingClientRect();
+      if (rr.width > 0 && rr.height > 0 && x >= rr.left && x <= rr.right && y >= rr.top && y <= rr.bottom) {
+        return rm;
+      }
+    }
+    return null;
+  };
+
+  const activateDrag = () => {
+    if (!active || active.started) return;
+    active.started = true;
+    active.moved = true;
+    if (active.holdTimer) { clearTimeout(active.holdTimer); active.holdTimer = 0; }
+    try { active.captureTarget.setPointerCapture?.(active.pointerId); } catch {}
+    onDragStart?.({ itemEl: active.item, sourceGrid: active.sourceGrid });
+    active.ghost = createGhost(active.item);
+    active.item.setAttribute('data-dragging', '');
+    active.item.classList.add('tile-drag-slot');
+    updateDrag();
   };
 
   const onPointerDown = (e) => {
+    if (isEnabled && !isEnabled()) return;
     if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
-    const handle = e.target.closest(handleSelector);
-    if (!handle || !gridEl.contains(handle)) return;
-    const item = handle.closest(itemSelector);
-    if (!item || item.parentElement !== gridEl) return;
-    const items = Array.from(gridEl.children).filter((el) => el.matches(itemSelector));
-    if (items.length < 2) return;
+    if (e.target.closest?.('.chevron-btn')) return;
+
+    const handle = e.target.closest?.(handleSelector);
+    const isHandle = !!(handle && gridEl.contains(handle));
+    const item = findTopTile(isHandle ? handle : e.target);
+    if (!item) return;
+
+    // Don't hijack clicks on nested sub-tiles inside an expanded GroupTile
+    if (!isHandle && e.target.closest?.('.sub-body .tile')) return;
+
+    const items = getItems(gridEl);
+    if (!items.length) return;
     const startIdx = items.indexOf(item);
     if (startIdx < 0) return;
 
-    e.preventDefault();
-    e.stopPropagation();
-    handle.setPointerCapture?.(e.pointerId);
-    item.setAttribute('data-dragging', '');
+    if (isHandle) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
     active = {
       pointerId: e.pointerId,
-      handle,
+      pointerType: e.pointerType || 'mouse',
+      isHandle,
+      captureTarget: isHandle ? handle : item,
       item,
-      items,
+      ghost: null,
+      sourceGrid: gridEl,
+      currentGrid: gridEl,
       startIdx,
-      targetIdx: startIdx,
+      currentIdx: startIdx,
+      lastIntent: 'auto',
+      lastPartnerEl: null,
       startX: e.clientX,
       startY: e.clientY,
       lastX: e.clientX,
       lastY: e.clientY,
+      started: false,
+      moved: false,
+      holdTimer: 0,
       raf: 0,
+      lastSwapAt: 0,
+      scrollInterval: 0,
+      scrollDelta: 0,
+      pendingExpandRoom: null,
+      expandTimer: 0,
     };
+
+    if (isHandle) {
+      activateDrag();
+    } else {
+      const holdMs = active.pointerType === 'mouse' ? 180 : 220;
+      active.holdTimer = setTimeout(() => {
+        activateDrag();
+      }, holdMs);
+    }
   };
 
-  const updateDrag = () => {
-    if (!active) return;
+  const updateDrag = (force = false) => {
+    if (!active || !active.started) return;
     active.raf = 0;
     const dx = active.lastX - active.startX;
     const dy = active.lastY - active.startY;
-    active.item.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.02)`;
-    const nextIdx = findTargetIdx(active.lastX, active.lastY, active.items, active.startIdx);
-    if (nextIdx !== active.targetIdx) {
-      active.items.forEach((el) => el.removeAttribute('data-drop-target'));
-      if (nextIdx !== active.startIdx && active.items[nextIdx]) {
-        active.items[nextIdx].setAttribute('data-drop-target', '');
-      }
-      active.targetIdx = nextIdx;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) active.moved = true;
+    if (active.ghost) {
+      active.ghost.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.02)`;
     }
+    updateAutoScroll(active.lastY);
+
+    const now = Date.now();
+    const hoverRoom = findRoomUnderPointer(active.lastX, active.lastY);
+
+    // Highlight destination room if dragging outside source room
+    clearRoomHighlight();
+    const srcRoomEl = active.sourceGrid.closest(roomSelector);
+    if (hoverRoom && hoverRoom !== srcRoomEl) {
+      hoverRoom.setAttribute('data-drop-room', '');
+    }
+
+    // Auto-expand collapsed room after brief hover (~180ms), or immediately on forced drop
+    if (hoverRoom && !hoverRoom.hasAttribute('data-open')) {
+      if (force) {
+        if (active.expandTimer) { clearTimeout(active.expandTimer); active.expandTimer = 0; }
+        active.pendingExpandRoom = null;
+        hoverRoom.__roomInstance?.setOpen?.(true);
+      } else {
+        if (active.pendingExpandRoom !== hoverRoom) {
+          if (active.expandTimer) clearTimeout(active.expandTimer);
+          active.pendingExpandRoom = hoverRoom;
+          active.expandTimer = setTimeout(() => {
+            if (!active || !active.started) return;
+            hoverRoom.__roomInstance?.setOpen?.(true);
+            active.pendingExpandRoom = null;
+            active.expandTimer = 0;
+            active.lastSwapAt = 0;
+            updateDrag(true);
+          }, 180);
+        }
+        return;
+      }
+    }
+    if (active.expandTimer) {
+      clearTimeout(active.expandTimer);
+      active.expandTimer = 0;
+    }
+    active.pendingExpandRoom = null;
+
+    if (!force && now - active.lastSwapAt < 85) return;
+
+    let targetGrid = active.currentGrid;
+    if (hoverRoom) {
+      const candidateGrid = hoverRoom.querySelector(roomGridSelector);
+      if (candidateGrid) targetGrid = candidateGrid;
+    }
+
+    const fromGrid = active.currentGrid;
+    const isCrossRoom = targetGrid !== fromGrid;
+    const targetDrop = computeDropTarget(active.lastX, active.lastY, targetGrid, active.item);
+    if (!isCrossRoom && targetDrop.noop) return;
+
+    const intentKey = `${targetGrid.dataset.areaId || ''}|${targetDrop.toIdx}|${targetDrop.intent}|${targetDrop.partnerEl?.dataset?.key || ''}`;
+    const changed = isCrossRoom
+      || targetDrop.toIdx !== targetDrop.currentIdx
+      || (targetDrop.intent && targetDrop.intent !== 'auto' && intentKey !== active.lastPreviewKey);
+
+    if (!changed) return;
+
+    active.lastSwapAt = now;
+    active.lastPreviewKey = intentKey;
+
+    const beforeRects = new Map();
+    for (const el of getItems(targetGrid)) {
+      beforeRects.set(el, el.getBoundingClientRect());
+    }
+
+    flipAnimate(targetGrid, beforeRects, () => {
+      if (typeof onPreview === 'function') {
+        onPreview({
+          itemEl: active.item,
+          fromGrid,
+          targetGrid,
+          toIdx: targetDrop.toIdx,
+          intent: targetDrop.intent || 'auto',
+          partnerEl: targetDrop.partnerEl,
+        });
+      } else {
+        const curItems = getItems(targetGrid);
+        const ref = curItems[Math.min(targetDrop.toIdx, curItems.length - 1)];
+        if (!ref) targetGrid.appendChild(active.item);
+        else if (!isCrossRoom && targetDrop.currentIdx < targetDrop.toIdx) ref.after(active.item);
+        else ref.before(active.item);
+      }
+    });
+
+    active.currentGrid = targetGrid;
+    active.currentIdx = getItems(targetGrid).indexOf(active.item);
+    if (targetDrop.intent) active.lastIntent = targetDrop.intent;
+    active.lastPartnerEl = targetDrop.partnerEl;
   };
 
   const onPointerMove = (e) => {
     if (!active || e.pointerId !== active.pointerId) return;
-    e.preventDefault();
     active.lastX = e.clientX;
     active.lastY = e.clientY;
-    if (!active.raf) active.raf = requestAnimationFrame(updateDrag);
+    const dx = active.lastX - active.startX;
+    const dy = active.lastY - active.startY;
+    const dist = Math.hypot(dx, dy);
+
+    if (!active.started) {
+      if (active.pointerType === 'mouse') {
+        if (dist > 6) activateDrag();
+      } else if (dist > 8) {
+        cleanup(false);
+        return;
+      }
+      if (!active.started) return;
+    }
+
+    e.preventDefault();
+    if (!active.raf) {
+      updateDrag(false);
+      active.raf = requestAnimationFrame(() => updateDrag(false));
+    }
+  };
+
+  const onTouchMove = (e) => {
+    if (active && active.started) {
+      e.preventDefault();
+    }
   };
 
   const cleanup = (commit) => {
     if (!active) return;
+    if (active.holdTimer) clearTimeout(active.holdTimer);
+    if (active.expandTimer) clearTimeout(active.expandTimer);
     if (active.raf) cancelAnimationFrame(active.raf);
-    try { active.handle.releasePointerCapture?.(active.pointerId); } catch {}
-    active.item.removeAttribute('data-dragging');
-    active.item.style.transform = '';
-    active.items.forEach((el) => el.removeAttribute('data-drop-target'));
+    if (commit && active.started) {
+      updateDrag(true);
+    }
+    stopAutoScroll();
+    clearRoomHighlight();
+    const wasStarted = active.started;
+    const moved = active.moved;
+    const itemEl = active.item;
+    const sourceGrid = active.sourceGrid;
+    const targetGrid = active.currentGrid;
     const from = active.startIdx;
-    const to = active.targetIdx;
+    const to = active.currentIdx;
+    const intent = active.lastIntent;
+    const partnerEl = active.lastPartnerEl;
+    if (wasStarted) {
+      try { active.captureTarget.releasePointerCapture?.(active.pointerId); } catch {}
+      active.item.removeAttribute('data-dragging');
+      active.item.classList.remove('tile-drag-slot');
+      active.ghost?.remove();
+      const scope = getRootScope();
+      scope.querySelectorAll(itemSelector).forEach((el) => {
+        el.removeAttribute('data-drop-target');
+        el.style.transition = '';
+        el.style.transform = '';
+      });
+    }
+    if (wasStarted || moved) suppressClickUntil = Date.now() + 300;
     active = null;
-    if (commit && from !== to) onReorder(from, to);
+    if (wasStarted) {
+      if (!commit) {
+        onCancel?.({ itemEl, sourceGrid, currentGrid: targetGrid, startIdx: from });
+      } else if (sourceGrid !== targetGrid || from !== to || moved) {
+        onReorder({ itemEl, sourceGrid, targetGrid, fromIdx: from, toIdx: to, intent, partnerEl });
+      }
+    }
   };
 
-  const onPointerUp = (e) => { if (active && e.pointerId === active.pointerId) cleanup(true); };
+  const onPointerUp = (e) => {
+    if (active && e.pointerId === active.pointerId) {
+      if (typeof e.clientX === 'number' && typeof e.clientY === 'number') {
+        active.lastX = e.clientX;
+        active.lastY = e.clientY;
+      }
+      cleanup(true);
+    }
+  };
   const onPointerCancel = (e) => { if (active && e.pointerId === active.pointerId) cleanup(false); };
+  const onSuppressClick = (e) => {
+    if (Date.now() < suppressClickUntil) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  };
 
   gridEl.addEventListener('pointerdown', onPointerDown);
-  gridEl.addEventListener('pointermove', onPointerMove);
-  gridEl.addEventListener('pointerup', onPointerUp);
-  gridEl.addEventListener('pointercancel', onPointerCancel);
+  gridEl.addEventListener('touchmove', onTouchMove, { passive: false });
+  gridEl.addEventListener('click', onSuppressClick, true);
+  window.addEventListener('pointermove', onPointerMove, { passive: false });
+  window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', onPointerCancel);
   return () => {
     cleanup(false);
     gridEl.removeEventListener('pointerdown', onPointerDown);
-    gridEl.removeEventListener('pointermove', onPointerMove);
-    gridEl.removeEventListener('pointerup', onPointerUp);
-    gridEl.removeEventListener('pointercancel', onPointerCancel);
+    gridEl.removeEventListener('touchmove', onTouchMove);
+    gridEl.removeEventListener('click', onSuppressClick, true);
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerCancel);
   };
 }
 
@@ -4774,10 +5216,14 @@ class Tile {
     const wide = ['cover', 'media_player', 'climate'].includes(this.kind)
       || this.spec.wide === true
       || this.spec.force_own_row === true;
+    this._layoutMode = this.spec?.layout_mode === 'compact' || this.spec?.layout_mode === 'wide'
+      ? this.spec.layout_mode
+      : null;
     this.el = h('div', { class: `tile ${this.kind}${wide ? ' wide' : ''}`, 'data-key': this.spec.key },
       h('div', { class: 'tile-main' }, this.dragHandle, this.iconBtn, this.info, this.btns),
       this.feature,
       editBorder(10));
+    this.el.__tileInstance = this;
 
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
@@ -4844,6 +5290,15 @@ class Tile {
     return this.el.classList.contains('wide');
   }
 
+  get layoutMode() {
+    return this._layoutMode ?? this.spec?.layout_mode ?? null;
+  }
+
+  set layoutMode(mode) {
+    this._layoutMode = mode === 'compact' || mode === 'wide' ? mode : null;
+    if (this.spec) this.spec.layout_mode = this._layoutMode;
+  }
+
   setWide(wide) {
     this.el.classList.toggle('wide', !!wide);
   }
@@ -4866,7 +5321,7 @@ class Tile {
       this._dragging = false;
       this._service('light', 'turn_on', { brightness_pct: Number(this.slider.value) });
     });
-    this.swatches = h('div', { style: { display: 'flex', gap: '8px' } });
+    this.swatches = h('div', { class: 'tile-swatches', style: { display: 'flex', gap: '8px' } });
     this.feature.append(this.slider, this.swatches);
   }
 
@@ -5114,6 +5569,31 @@ class GroupTile {
     return !this.isSubGroup;
   }
 
+  get groupEntityId() {
+    if (this.spec.entity_id) return this.spec.entity_id;
+    if (this.hass && this.spec.group_id) {
+      const safeGid = String(this.spec.group_id).replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+      for (const dom of ['light', 'switch', 'group']) {
+        if (this.hass.states[`${dom}.${safeGid}`]) return `${dom}.${safeGid}`;
+      }
+    }
+    return this.children[0]?.entityId || this.entityIds[0] || null;
+  }
+
+  get entityId() {
+    return this.groupEntityId;
+  }
+
+  _handleInfoOrRowClick(e) {
+    if (this.ctx?.isEditMode?.()) {
+      if (this.spec.device_id && !this.spec.group_id) this.ctx.onOpenDevice?.(this.spec.device_id);
+      else this.ctx.onOpenGroup?.(this.spec.group_id);
+      return;
+    }
+    const targetEid = this.groupEntityId;
+    if (targetEid) moreInfo(this.el, targetEid);
+  }
+
   setWide(wide) {
     this.el.classList.toggle('wide', !!wide);
   }
@@ -5145,13 +5625,7 @@ class GroupTile {
       class: 'tile-info',
       onClick: (e) => {
         e.stopPropagation();
-        if (this.ctx?.isEditMode?.()) {
-          if (this.spec.device_id && !this.spec.group_id) this.ctx.onOpenDevice?.(this.spec.device_id);
-          else this.ctx.onOpenGroup?.(this.spec.group_id);
-          return;
-        }
-        const targetEid = this.groupEntityId || this.children[0]?.entityId;
-        if (targetEid) moreInfo(this.el, targetEid);
+        this._handleInfoOrRowClick(e);
       },
     }, this.nameEl, this.stateEl);
 
@@ -5205,13 +5679,7 @@ class GroupTile {
       class: 'tile-main',
       onClick: (e) => {
         if (e.target.closest('button')) return;
-        if (this.ctx?.isEditMode?.()) {
-          if (this.spec.device_id && !this.spec.group_id) this.ctx.onOpenDevice?.(this.spec.device_id);
-          else this.ctx.onOpenGroup?.(this.spec.group_id);
-          return;
-        }
-        const targetEid = this.groupEntityId || this.children[0]?.entityId;
-        if (targetEid) moreInfo(this.el, targetEid);
+        this._handleInfoOrRowClick(e);
       },
     }, this.dragHandle, this.iconBtn, this.info, this.btns);
 
@@ -5251,6 +5719,7 @@ class GroupTile {
         'data-group': 'true',
       }, mainRow, this.feature, this.subBody, editBorder(10));
     }
+    this.el.__tileInstance = this;
 
     // Edit Mode click interception (allow chevron toggle & child/subgroup tile clicks)
     this.el.addEventListener('click', (e) => {
@@ -5431,14 +5900,20 @@ function average(hass, ids) {
  * - Group tiles sit at the bottom in full width.
  */
 function applySmartTileLayout(tiles, grid = null) {
-  if (!tiles || !tiles.length) return;
+  if (!tiles || !tiles.length) {
+    if (grid && grid.children.length) grid.replaceChildren();
+    return;
+  }
 
   // Preserve the exact tile order (pinned + drag-and-drop) while pairing consecutive
-  // compact tiles 2-up (left/right) and promoting lone compact tiles before wide rows or at end.
+  // compact tiles 2-up (left/right). Explicit layoutMode ('compact' | 'wide') overrides
+  // automatic hasSlider / isAlwaysWide defaults (except groups & grouped covers which stay wide).
   let pendingCompact = null;
   for (const t of tiles) {
     const isGroup = t.spec?.is_group || t.is_group === true || t.constructor?.name === 'GroupTile';
-    const isWide = isGroup || t.isForceOwnRow || t.isAlwaysWide || t.hasSlider;
+    const hardWide = isGroup || t.isForceOwnRow || t.constructor?.name === 'GroupedCoverTile';
+    const mode = t.layoutMode ?? t.spec?.layout_mode ?? null;
+    const isWide = hardWide || (mode === 'wide' ? true : mode === 'compact' ? false : (t.isAlwaysWide || t.hasSlider));
     if (isWide) {
       if (pendingCompact) {
         pendingCompact.setWide(true);
@@ -5545,6 +6020,7 @@ class GroupedCoverTile {
       'data-active': 'true',
       'data-key': this.coverSpecs[0]?.key || `cover-group:${this.roomSpec.area_id}`,
     }, h('div', { class: 'tile-main' }, this.dragHandle, this.iconBtn, this.info, this.btns), editBorder(10));
+    this.el.__tileInstance = this;
 
     this.el.addEventListener('click', (e) => {
       if (this.ctx?.isEditMode?.()) {
@@ -5734,40 +6210,185 @@ class Room {
       }
     }, true);
 
-    this.grid = h('div', { class: 'tile-grid' }, this.tiles.map((t) => t.el));
-    this.el = h('div', { class: 'card room' },
+    this.grid = h('div', {
+      class: 'tile-grid',
+      'data-area-id': spec.area_id,
+    }, this.tiles.map((t) => t.el));
+    this.grid.__roomInstance = this;
+    this.el = h('div', {
+      class: 'card room',
+      'data-area-id': spec.area_id,
+    },
       this.head,
       h('div', { class: 'room-body' }, h('div', { class: 'room-body-inner' }, this.grid)));
+    this.el.__roomInstance = this;
     this._applyOpen();
     applySmartTileLayout(this.tiles, this.grid);
+
+    const serializeTiles = (tiles) => {
+      const order = [];
+      const layout = {};
+      for (const t of tiles) {
+        if (t instanceof GroupedCoverTile) {
+          for (const c of (t.coverSpecs || [])) {
+            if (c.key) {
+              order.push(c.key);
+              if (t.layoutMode === 'compact' || t.layoutMode === 'wide') layout[c.key] = t.layoutMode;
+            }
+          }
+        } else if (t.spec?.key) {
+          order.push(t.spec.key);
+          if (t.layoutMode === 'compact' || t.layoutMode === 'wide') layout[t.spec.key] = t.layoutMode;
+        }
+      }
+      return { order, layout };
+    };
+
+    let dragBaseline = null;
+    const captureBaseline = () => {
+      const root = this.grid.getRootNode?.() || document;
+      const roomEls = Array.from(root.querySelectorAll('.room[data-area-id]'));
+      const rooms = [];
+      const modes = new Map();
+      const wideBefore = new Map();
+      const origTiles = new Map();
+      for (const rEl of roomEls) {
+        const rm = rEl.__roomInstance;
+        if (!rm) continue;
+        rooms.push(rm);
+        origTiles.set(rm, [...rm.tiles]);
+        for (const t of rm.tiles) {
+          modes.set(t, t.layoutMode ?? null);
+          wideBefore.set(t, !!t.isWide);
+        }
+      }
+      return { rooms, modes, wideBefore, origTiles };
+    };
+
+    const restoreBaseline = (baseline) => {
+      if (!baseline) return;
+      for (const [t, mode] of baseline.modes.entries()) {
+        t.layoutMode = mode;
+      }
+    };
 
     enableGridPointerReorder(this.grid, {
       itemSelector: '.tile',
       handleSelector: '.tile-drag-handle',
-      onReorder: (from, to) => {
+      isEnabled: () => !!this.ctx?.isEditMode?.(),
+      onDragStart: () => {
+        dragBaseline = captureBaseline();
+      },
+      onPreview: ({ itemEl, fromGrid, targetGrid, toIdx, intent, partnerEl }) => {
         if (!this.ctx?.isEditMode?.()) return;
-        const [moved] = this.tiles.splice(from, 1);
-        if (!moved) return;
-        this.tiles.splice(to, 0, moved);
-        applySmartTileLayout(this.tiles, this.grid);
+        const itemTile = itemEl?.__tileInstance;
+        const fromRoom = fromGrid?.__roomInstance || this;
+        const toRoom = targetGrid?.__roomInstance || this;
+        if (!itemTile || !fromRoom || !toRoom) return;
 
-        const nextOrder = [];
-        for (const t of this.tiles) {
-          if (t instanceof GroupedCoverTile) {
-            for (const c of (t.coverSpecs || [])) {
-              if (c.key) nextOrder.push(c.key);
-            }
-          } else if (t.spec?.key) {
-            nextOrder.push(t.spec.key);
-          }
+        if (!dragBaseline) dragBaseline = captureBaseline();
+        restoreBaseline(dragBaseline);
+
+        // Remove itemTile from whichever room currently holds it
+        for (const rm of dragBaseline.rooms) {
+          const idx = rm.tiles.indexOf(itemTile);
+          if (idx >= 0) rm.tiles.splice(idx, 1);
         }
-        this.ctx?.hass?.callWS({
-          type: 'smarthome_companion/dashboard/tile_order',
-          area_id: this.spec.area_id,
-          tile_order: nextOrder,
-        }).catch(() => {});
+
+        const safeIdx = Math.max(0, Math.min(toRoom.tiles.length, toIdx));
+        toRoom.tiles.splice(safeIdx, 0, itemTile);
+
+        const isDragGroup = itemTile.spec?.is_group || itemTile.is_group === true || itemTile.constructor?.name === 'GroupTile' || itemTile instanceof GroupedCoverTile;
+        const partnerTile = partnerEl?.__tileInstance || null;
+        const isPartnerGroup = !partnerTile || partnerTile.spec?.is_group || partnerTile.is_group === true || partnerTile.constructor?.name === 'GroupTile' || partnerTile instanceof GroupedCoverTile;
+
+        if (intent === 'compact' && !isDragGroup && !isPartnerGroup && partnerTile !== itemTile) {
+          itemTile.layoutMode = 'compact';
+          partnerTile.layoutMode = 'compact';
+          const wasPartnerWide = dragBaseline.wideBefore.get(partnerTile) === true;
+          if (wasPartnerWide) {
+            const pairStart = Math.min(toRoom.tiles.indexOf(itemTile), toRoom.tiles.indexOf(partnerTile));
+            let compactRun = 0;
+            for (let i = 0; i < pairStart; i++) {
+              const t = toRoom.tiles[i];
+              const tGroup = t.spec?.is_group || t.is_group === true || t.constructor?.name === 'GroupTile' || t instanceof GroupedCoverTile;
+              const m = t.layoutMode ?? null;
+              const tWide = tGroup || (m === 'wide' ? true : m === 'compact' ? false : (t.isAlwaysWide || t.hasSlider));
+              if (tWide) compactRun = 0;
+              else compactRun += 1;
+            }
+            if (compactRun % 2 === 1 && pairStart > 0) {
+              for (let i = pairStart - 1; i >= 0; i--) {
+                const t = toRoom.tiles[i];
+                if ((t.layoutMode ?? null) !== 'compact') {
+                  t.layoutMode = 'wide';
+                  break;
+                }
+              }
+            }
+          }
+        } else if (intent === 'wide' && !isDragGroup) {
+          itemTile.layoutMode = 'wide';
+        }
+
+        if (fromRoom !== toRoom) {
+          applySmartTileLayout(fromRoom.tiles, fromRoom.grid);
+        }
+        applySmartTileLayout(toRoom.tiles, toRoom.grid);
+      },
+      onCancel: () => {
+        if (!dragBaseline) return;
+        for (const [t, mode] of dragBaseline.modes.entries()) {
+          t.layoutMode = mode;
+        }
+        for (const rm of dragBaseline.rooms) {
+          const orig = dragBaseline.origTiles.get(rm);
+          if (orig) rm.tiles = [...orig];
+          applySmartTileLayout(rm.tiles, rm.grid);
+        }
+        dragBaseline = null;
+      },
+      onReorder: ({ itemEl, sourceGrid, targetGrid }) => {
+        const baseline = dragBaseline;
+        dragBaseline = null;
+        if (!this.ctx?.isEditMode?.()) return;
+        const sourceRoom = sourceGrid?.__roomInstance || this;
+        const targetRoom = targetGrid?.__roomInstance || this;
+        const itemTile = itemEl?.__tileInstance;
+
+        if (sourceRoom === targetRoom) {
+          applySmartTileLayout(targetRoom.tiles, targetRoom.grid);
+          const { order, layout } = serializeTiles(targetRoom.tiles);
+          this.ctx?.hass?.callWS({
+            type: 'smarthome_companion/dashboard/tile_order',
+            area_id: targetRoom.spec.area_id,
+            tile_order: order,
+            tile_layout: layout,
+          }).catch(() => {});
+          return;
+        }
+
+        applySmartTileLayout(sourceRoom.tiles, sourceRoom.grid);
+        applySmartTileLayout(targetRoom.tiles, targetRoom.grid);
+        const srcSer = serializeTiles(sourceRoom.tiles);
+        const dstSer = serializeTiles(targetRoom.tiles);
+        this.ctx?.onMoveTileToRoom?.({
+          tile: itemTile,
+          fromAreaId: sourceRoom.spec.area_id,
+          toAreaId: targetRoom.spec.area_id,
+          sourceOrder: srcSer.order,
+          sourceLayout: srcSer.layout,
+          targetOrder: dstSer.order,
+          targetLayout: dstSer.layout,
+        });
       },
     });
+  }
+
+  setOpen(open) {
+    if (this.spec.always_open && !open) return;
+    this.ctx.openState.set(this.spec.area_id, !!open);
+    this._applyOpen();
   }
 
   _applyOpen() {
@@ -6406,11 +7027,127 @@ function bindPress(el, onTap, onHold) {
 
 // ═══════════════ Header badges ═══════════════
 class Badges {
-  constructor(badges, user, onNavigate = null) {
+  constructor(badges, user, onNavigate = null, { layout = null, config = null } = {}) {
     this.user = user;
     this.onNavigate = onNavigate;
-    this.items = (badges || []).filter((b) => b && b.entity_id).map((cfg) => this._make(cfg));
-    this.el = h('div', { class: 'badges' }, this.items.map((i) => i.el));
+    this._layout = layout;
+    this._config = config;
+    this._lightCounterKey = null;
+    // Filter out legacy external sensor.lichter_zahler when built-in counter is active
+    const lightCounterEnabled = config?.light_counter?.enabled !== false;
+    this.items = (badges || [])
+      .filter((b) => b && b.entity_id && !(lightCounterEnabled && b.entity_id === 'sensor.lichter_zahler'))
+      .map((cfg) => this._make(cfg));
+    this.lightCounterEl = h('button', {
+      class: 'badge',
+      type: 'button',
+      hidden: true,
+      onClick: () => this._openActiveLightsPopup(),
+    });
+    this.el = h('div', { class: 'badges' }, this.lightCounterEl, ...this.items.map((i) => i.el));
+  }
+
+  _getConfiguredLights() {
+    const map = new Map();
+    for (const item of (this._layout?.configured?.lights || [])) {
+      if (item?.entity_id && !map.has(item.entity_id)) {
+        map.set(item.entity_id, {
+          entity_id: item.entity_id,
+          name: item.name || item.entity_id,
+          area_name: item.area_name || '',
+        });
+      }
+    }
+    if (map.size === 0) {
+      const walk = (tiles, areaName) => {
+        for (const t of (tiles || [])) {
+          if (t.children?.length) walk(t.children, areaName);
+          if ((t.category === 'leuchte' || t.category === 'light') && t.entity_id && !t.is_group && !map.has(t.entity_id)) {
+            map.set(t.entity_id, {
+              entity_id: t.entity_id,
+              name: t.name || t.entity_id,
+              area_name: areaName || '',
+            });
+          }
+        }
+      };
+      for (const r of (this._layout?.rooms || [])) walk(r.tiles, r.name);
+    }
+    return Array.from(map.values());
+  }
+
+  _openActiveLightsPopup() {
+    if (!this.hass) return;
+    const lights = this._getConfiguredLights();
+    const active = lights.filter((l) => isActive(this.hass.states[l.entity_id]));
+    const root = this.el.getRootNode();
+    const host = root instanceof ShadowRoot ? root : document.body;
+
+    const close = () => overlay.remove();
+    const listEl = h('div', { style: { display: 'grid', gap: '8px', maxHeight: '55vh', overflowY: 'auto' } });
+
+    const renderList = () => {
+      const curActive = lights.filter((l) => isActive(this.hass.states[l.entity_id]));
+      if (!curActive.length) {
+        listEl.replaceChildren(
+          h('div', { class: 'hint', style: { padding: '12px 4px', textAlign: 'center' } }, 'Alle eingerichteten Lichter sind aus.'),
+        );
+        allOffBtn.hidden = true;
+        return;
+      }
+      allOffBtn.hidden = false;
+      listEl.replaceChildren(...curActive.map((l) => h('div', {
+        class: 'row-card',
+        style: { padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' },
+      },
+      h('div', { style: { minWidth: '0', flex: '1' } },
+        h('div', { style: { fontWeight: '600', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, l.name),
+        l.area_name ? h('div', { class: 'hint', style: { fontSize: '11px' } }, l.area_name) : null),
+      h('button', {
+        type: 'button',
+        class: 'btn secondary small',
+        onClick: async () => {
+          await toggleEntity(this.hass, l.entity_id);
+          setTimeout(() => { this.update(this.hass); renderList(); }, 180);
+        },
+      }, icon('mdi:power'), ' Aus'))));
+    };
+
+    const allOffBtn = h('button', {
+      type: 'button',
+      class: 'btn danger small',
+      hidden: !active.length,
+      onClick: async () => {
+        const curActive = lights.filter((l) => isActive(this.hass.states[l.entity_id]));
+        await Promise.all(curActive.map((l) => {
+          const dom = domainOf(l.entity_id);
+          const svcDom = ['light', 'switch', 'input_boolean', 'fan'].includes(dom) ? dom : 'homeassistant';
+          return this.hass.callService(svcDom, 'turn_off', { entity_id: l.entity_id });
+        }));
+        close();
+      },
+    }, icon('mdi:lightbulb-off-outline'), ' Alle ausschalten');
+
+    const dlg = h('div', {
+      class: 'dialog',
+      style: { maxWidth: '400px', width: '92vw' },
+      onClick: (e) => e.stopPropagation(),
+    },
+    h('div', { class: 'dialog-head' },
+      h('div', { class: 'dialog-title', style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+        icon('mdi:lightbulb-on-outline'), `Aktive Lichter (${active.length})`),
+      h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Schließen', onClick: close }, icon('mdi:close'))),
+    h('div', { class: 'dialog-body' }, listEl),
+    h('div', { class: 'dialog-foot', style: { justifyContent: 'space-between' } },
+      allOffBtn,
+      h('button', { type: 'button', class: 'btn secondary', onClick: close }, 'Schließen')));
+
+    const overlay = h('div', {
+      class: 'overlay',
+      onClick: (e) => { if (e.target === overlay) close(); },
+    }, dlg);
+    renderList();
+    host.append(overlay);
   }
 
   _make(cfg) {
@@ -6444,6 +7181,28 @@ class Badges {
 
   update(hass) {
     this.hass = hass;
+    const lcCfg = this._config?.light_counter || {};
+    const lcEnabled = lcCfg.enabled !== false;
+    if (!lcEnabled) {
+      this.lightCounterEl.hidden = true;
+    } else {
+      const lights = this._getConfiguredLights();
+      const activeCount = lights.reduce((acc, l) => acc + (isActive(hass.states[l.entity_id]) ? 1 : 0), 0);
+      const showZero = lcCfg.show_zero !== false;
+      const show = activeCount > 0 || showZero;
+      this.lightCounterEl.hidden = !show;
+      if (show) {
+        const ic = activeCount > 0 ? 'mdi:lightbulb' : 'mdi:lightbulb-outline';
+        const label = `${activeCount} ${activeCount === 1 ? 'Licht' : 'Lichter'} an`;
+        const col = activeCount > 0 ? resolveColor('amber') : 'var(--cd-secondary)';
+        const key = `${ic}|${label}|${col}`;
+        if (this._lightCounterKey !== key) {
+          this._lightCounterKey = key;
+          this.lightCounterEl.style.setProperty('--badge-color', col);
+          this.lightCounterEl.replaceChildren(icon(ic), h('span', {}, label));
+        }
+      }
+    }
     for (const item of this.items) {
       const { cfg, el } = item;
       const st = hass.states[cfg.entity_id];
@@ -7906,6 +8665,9 @@ class Settings {
   _tabHome() {
     const d = this.draft;
     d.badges ||= [];
+    d.light_counter ||= { enabled: true, show_zero: true };
+    if (d.light_counter.enabled === undefined) d.light_counter.enabled = true;
+    if (d.light_counter.show_zero === undefined) d.light_counter.show_zero = true;
     d.greetings ||= {};
     if (d.greetings.morning === undefined) d.greetings.morning = 'Guten Morgen';
     if (d.greetings.day === undefined) d.greetings.day = 'Guten Tag';
@@ -7918,6 +8680,12 @@ class Settings {
         this._text(d.greetings, 'morning', 'Morgens (05:00 – 11:00)', { placeholder: 'Guten Morgen' }),
         this._text(d.greetings, 'day', 'Tagsüber (11:00 – 18:00)', { placeholder: 'Guten Tag' }),
         this._text(d.greetings, 'evening', 'Abends (18:00 – 05:00)', { placeholder: 'Guten Abend' })),
+
+      this._title('Lichter-Zähler (integriert)'),
+      this._hint('• Zählt aktive eingerichtete Geräte der Kategorie „Leuchte“\n• Keine externe HA-Entität nötig'),
+      h('div', { class: 'fields' },
+        this._check(d.light_counter, 'enabled', 'Lichter-Zähler auf Startseite anzeigen'),
+        this._check(d.light_counter, 'show_zero', 'Auch anzeigen, wenn 0 Lichter an sind')),
 
       this._title('Status-Badges'),
       this._hint('• Kompakte Status-Chips unter Begrüßung\n• Tippen zum Bearbeiten & Sortieren'),
@@ -9752,6 +10520,28 @@ class DeviceWizard {
 
     let selectedIcon = existingGroup?.icon || (selectedCat === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug');
     let isCustomIcon = !!existingGroup?.icon;
+    const pinnedList = Array.isArray(this._dashboardConfig?.pinned_tiles) ? this._dashboardConfig.pinned_tiles : [];
+    let isGroupPinned = !!(
+      existingGroup?.pinned
+      || existingGroup?.options?.pinned
+      || (existingGroup?.id && (pinnedList.includes(`g:${existingGroup.id}`) || pinnedList.includes(`group:${existingGroup.id}`)))
+    );
+
+    const groupPinCard = h('div', {
+      class: `feature-card${isGroupPinned ? ' active' : ''}`,
+      style: { '--feat-color': 'var(--cd-accent, #29b6f6)', cursor: 'pointer' },
+      ...(isGroupPinned ? { 'data-active': '' } : {}),
+      onClick: () => {
+        isGroupPinned = !isGroupPinned;
+        groupPinCard.toggleAttribute('data-active', isGroupPinned);
+        groupPinCard.classList.toggle('active', isGroupPinned);
+      },
+    },
+    h('div', { class: 'feature-icon' }, icon('mdi:pin-outline')),
+    h('div', { class: 'feature-info' },
+      h('div', { class: 'feature-title' }, 'Anpinnen'),
+      h('div', { class: 'feature-desc' }, 'Am Anfang der Kategorie anzeigen')),
+    h('div', { class: 'switch-ui' }));
 
     const iconPicker = new IconPicker({
       hass: this.hass,
@@ -9886,6 +10676,7 @@ class DeviceWizard {
         h('div', { class: 'field' }, 'Raum', areaDd.el),
         h('div', { class: 'field' }, 'Kategorie', catDd.el),
         h('div', { class: 'field' }, 'Icon', iconPicker.el),
+        groupPinCard,
         h('div', {},
           countHeader,
           tagsContainer,
@@ -9913,7 +10704,7 @@ class DeviceWizard {
               if (!groupName) { showToast(this.el, 'Name fehlt', { error: true }); return; }
               if (selectedIds.length === 0) { showToast(this.el, 'Mind. 1 Element wählen', { error: true }); return; }
               try {
-                await this.hass.callWS({
+                const saveRes = await this.hass.callWS({
                   type: 'smarthome_companion/groups/save',
                   group: {
                     ...(existingGroup ? { id: existingGroup.id } : {}),
@@ -9921,9 +10712,26 @@ class DeviceWizard {
                     area_id: selectedArea,
                     category: selectedCat,
                     icon: selectedIcon || (selectedCat === 'leuchte' ? 'mdi:lightbulb-group' : 'mdi:power-plug'),
+                    pinned: !!isGroupPinned,
                     children: selectedIds,
                   },
                 });
+                const savedGid = saveRes?.group_id || saveRes?.group?.id || existingGroup?.id;
+                if (savedGid) {
+                  const gPinKey = `g:${savedGid}`;
+                  try {
+                    await this.hass.callWS({
+                      type: 'smarthome_companion/dashboard/tile_order',
+                      area_id: selectedArea || '__none__',
+                      pin_key: gPinKey,
+                      pinned: !!isGroupPinned,
+                    });
+                    const curPins = Array.isArray(this._dashboardConfig?.pinned_tiles) ? [...this._dashboardConfig.pinned_tiles] : [];
+                    const cleanedPins = curPins.filter((k) => k !== gPinKey && k !== `group:${savedGid}`);
+                    if (isGroupPinned) cleanedPins.push(gPinKey);
+                    this._dashboardConfig = { ...(this._dashboardConfig || {}), pinned_tiles: cleanedPins };
+                  } catch (_) { /* non-fatal */ }
+                }
                 overlay.remove();
                 destroyPickers();
                 this.selectedDevices.clear();
@@ -14302,6 +15110,7 @@ class CompanionDashboardPanel extends HTMLElement {
     this._destroyComponents();
     const { config, layout, user } = this._data;
     const ctx = {
+      hass: this._hass,
       presets: config.color_presets || [],
       openState: this._openState,
       onOpenRoom: (areaId) => this._openRoom(areaId),
@@ -14312,6 +15121,7 @@ class CompanionDashboardPanel extends HTMLElement {
       onOpenGroup: (groupId) => {
         this._openWizard(null, groupId);
       },
+      onMoveTileToRoom: (payload) => this._moveTileToRoom(payload),
       onOpenSettings: () => this._openSettings(),
       isEditMode: () => !!this._editMode,
     };
@@ -14412,7 +15222,7 @@ class CompanionDashboardPanel extends HTMLElement {
 
     // Greeting + badges
     this._greeting = h('h1', {});
-    this._badges = new Badges(config.badges, user, (target) => this._navigate(target));
+    this._badges = new Badges(config.badges, user, (target) => this._navigate(target), { layout, config });
 
     // Smoke alert banner right under status badges (configured smoke detectors only)
     this._smoke = new SmokeAlerts({
@@ -14657,6 +15467,117 @@ class CompanionDashboardPanel extends HTMLElement {
       },
     });
     this.shadowRoot.append(this._wizard.el);
+  }
+
+  async _moveTileToRoom({ tile, fromAreaId, toAreaId, sourceOrder, sourceLayout, targetOrder, targetLayout }) {
+    if (!this._hass || !tile || !toAreaId || fromAreaId === toAreaId) return;
+    const hass = this._hass;
+    const nextAreaVal = toAreaId === '__no_area__' ? '' : toAreaId;
+    const spec = tile.spec || {};
+    const renamed = {};
+
+    try {
+      if (spec.group_id) {
+        const gRes = await hass.callWS({ type: 'smarthome_companion/groups/list' });
+        const groupCfg = (gRes?.groups || {})[spec.group_id];
+        if (groupCfg) {
+          await hass.callWS({
+            type: 'smarthome_companion/groups/save',
+            group: { ...groupCfg, area_id: nextAreaVal },
+          });
+        }
+      } else {
+        const keys = tile.coverSpecs?.length
+          ? tile.coverSpecs.map((c) => ({ key: c.key, device_id: c.device_id, entity_id: c.entity_id }))
+          : [{ key: spec.key, device_id: spec.device_id, entity_id: spec.entity_id }];
+
+        const devRes = await hass.callWS({ type: 'smarthome_companion/devices/get' });
+        const devices = devRes?.devices || {};
+        const seenDevices = new Set();
+
+        for (const item of keys) {
+          const parsed = parseChannelKey(item.key);
+          const devId = item.device_id || parsed.deviceId || item.entity_id;
+          if (!devId || seenDevices.has(devId)) continue;
+          const devCfg = devices[devId];
+          if (!devCfg) continue;
+
+          const entities = JSON.parse(JSON.stringify(devCfg.entities || {}));
+          const subEnts = entities.sub_entities;
+          const isChannelTile = String(item.key || '').startsWith('d:')
+            && subEnts && typeof subEnts === 'object'
+            && Object.keys(subEnts).length > 1
+            && item.entity_id && subEnts[item.entity_id];
+
+          let deviceAreaArg = nextAreaVal;
+          if (isChannelTile) {
+            subEnts[item.entity_id] = { ...subEnts[item.entity_id], area_id: nextAreaVal };
+            deviceAreaArg = devCfg.area_id ?? undefined;
+          } else {
+            seenDevices.add(devId);
+            if (subEnts && typeof subEnts === 'object') {
+              for (const k of Object.keys(subEnts)) {
+                if (subEnts[k] && typeof subEnts[k] === 'object' && 'area_id' in subEnts[k]) {
+                  subEnts[k] = { ...subEnts[k], area_id: nextAreaVal };
+                }
+              }
+            }
+          }
+
+          const cfgRes = await hass.callWS({
+            type: 'smarthome_companion/devices/configure',
+            device_id: devId,
+            category: devCfg.category || 'sonstiges',
+            entities,
+            custom_name: devCfg.custom_name ?? null,
+            area_id: deviceAreaArg,
+            options: devCfg.options || {},
+            icon: devCfg.icon ?? null,
+          });
+          if (cfgRes?.renamed && typeof cfgRes.renamed === 'object') {
+            Object.assign(renamed, cfgRes.renamed);
+          }
+        }
+      }
+
+      const rewriteKey = (k) => {
+        let out = k;
+        for (const [oldEid, newEid] of Object.entries(renamed)) {
+          if (out === oldEid || out.endsWith(`:${oldEid}`)) {
+            out = out.slice(0, out.length - oldEid.length) + newEid;
+          }
+        }
+        return out;
+      };
+      const cleanTargetOrder = (targetOrder || []).map(rewriteKey);
+      const cleanTargetLayout = {};
+      for (const [k, v] of Object.entries(targetLayout || {})) {
+        cleanTargetLayout[rewriteKey(k)] = v;
+      }
+
+      await Promise.all([
+        hass.callWS({
+          type: 'smarthome_companion/dashboard/tile_order',
+          area_id: fromAreaId,
+          tile_order: sourceOrder || [],
+          tile_layout: sourceLayout || {},
+        }),
+        hass.callWS({
+          type: 'smarthome_companion/dashboard/tile_order',
+          area_id: toAreaId,
+          tile_order: cleanTargetOrder,
+          tile_layout: cleanTargetLayout,
+        }),
+      ]);
+
+      this._toast('In neuen Raum verschoben');
+      this._serialized = null;
+      await this._load();
+    } catch (err) {
+      this._toast(`Verschieben fehlgeschlagen: ${err.message || err}`, true);
+      this._serialized = null;
+      await this._load();
+    }
   }
 
   // ── settings ──
