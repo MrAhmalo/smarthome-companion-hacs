@@ -29,6 +29,9 @@ class CompanionDashboardPanel extends HTMLElement {
     super();
     this.attachShadow({ mode: 'open' });
     this._openState = new Map();
+    this._scrollPositions = new Map();
+    this._renderedKey = null;
+    this._scrollRestoreSeq = 0;
     this._components = [];
     this._data = null;
     this._raf = 0;
@@ -158,6 +161,7 @@ class CompanionDashboardPanel extends HTMLElement {
 
   _syncRouteFromHash(shouldRender = true) {
     if (typeof window === 'undefined') return;
+    if (shouldRender && this._data) this._saveCurrentScroll();
     const raw = (window.location.hash || '').replace(/^#/, '');
     const params = new URLSearchParams(raw);
     const v = params.get('view');
@@ -194,6 +198,68 @@ class CompanionDashboardPanel extends HTMLElement {
     }
   }
 
+  _currentScrollKey() {
+    if (this._activeWarningView) return 'view:warning';
+    if (this._activeRoomId) return `room:${this._activeRoomId}`;
+    return `view:${this._activeView || 'overview'}`;
+  }
+
+  _getScrollContainer() {
+    if (this.scrollTop > 0) return this;
+    let el = this.parentElement || (this.getRootNode?.() instanceof ShadowRoot ? this.getRootNode().host : null);
+    while (el) {
+      if (el.scrollHeight > el.clientHeight + 2) {
+        const ov = getComputedStyle(el).overflowY;
+        if (ov === 'auto' || ov === 'scroll' || ov === 'overlay') return el;
+      }
+      el = el.parentElement || (el.getRootNode?.() instanceof ShadowRoot ? el.getRootNode().host : null);
+    }
+    return document.scrollingElement || document.documentElement;
+  }
+
+  _readScrollY() {
+    const el = this._getScrollContainer();
+    const docEl = document.scrollingElement || document.documentElement;
+    if (!el || el === docEl || el === document.body) {
+      const y = (typeof window !== 'undefined' ? window.scrollY : 0) || docEl?.scrollTop || 0;
+      return { el: docEl, y };
+    }
+    return { el, y: el.scrollTop || 0 };
+  }
+
+  _writeScrollY(y, elHint = null) {
+    const targetY = Math.max(0, Number(y) || 0);
+    const docEl = document.scrollingElement || document.documentElement;
+    const el = (elHint && elHint.isConnected) ? elHint : this._getScrollContainer();
+    if (!el || el === docEl || el === document.body) {
+      if (typeof window !== 'undefined') window.scrollTo(0, targetY);
+      if (docEl) docEl.scrollTop = targetY;
+      return;
+    }
+    el.scrollTop = targetY;
+  }
+
+  _saveCurrentScroll() {
+    const { el, y } = this._readScrollY();
+    this._scrollPositions.set(this._currentScrollKey(), y);
+    this._lastScrollEl = el;
+  }
+
+  _restoreScroll(key, fallback = 0) {
+    const targetY = this._scrollPositions.has(key) ? this._scrollPositions.get(key) : fallback;
+    const seq = ++this._scrollRestoreSeq;
+    const elHint = this._lastScrollEl;
+    this._writeScrollY(targetY, elHint);
+    requestAnimationFrame(() => {
+      if (seq !== this._scrollRestoreSeq) return;
+      this._writeScrollY(targetY, elHint);
+      setTimeout(() => {
+        if (seq !== this._scrollRestoreSeq) return;
+        this._writeScrollY(targetY, elHint);
+      }, 60);
+    });
+  }
+
   _navigate(target) {
     const internal = resolveInternalView(target);
     if (!internal) {
@@ -204,13 +270,13 @@ class CompanionDashboardPanel extends HTMLElement {
       this._openWarningDetail();
       return;
     }
+    this._saveCurrentScroll();
     this._prevView = this._activeView || 'overview';
     this._activeWarningView = false;
     this._activeRoomId = null;
     this._activeView = internal;
     this._pushHash(internal === 'overview' ? '' : `#view=${encodeURIComponent(internal)}`);
     if (this._data) this._render();
-    this.scrollTop = 0;
   }
 
   _makeNavBar(config, user) {
@@ -258,6 +324,16 @@ class CompanionDashboardPanel extends HTMLElement {
 
   // ── rendering ──
   _render() {
+    const renderKey = this._currentScrollKey();
+    if (this._renderedKey === renderKey && this._content) {
+      this._saveCurrentScroll();
+    }
+    const prevMinH = this._content?.style.minHeight ?? '';
+    if (this._content && this._content.offsetHeight > 0) {
+      this._content.style.minHeight = `${this._content.offsetHeight}px`;
+    }
+    this._renderedKey = renderKey;
+
     this._destroyComponents();
     const { config, layout, user } = this._data;
     const ctx = {
@@ -289,6 +365,8 @@ class CompanionDashboardPanel extends HTMLElement {
         this._content.prepend(this._editBanner);
       }
       this._push();
+      this._content.style.minHeight = prevMinH;
+      this._restoreScroll(renderKey, 0);
       return;
     }
 
@@ -308,6 +386,8 @@ class CompanionDashboardPanel extends HTMLElement {
           this._content.prepend(this._editBanner);
         }
         this._push();
+        this._content.style.minHeight = prevMinH;
+        this._restoreScroll(renderKey, 0);
         return;
       }
       this._activeRoomId = null;
@@ -347,11 +427,14 @@ class CompanionDashboardPanel extends HTMLElement {
           this._content.prepend(this._editBanner);
         }
         this._push();
+        this._content.style.minHeight = prevMinH;
         if (activeView === 'security' && this._pendingSecuritySmokeScroll) {
           this._pendingSecuritySmokeScroll = false;
           requestAnimationFrame(() => {
             this._content.querySelector('#security-smoke')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           });
+        } else {
+          this._restoreScroll(renderKey, 0);
         }
         return;
       }
@@ -361,8 +444,6 @@ class CompanionDashboardPanel extends HTMLElement {
     this._backBtn.hidden = true;
     this._menuBtn.hidden = !this._narrow;
     this._syncToolbar();
-
-    const scroll = this.scrollTop;
 
     // Greeting + badges
     this._greeting = h('h1', {});
@@ -415,7 +496,8 @@ class CompanionDashboardPanel extends HTMLElement {
     }
 
     this._push();
-    this.scrollTop = scroll;
+    this._content.style.minHeight = prevMinH;
+    this._restoreScroll(renderKey, 0);
   }
 
   _layoutRooms() {
@@ -488,15 +570,16 @@ class CompanionDashboardPanel extends HTMLElement {
 
   // ── room subview ──
   _openRoom(areaId) {
+    this._saveCurrentScroll();
     this._activeWarningView = false;
     this._activeView = 'overview';
     this._activeRoomId = areaId;
     this._pushHash(areaId ? `#room=${encodeURIComponent(areaId)}` : '');
     this._render();
-    this.scrollTop = 0;
   }
 
   _closeRoom() {
+    this._saveCurrentScroll();
     this._activeWarningView = false;
     this._activeRoomId = null;
     this._activeView = 'overview';
@@ -509,15 +592,16 @@ class CompanionDashboardPanel extends HTMLElement {
 
   // ── warning subview ──
   _openWarningDetail() {
+    this._saveCurrentScroll();
     this._activeWarningView = true;
     this._activeRoomId = null;
     this._activeView = 'warning';
     this._pushHash('#view=warning');
     this._render();
-    this.scrollTop = 0;
   }
 
   _closeWarningDetail() {
+    this._saveCurrentScroll();
     this._activeWarningView = false;
     this._activeView = 'overview';
     this._pushHash('');
@@ -555,6 +639,7 @@ class CompanionDashboardPanel extends HTMLElement {
   // ── room edit modal ──
   async _openRoomEdit(roomSpec) {
     if (!this._hass || !roomSpec) return;
+    this._saveCurrentScroll();
     if (!this._usersCache) {
       try {
         const res = await this._hass.callWS({ type: 'smarthome_companion/dashboard/users' });
@@ -571,6 +656,7 @@ class CompanionDashboardPanel extends HTMLElement {
       onClose: () => {
         this._roomModal?.destroy?.();
         this._roomModal = null;
+        this._restoreScroll(this._currentScrollKey(), 0);
       },
       onSaved: () => {
         this._roomModal?.destroy?.();
@@ -585,6 +671,7 @@ class CompanionDashboardPanel extends HTMLElement {
 
   // ── device wizard ──
   _openWizard(deviceId = null, groupId = null) {
+    this._saveCurrentScroll();
     this._wizard?.destroy?.();
     this._wizard = new DeviceWizard({
       hass: this._hass,
@@ -593,6 +680,7 @@ class CompanionDashboardPanel extends HTMLElement {
       onClose: () => {
         this._wizard?.destroy?.();
         this._wizard = null;
+        this._restoreScroll(this._currentScrollKey(), 0);
       },
       onSaved: (err) => {
         if (err) { this._toast(`Fehler: ${err.message || err}`, true); return; }
@@ -608,6 +696,7 @@ class CompanionDashboardPanel extends HTMLElement {
 
   // ── settings ──
   async _openSettings() {
+    this._saveCurrentScroll();
     try {
       const [edit, users] = await Promise.all([
         this._hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true }),
@@ -622,6 +711,7 @@ class CompanionDashboardPanel extends HTMLElement {
         onClose: () => {
           this._settings?.destroy?.();
           this._settings = null;
+          this._restoreScroll(this._currentScrollKey(), 0);
         },
         onOpenDevice: (devId) => {
           this._settings?.destroy?.();
