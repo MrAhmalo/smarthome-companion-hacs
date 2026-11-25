@@ -151,6 +151,7 @@ async def _async_default_config(hass) -> dict:
     return {
         "greeting_entity": "sensor.greeting_sensor",
         "ui_scale": "medium",
+        "sidebar_pin_top": True,
         "light_counter": {"enabled": True, "show_zero": True},
         "badges": [
             {"entity_id": "binary_sensor.fritz_box_7590_ax_verbindung", "name": "Offline",
@@ -250,6 +251,8 @@ def _sanitize_config(raw: dict) -> dict:
         clean["greeting_entity"] = raw["greeting_entity"].strip()
     ui_scale = raw.get("ui_scale")
     clean["ui_scale"] = ui_scale if ui_scale in ("small", "medium", "large") else "medium"
+    sidebar_pin_top = raw.get("sidebar_pin_top")
+    clean["sidebar_pin_top"] = sidebar_pin_top if isinstance(sidebar_pin_top, bool) else True
     for key in _LIST_KEYS:
         value = raw.get(key)
         clean[key] = value if isinstance(value, list) else []
@@ -269,6 +272,9 @@ async def async_get_or_create_config(hass, store) -> dict:
         # Migration: Purge legacy hardcoded default extra_tiles so only devices
         # configured in the device manager appear on the dashboard.
         changed = False
+        if "sidebar_pin_top" not in config:
+            config["sidebar_pin_top"] = True
+            changed = True
         extras = config.get("extra_tiles", [])
         if any(isinstance(e, dict) and e.get("entity_id") in _LEGACY_SEEDED_EXTRA_ENTITIES for e in extras):
             config["extra_tiles"] = [

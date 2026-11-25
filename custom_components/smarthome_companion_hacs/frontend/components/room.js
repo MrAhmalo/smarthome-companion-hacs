@@ -351,8 +351,8 @@ export class Room {
       'data-area-id': spec.area_id,
     },
       this.head,
-      h('div', { class: 'room-body' }, h('div', { class: 'room-body-inner' }, this.grid)),
-      this.statusBar);
+      this.statusBar,
+      h('div', { class: 'room-body' }, h('div', { class: 'room-body-inner' }, this.grid)));
     this.el.__roomInstance = this;
     this._applyOpen();
     applySmartTileLayout(this.tiles, this.grid);

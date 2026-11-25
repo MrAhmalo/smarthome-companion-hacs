@@ -17,6 +17,30 @@ const LVL_COLORS = [
   '#8e24aa', // Level 4: Violett
 ];
 
+function parseHexRgb(color) {
+  const s = String(color || '').trim();
+  const m = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!m) return null;
+  let hex = m[1];
+  if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
+  return [
+    parseInt(hex.slice(0, 2), 16),
+    parseInt(hex.slice(2, 4), 16),
+    parseInt(hex.slice(4, 6), 16),
+  ];
+}
+
+function contrastTextForBg(color) {
+  const rgb = parseHexRgb(color);
+  if (!rgb) return '#ffffff';
+  const toLin = (c) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const lum = 0.2126 * toLin(rgb[0]) + 0.7152 * toLin(rgb[1]) + 0.0722 * toLin(rgb[2]);
+  return lum > 0.26 ? '#111827' : '#ffffff';
+}
+
 function formatTime(val) {
   if (!val) return '';
   const d = new Date(val);
@@ -44,18 +68,11 @@ export class WarningDetailView {
   }
 
   _build() {
-    this.backBtn = h('button', {
-      class: 'warning-detail-back',
-      'aria-label': 'Zurück zum Dashboard',
-      onClick: () => this.onBack?.(),
-    }, icon('mdi:arrow-left'), 'Zurück');
-
     this.regionEl = h('div', { style: { fontSize: '12px', color: 'var(--cd-secondary)' } });
     this.countBadge = h('div', { class: 'warning-detail-count' }, '0 Warnungen');
 
     this.header = h('div', { class: 'warning-detail-head' },
       h('div', { class: 'warning-detail-left' },
-        this.backBtn,
         h('div', { class: 'warning-detail-title-wrap' },
           h('div', { class: 'icon' }, icon('mdi:alert-decagram')),
           h('div', {},
@@ -83,7 +100,7 @@ export class WarningDetailView {
     this._renderedKey = key;
 
     this.countBadge.textContent = count === 1 ? '1 Warnung' : `${count} Warnungen`;
-    this.countBadge.style.color = count > 0 ? '#ff9800' : 'var(--primary-text-color, #fff)';
+    this.countBadge.toggleAttribute('data-active', count > 0);
 
     if (count <= 0) {
       this.listEl.replaceChildren(
@@ -100,6 +117,7 @@ export class WarningDetailView {
       const lvl = parseInt(attrs[`warning_${i}_level`], 10) || numeric(st) || 1;
       const lvlName = LVL_NAMES[lvl] || `Warnstufe ${lvl}`;
       const color = attrs[`warning_${i}_color`] || LVL_COLORS[lvl] || '#fb8c00';
+      const badgeFg = contrastTextForBg(color);
       const hl = attrs[`warning_${i}_headline`] || attrs[this.cfg.headline_attribute] || st?.state || 'Amtliche Warnung';
       const start = formatTime(attrs[`warning_${i}_start`]);
       const end = formatTime(attrs[`warning_${i}_end`]);
@@ -107,7 +125,7 @@ export class WarningDetailView {
       const instr = attrs[`warning_${i}_instruction`] || '';
 
       const topRow = h('div', { class: 'warning-top' },
-        h('span', { class: 'warning-level-badge', style: { background: color } },
+        h('span', { class: 'warning-level-badge', style: { background: color, color: badgeFg } },
           `Stufe ${lvl} · ${lvlName}`),
         (start || end) ? h('span', { class: 'warning-time' },
           icon('mdi:clock-outline'),
@@ -126,13 +144,13 @@ export class WarningDetailView {
       if (instr) {
         cardChildren.push(
           h('div', { class: 'warning-instruction' },
-            h('div', { class: 'warning-instruction-title', style: { color } },
+            h('div', { class: 'warning-instruction-title' },
               icon('mdi:information-outline'), 'Handlungsempfehlungen'),
             h('div', { class: 'warning-instruction-text' }, instr))
         );
       }
 
-      cards.push(h('div', { class: 'warning-card' }, ...cardChildren));
+      cards.push(h('div', { class: 'warning-card', style: { '--warn-color': color } }, ...cardChildren));
     }
 
     this.listEl.replaceChildren(...cards);

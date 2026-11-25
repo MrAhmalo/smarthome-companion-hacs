@@ -852,6 +852,9 @@ export class Settings {
     if (!['small', 'medium', 'large'].includes(this.draft.ui_scale)) {
       this.draft.ui_scale = 'medium';
     }
+    if (this.draft.sidebar_pin_top === undefined) {
+      this.draft.sidebar_pin_top = true;
+    }
     const viewsCfg = this.draft.views;
     const presets = (this.draft.color_presets ||= []);
 
@@ -942,6 +945,11 @@ export class Settings {
       this._title('Darstellung & Skalierung'),
       this._hint('• Globale Größe für Schriften, Icons & Abstände'),
       scaleRow,
+
+      this._title('Seitenleiste (Global)'),
+      this._hint('• Gilt global für alle Benutzer\n• Positioniert das Dashboard als ersten Eintrag'),
+      h('div', { class: 'row-card' },
+        this._check(this.draft, 'sidebar_pin_top', 'Dashboard global ganz oben in der Seitenleiste anzeigen')),
 
       this._title('Untere Navigationsleiste'),
       this._hint('• Direktsprung zu eingebauten Ansichten\n• Reihenfolge per Drag & Drop oder Pfeile'),

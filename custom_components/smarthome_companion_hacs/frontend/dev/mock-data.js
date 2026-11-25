@@ -232,6 +232,7 @@ export const MOCK_DATA = {
 
   config: {
     ui_scale: 'medium',
+    sidebar_pin_top: true,
     greetings: {
       morning: 'Guten Morgen',
       day: 'Guten Tag',
