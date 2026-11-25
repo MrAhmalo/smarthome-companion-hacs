@@ -1,6 +1,6 @@
 // Shared Cover Row Builder used by RoomDetailView and BlindsView.
 import {
-  h, icon, domainOf, isUnavailable, entityIcon, setSliderVal, parseChannelKey, editBorder,
+  h, icon, domainOf, isUnavailable, entityIcon, setSliderVal, parseChannelKey, editBorder, moreInfo,
 } from '../lib/util.js';
 
 export function coverRowService(getHass, spec, svc) {
@@ -76,7 +76,11 @@ export function createCoverRow(spec, { getHass, ctx } = {}) {
     h('div', { class: 'cover-detail-top' },
       h('div', {
         class: 'cover-detail-info',
-        onClick: () => { if (ctx?.isEditMode?.()) openEditDevice(); },
+        onClick: (e) => {
+          e.stopPropagation();
+          if (ctx?.isEditMode?.()) { openEditDevice(); return; }
+          moreInfo(e.currentTarget, spec.entity_id);
+        },
       },
         h('div', { class: 'cover-detail-icon' }, iconEl),
         h('div', { class: 'cover-detail-texts' }, nameEl, stateEl)),
@@ -84,14 +88,19 @@ export function createCoverRow(spec, { getHass, ctx } = {}) {
     sliderWrap,
     ctx ? editBorder(10) : null);
 
-  if (ctx) {
-    row.addEventListener('pointerdown', (e) => {
-      if (ctx.isEditMode?.()) { e.stopPropagation(); e.preventDefault(); }
-    }, true);
-    row.addEventListener('click', (e) => {
-      if (ctx.isEditMode?.()) { e.stopPropagation(); e.preventDefault(); openEditDevice(); }
-    }, true);
-  }
+  row.addEventListener('pointerdown', (e) => {
+    if (ctx?.isEditMode?.()) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+  row.addEventListener('click', (e) => {
+    if (ctx?.isEditMode?.()) {
+      e.stopPropagation();
+      e.preventDefault();
+      openEditDevice();
+      return;
+    }
+    if (e.target.closest('button, input.slider, .cover-slider-wrap, .cover-detail-info')) return;
+    moreInfo(row, spec.entity_id);
+  }, true);
 
   return {
     spec, row, iconEl, stateEl, slider, btnUp, btnStop, btnDown,

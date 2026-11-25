@@ -1,7 +1,7 @@
 // Room component: collapsible "expander" card with area header (sensors, alerts, group controls) and tiles.
 import {
   h, icon, editBorder, domainOf, isActive, numeric, effectiveCategory, parseChannelKey,
-  enableGridPointerReorder,
+  enableGridPointerReorder, moreInfo,
 } from '../lib/util.js';
 import { Tile, GroupTile } from './tile.js';
 
@@ -302,7 +302,6 @@ export class Room {
       onClick: (e) => { e.stopPropagation(); this.ctx.onOpenRoom?.(this.spec.area_id); },
     }, icon('mdi:arrow-right'));
 
-    this.metaEl = h('div', { class: 'room-meta', hidden: true });
     this.controlsEl = h('div', { class: 'room-controls' }, ...this.groups.map((g) => g.btn), this.detailBtn);
 
     this.head = h('div', {
@@ -323,7 +322,7 @@ export class Room {
       },
     },
       h('div', { class: 'room-icon' }, icon(spec.icon)),
-      h('div', { class: 'room-title' }, h('div', { class: 'room-name' }, spec.name), this.metaEl),
+      h('div', { class: 'room-title' }, h('div', { class: 'room-name' }, spec.name)),
       this.controlsEl,
       icon('mdi:chevron-down', 'chevron'),
       editBorder(17));
@@ -346,12 +345,14 @@ export class Room {
       'data-area-id': spec.area_id,
     }, this.tiles.map((t) => t.el));
     this.grid.__roomInstance = this;
+    this.statusBar = h('div', { class: 'room-status-bar', hidden: true });
     this.el = h('div', {
       class: 'card room',
       'data-area-id': spec.area_id,
     },
       this.head,
-      h('div', { class: 'room-body' }, h('div', { class: 'room-body-inner' }, this.grid)));
+      h('div', { class: 'room-body' }, h('div', { class: 'room-body-inner' }, this.grid)),
+      this.statusBar);
     this.el.__roomInstance = this;
     this._applyOpen();
     applySmartTileLayout(this.tiles, this.grid);
@@ -589,13 +590,8 @@ export class Room {
       g.btn.toggleAttribute('data-on', count > 0);
     }
 
-    // Header meta: temperature, humidity, alerts
+    // Bottom compact status bar (configured room sensors + smoke/motion alerts)
     const { sensors } = this.spec;
-    const chips = [];
-    const temp = sensors.temperature?.length ? average(hass, sensors.temperature) : null;
-    const hum = sensors.humidity?.length ? average(hass, sensors.humidity) : null;
-    if (temp) chips.push(h('span', {}, icon('mdi:thermometer'), temp));
-    if (hum) chips.push(h('span', {}, icon('mdi:water-percent'), hum));
     const isSensorOn = (id) => {
       const st = hass.states[id];
       if (!st) return false;
@@ -608,35 +604,115 @@ export class Room {
       const v = String(st.state || '').toLowerCase();
       return ['on', 'detected', 'smoke', 'alarm', 'true'].includes(v);
     };
+
+    const barSmokeIds = Array.isArray(sensors.smoke) ? sensors.smoke : [];
     const tileSmokeIds = (this.spec.tiles || [])
       .filter((t) => effectiveCategory(t) === 'rauchmelder' && t.entity_id)
       .map((t) => t.entity_id);
-    const allSmokeIds = Array.from(new Set([...(sensors.smoke || []), ...tileSmokeIds]));
+    const allSmokeIds = Array.from(new Set([...barSmokeIds, ...tileSmokeIds]));
     const smokeTriggered = allSmokeIds.some(isSmokeTriggered);
     this.el.toggleAttribute('data-smoke-alarm', smokeTriggered);
-    if (allSmokeIds.length > 0) {
-      if (smokeTriggered) {
-        chips.push(h('span', { class: 'smoke-header-chip alert', title: 'Rauchalarm!' }, icon('mdi:smoke-detector-alert'), 'Rauch!'));
-      } else {
-        chips.push(h('span', { class: 'smoke-header-chip', title: 'Rauchmelder aktiv' }, icon('mdi:smoke-detector')));
-      }
+
+    const statusEntries = [];
+    const pushStatus = ({ ic, val, color, alert = false, entityId = null, title = '' }) => {
+      statusEntries.push({
+        key: `${ic}|${val}|${alert ? 1 : 0}|${color || ''}`,
+        node: h('button', {
+          type: 'button',
+          class: `room-status-item${alert ? ' alert' : ''}`,
+          title: title || undefined,
+          style: color ? { '--status-color': color } : undefined,
+          onClick: (e) => {
+            e.stopPropagation();
+            if (this.ctx?.isEditMode?.()) {
+              this.ctx.onEditRoom?.(this.spec);
+              return;
+            }
+            if (entityId) moreInfo(this.el, entityId);
+          },
+        },
+        h('span', { class: 'room-status-badge' }, icon(ic)),
+        h('span', { class: 'room-status-val' }, val)),
+      });
+    };
+
+    if (barSmokeIds.length > 0) {
+      const barSmokeAlarm = barSmokeIds.some(isSmokeTriggered);
+      pushStatus({
+        ic: barSmokeAlarm ? 'mdi:smoke-detector-alert' : 'mdi:smoke-detector',
+        val: barSmokeAlarm ? 'Alarm!' : 'OK',
+        color: barSmokeAlarm ? '#ef4444' : '#22c55e',
+        alert: barSmokeAlarm,
+        entityId: barSmokeIds[0],
+        title: barSmokeAlarm ? 'Rauchalarm!' : 'Rauchmelder OK',
+      });
     }
+
+    const temp = sensors.temperature?.length ? average(hass, sensors.temperature) : null;
+    if (temp) {
+      pushStatus({
+        ic: 'mdi:thermometer',
+        val: temp,
+        color: '#ff7043',
+        entityId: sensors.temperature[0],
+        title: 'Temperatur',
+      });
+    }
+
+    const hum = sensors.humidity?.length ? average(hass, sensors.humidity) : null;
+    if (hum) {
+      pushStatus({
+        ic: 'mdi:water-percent',
+        val: hum,
+        color: '#29b6f6',
+        entityId: sensors.humidity[0],
+        title: 'Luftfeuchtigkeit',
+      });
+    }
+
     const moistIds = sensors.moisture || [];
     const numericMoistIds = moistIds.filter((id) => numeric(hass.states[id]) !== null);
     const binaryMoistIds = moistIds.filter((id) => numeric(hass.states[id]) === null);
     const moistAvg = numericMoistIds.length ? average(hass, numericMoistIds) : null;
-    if (moistAvg) chips.push(h('span', {}, icon('mdi:sprout'), moistAvg));
-    if ((sensors.motion || []).some(isSensorOn)) {
-      chips.push(h('span', { class: 'alert' }, icon('mdi:motion-sensor'), 'Bewegung'));
+    if (moistAvg) {
+      pushStatus({
+        ic: 'mdi:sprout',
+        val: moistAvg,
+        color: '#4caf50',
+        entityId: numericMoistIds[0],
+        title: 'Bodenfeuchtigkeit',
+      });
     }
-    if (binaryMoistIds.some(isSensorOn)) {
-      chips.push(h('span', { class: 'alert' }, icon('mdi:water-alert'), 'Feuchtigkeit'));
+    if (binaryMoistIds.length > 0) {
+      const wet = binaryMoistIds.some(isSensorOn);
+      pushStatus({
+        ic: 'mdi:water-alert',
+        val: wet ? 'Feucht' : 'Trocken',
+        color: wet ? '#ef4444' : '#26c6da',
+        alert: wet,
+        entityId: binaryMoistIds[0],
+        title: 'Feuchtigkeitsmelder',
+      });
     }
-    const key = `${chips.map((c) => c.textContent || c.getAttribute('title') || '').join('|')}|${smokeTriggered ? 1 : 0}`;
-    if (key !== this._metaKey) {
-      this._metaKey = key;
-      this.metaEl.replaceChildren(...chips);
-      this.metaEl.hidden = chips.length === 0;
+
+    const motionIds = sensors.motion || [];
+    if (motionIds.length > 0) {
+      const motionActive = motionIds.some(isSensorOn);
+      pushStatus({
+        ic: motionActive ? 'mdi:motion-sensor' : 'mdi:motion-sensor-off',
+        val: motionActive ? 'Bewegung' : 'Ruhig',
+        color: motionActive ? '#e91e63' : '#9b9b9b',
+        alert: motionActive,
+        entityId: motionIds[0],
+        title: 'Bewegung / Anwesenheit',
+      });
+    }
+
+    const key = `${statusEntries.map((x) => x.key).join('||')}|${smokeTriggered ? 1 : 0}`;
+    if (key !== this._statusKey) {
+      this._statusKey = key;
+      this.statusBar.replaceChildren(...statusEntries.map((x) => x.node));
+      this.statusBar.hidden = statusEntries.length === 0;
     }
   }
 }

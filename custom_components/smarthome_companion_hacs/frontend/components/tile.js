@@ -6,6 +6,14 @@ import {
 
 const COLOR_MODES = ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'];
 
+// Home Assistant MediaPlayerEntityFeature bitmasks (explicitly NO seek bits)
+const MP_PAUSE = 1;
+const MP_PREVIOUS_TRACK = 16;
+const MP_NEXT_TRACK = 32;
+const MP_TURN_ON = 128;
+const MP_TURN_OFF = 256;
+const MP_PLAY = 16384;
+
 function lightSupport(st) {
   const modes = st?.attributes?.supported_color_modes || [];
   return {
@@ -90,6 +98,10 @@ export class Tile {
         e.preventDefault();
         const targetId = this.deviceId || this.spec?.device_id || this.entityId;
         this.ctx.onOpenDevice?.(targetId);
+        return;
+      }
+      if (this.kind === 'media_player' && !e.target.closest('button') && !e.target.closest('.tile-info')) {
+        moreInfo(this.el, this.entityId);
       }
     }, true);
 
@@ -117,11 +129,44 @@ export class Tile {
   }
 
   _buildMedia() {
-    this.btnPlay = h('button', {
-      class: 'mini-btn', 'aria-label': 'Wiedergabe',
-      onClick: (e) => { e.stopPropagation(); this._service('media_player', 'media_play_pause'); },
-    }, icon('mdi:play-pause'));
-    this.btns.append(this.btnPlay);
+    const mk = (ic, label, hidden, fn) => h('button', {
+      type: 'button',
+      class: 'mini-btn',
+      'aria-label': label,
+      title: label,
+      hidden,
+      onClick: (e) => { e.stopPropagation(); fn(); },
+    }, icon(ic));
+
+    this.btnPower = mk('mdi:power', 'Ein/Aus', true, () => {
+      const st = this._st;
+      const feats = Number(st?.attributes?.supported_features || 0);
+      const isOff = !st || st.state === 'off' || st.state === 'standby';
+      if (isOff) {
+        if (feats & MP_TURN_ON) this._service('media_player', 'turn_on');
+        else this._service('media_player', 'toggle');
+      } else {
+        if (feats & MP_TURN_OFF) this._service('media_player', 'turn_off');
+        else this._service('media_player', 'toggle');
+      }
+    });
+    this.btnPrev = mk('mdi:skip-previous', 'Vorheriger Titel', true, () => this._service('media_player', 'media_previous_track'));
+    this.btnPlay = mk('mdi:play', 'Wiedergabe / Pause', true, () => {
+      const st = this._st;
+      const feats = Number(st?.attributes?.supported_features || 0);
+      if ((feats & MP_PLAY) && (feats & MP_PAUSE)) {
+        this._service('media_player', 'media_play_pause');
+      } else if (st?.state === 'playing' && (feats & MP_PAUSE)) {
+        this._service('media_player', 'media_pause');
+      } else if (feats & MP_PLAY) {
+        this._service('media_player', 'media_play');
+      } else {
+        this._service('media_player', 'media_play_pause');
+      }
+    });
+    this.btnNext = mk('mdi:skip-next', 'Nächster Titel', true, () => this._service('media_player', 'media_next_track'));
+
+    this.btns.append(this.btnPower, this.btnPrev, this.btnPlay, this.btnNext);
     this.el.classList.add('media');
   }
 
@@ -250,7 +295,7 @@ export class Tile {
     const subSensorSig = Array.isArray(this.spec.sub_sensors)
       ? this.spec.sub_sensors.map((s) => `${s.entity_id}:${hass.states[s.entity_id]?.state}`).join(',')
       : '';
-    const stateKey = `${st?.state}|${st?.attributes?.brightness}|${st?.attributes?.current_position}|${st?.attributes?.rgb_color}|${st?.last_updated}|${pw?.state}|${this._optimisticOn}|${this.spec.icon}|${this.spec.category}|${subSensorSig}`;
+    const stateKey = `${st?.state}|${st?.attributes?.brightness}|${st?.attributes?.current_position}|${st?.attributes?.rgb_color}|${st?.attributes?.supported_features}|${st?.attributes?.entity_picture}|${st?.attributes?.media_title}|${st?.last_updated}|${pw?.state}|${this._optimisticOn}|${this.spec.icon}|${this.spec.category}|${subSensorSig}`;
     if (this._rendered && this._stateKey === stateKey) return;
     this._rendered = true;
     this._stateKey = stateKey;
@@ -292,8 +337,10 @@ export class Tile {
   }
 
   _stateText(hass, st, pw, active) {
-    if (this.spec.category === 'bodenmessgeraet' && Array.isArray(this.spec.sub_sensors) && this.spec.sub_sensors.length > 0) {
-      const orderWeight = { moisture: 0, soil_moisture: 0, humidity: 0, temperature: 1 };
+    if (['bodenmessgeraet', 'raummessgeraet'].includes(this.spec.category) && Array.isArray(this.spec.sub_sensors) && this.spec.sub_sensors.length > 0) {
+      const orderWeight = this.spec.category === 'bodenmessgeraet'
+        ? { moisture: 0, soil_moisture: 0, humidity: 0, temperature: 1, motion: 2 }
+        : { temperature: 0, humidity: 1, moisture: 2, motion: 3 };
       const sorted = [...this.spec.sub_sensors].sort((a, b) => (orderWeight[a.type] ?? 5) - (orderWeight[b.type] ?? 5));
       const parts = [];
       for (const s of sorted) {
@@ -356,8 +403,27 @@ export class Tile {
       this.el.style.backgroundImage = '';
       delete this.el.dataset.art;
     }
-    this.btnPlay.disabled = unavailable || st?.state === 'off';
+
+    const feats = Number(st?.attributes?.supported_features || 0);
+    const isOff = !st || st.state === 'off' || st.state === 'standby';
+    const canPower = (feats & (MP_TURN_ON | MP_TURN_OFF)) !== 0;
+    const canPrev = (feats & MP_PREVIOUS_TRACK) !== 0;
+    const canPlayPause = (feats & (MP_PLAY | MP_PAUSE)) !== 0;
+    const canNext = (feats & MP_NEXT_TRACK) !== 0;
+
+    this.btnPower.hidden = !canPower;
+    this.btnPower.disabled = unavailable || (isOff ? !(feats & MP_TURN_ON) : !(feats & MP_TURN_OFF));
+    this.btnPower.toggleAttribute('data-on', !unavailable && !isOff);
+
+    this.btnPrev.hidden = !canPrev;
+    this.btnPrev.disabled = unavailable || isOff;
+
+    this.btnPlay.hidden = !canPlayPause;
+    this.btnPlay.disabled = unavailable || isOff || (st?.state === 'playing' ? !(feats & MP_PAUSE) : !(feats & MP_PLAY));
     this.btnPlay.firstChild?.setAttribute('icon', st?.state === 'playing' ? 'mdi:pause' : 'mdi:play');
+
+    this.btnNext.hidden = !canNext;
+    this.btnNext.disabled = unavailable || isOff;
   }
 
   _updateLight(st, active) {

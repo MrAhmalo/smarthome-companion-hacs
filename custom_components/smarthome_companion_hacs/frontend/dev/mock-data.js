@@ -81,6 +81,21 @@ export const MOCK_DATA = {
       state: '48',
       attributes: { friendly_name: 'Luftfeuchtigkeit', unit_of_measurement: '%', device_class: 'humidity' },
     },
+    'binary_sensor.rauchmelder_julian': {
+      entity_id: 'binary_sensor.rauchmelder_julian',
+      state: 'off',
+      attributes: { friendly_name: 'Rauchmelder Julian', device_class: 'smoke' },
+    },
+    'light.phillips_hue_vintage_1': {
+      entity_id: 'light.phillips_hue_vintage_1',
+      state: 'unavailable',
+      attributes: { friendly_name: 'Phillips Hue Vintage 1', supported_color_modes: ['brightness', 'color_temp'] },
+    },
+    'light.phillips_hue_vintage_2': {
+      entity_id: 'light.phillips_hue_vintage_2',
+      state: 'off',
+      attributes: { friendly_name: 'Phillips Hue Vintage 2', supported_color_modes: ['brightness', 'color_temp'] },
+    },
 
     // ── Wohnzimmer Room ──
     'cover.rollladen_wohnzimmer': {
@@ -170,6 +185,8 @@ export const MOCK_DATA = {
     { id: 'dev_shelly2pm', name: 'Doppelschalter Garten', manufacturer: 'Shelly', model: 'Shelly 2PM Gen3', area_id: 'garten' },
     { id: 'dev_wasserpumpe', name: 'Wasserpumpe Fenster', manufacturer: 'Tuya', model: 'Smart Plug', area_id: 'garten' },
     { id: 'dev_rollladen_wz', name: 'Rollladen Wohnzimmer', manufacturer: 'Somfy', model: 'RTS IO', area_id: 'wohnzimmer' },
+    { id: 'dev_hue_vintage_1', name: 'Phillips Hue Vintage 1', manufacturer: 'Signify Netherlands B.V.', model: 'LTA005', area_id: 'garten', identifiers: [['zha', '00:17:88:01:0d:bf:df:28']] },
+    { id: 'dev_hue_vintage_2', name: 'Phillips Hue Vintage 2', manufacturer: 'Signify Netherlands B.V.', model: 'LTA005', area_id: 'garten', identifiers: [['zha', '00:17:88:01:0e:6e:3b:35']] },
   ],
 
   entities: [
@@ -182,6 +199,8 @@ export const MOCK_DATA = {
     { entity_id: 'switch.doppelschalter_garten_2', device_id: 'dev_shelly2pm', area_id: 'garten', name: 'Kanal 2 Teichpumpe' },
     { entity_id: 'switch.wasserpumpe_fenster', device_id: 'dev_wasserpumpe', area_id: 'garten', name: 'Wasserpumpe Fenster' },
     { entity_id: 'cover.rollladen_wohnzimmer', device_id: 'dev_rollladen_wz', area_id: 'wohnzimmer', name: 'Rollladen Wohnzimmer' },
+    { entity_id: 'light.phillips_hue_vintage_1', device_id: 'dev_hue_vintage_1', area_id: 'garten', platform: 'zha', disabled_by: 'user', hidden_by: 'integration', name: null },
+    { entity_id: 'light.phillips_hue_vintage_2', device_id: 'dev_hue_vintage_2', area_id: 'garten', platform: 'zha', disabled_by: null, hidden_by: 'integration', name: null },
   ],
 
   groups: {
@@ -212,6 +231,7 @@ export const MOCK_DATA = {
   },
 
   config: {
+    ui_scale: 'medium',
     greetings: {
       morning: 'Guten Morgen',
       day: 'Guten Tag',
@@ -268,6 +288,7 @@ export const MOCK_DATA = {
         icon: 'mdi:home',
         always_open: true,
         sensors: {
+          smoke: ['binary_sensor.rauchmelder_julian'],
           temperature: ['sensor.temperatur_julian'],
           humidity: ['sensor.luftfeuchtigkeit_julian'],
         },

@@ -849,8 +849,34 @@ export class Settings {
   _tabNavAndDesign() {
     this.draft.nav ||= [];
     this.draft.views ||= {};
+    if (!['small', 'medium', 'large'].includes(this.draft.ui_scale)) {
+      this.draft.ui_scale = 'medium';
+    }
     const viewsCfg = this.draft.views;
     const presets = (this.draft.color_presets ||= []);
+
+    const SCALE_CHOICES = [
+      ['small', 'Klein', 'Kompakt · mehr Übersicht'],
+      ['medium', 'Mittel', 'Standard · ausgewogen'],
+      ['large', 'Groß', 'Größere Schrift & Icons'],
+    ];
+    const scaleRow = h('div', { class: 'scale-options', role: 'group', 'aria-label': 'Dashboard-Skalierung' });
+    const renderScaleRow = () => scaleRow.replaceChildren(...SCALE_CHOICES.map(([val, title, sub]) => {
+      const selected = this.draft.ui_scale === val;
+      return h('button', {
+        type: 'button',
+        class: `scale-card${selected ? ' selected' : ''}`,
+        ...(selected ? { 'data-selected': '' } : {}),
+        onClick: () => {
+          this.draft.ui_scale = val;
+          renderScaleRow();
+        },
+      },
+      icon('mdi:format-size'),
+      h('div', { class: 'scale-card-title' }, title),
+      h('div', { class: 'scale-card-sub' }, sub));
+    }));
+    renderScaleRow();
 
     // Built-in theme views configuration cards
     const viewCards = BUILTIN_VIEWS.filter((v) => v.id !== 'overview').map((v) => {
@@ -913,6 +939,10 @@ export class Settings {
     renderColors();
 
     return [
+      this._title('Darstellung & Skalierung'),
+      this._hint('• Globale Größe für Schriften, Icons & Abstände'),
+      scaleRow,
+
       this._title('Untere Navigationsleiste'),
       this._hint('• Direktsprung zu eingebauten Ansichten\n• Reihenfolge per Drag & Drop oder Pfeile'),
       this._list(this.draft.nav, {

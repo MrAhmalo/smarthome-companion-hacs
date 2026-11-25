@@ -32,6 +32,12 @@ class CompanionDashboardPanel extends HTMLElement {
     this._scrollPositions = new Map();
     this._renderedKey = null;
     this._scrollRestoreSeq = 0;
+    this._restoringScrollUntil = 0;
+    this._activeScrollEl = null;
+    this._moreInfoScrollSnap = null;
+    this._headerPortaled = false;
+    this._headerObserver = null;
+    this._headerPortalRoot = null;
     this._components = [];
     this._data = null;
     this._raf = 0;
@@ -85,8 +91,30 @@ class CompanionDashboardPanel extends HTMLElement {
     this._unsub = null;
     this._ro?.disconnect();
     this._ro = null;
+    this._teardownHeaderPortal();
+    if (this._boundScrollEl && this._onContainerScroll) {
+      this._boundScrollEl.removeEventListener('scroll', this._onContainerScroll);
+      this._boundScrollEl = null;
+    }
+    if (this._onMoreInfo) {
+      this.removeEventListener('hass-more-info', this._onMoreInfo);
+      this._onMoreInfo = null;
+    }
     if (typeof window !== 'undefined') {
       window.removeEventListener('popstate', this._onPopState);
+      if (this._onAnyScroll) {
+        window.removeEventListener('scroll', this._onAnyScroll, true);
+        this._onAnyScroll = null;
+      }
+      if (this._cancelScrollRestore) {
+        window.removeEventListener('wheel', this._cancelScrollRestore);
+        window.removeEventListener('touchmove', this._cancelScrollRestore);
+        this._cancelScrollRestore = null;
+      }
+      if (this._onDialogClosed) {
+        window.removeEventListener('dialog-closed', this._onDialogClosed);
+        this._onDialogClosed = null;
+      }
     }
     this._destroyComponents();
     this._roomModal?.destroy?.();
@@ -140,28 +168,298 @@ class CompanionDashboardPanel extends HTMLElement {
     this._content = h('div');
     this._toolbar = h('div', { class: 'toolbar' },
       this._menuBtn, this._backBtn, h('div', { class: 'spacer' }), this._wizardBtn, this._editBtn, this._settingsBtn);
-    this._page = h('div', { class: 'page' }, this._toolbar, this._content);
+    this._stickyBannerSlot = h('div', { class: 'sticky-banner-slot' });
+    this._stickyHeader = h('div', { class: 'cd-sticky-header' }, this._toolbar, this._stickyBannerSlot);
+    this._page = h('div', { class: 'page' }, this._stickyHeader, this._content);
     this.shadowRoot.replaceChildren(style, this._page);
+
+    this._onMoreInfo = () => {
+      const key = this._currentScrollKey();
+      const { el, y } = this._readScrollY();
+      if (y > 0) this._writeStoredScroll(key, y);
+      this._lastScrollEl = el;
+      this._moreInfoScrollSnap = {
+        key,
+        y: Math.max(y, this._readStoredScroll(key) || 0),
+        el: this._activeScrollEl || el,
+      };
+    };
+    this.addEventListener('hass-more-info', this._onMoreInfo);
 
     if (typeof window !== 'undefined') {
       window.addEventListener('popstate', this._onPopState);
+      this._onAnyScroll = (e) => {
+        if (Date.now() < this._restoringScrollUntil || !this._data) return;
+        const target = e.target;
+        if (!target) return;
+        const isDoc = target === document || target === window || target === document.documentElement || target === document.body;
+        if (!isDoc) {
+          if (!(target instanceof Element)) return;
+          if (target.closest?.('.dialog-body, .overlay, .ep-list, .cdd-list, .ip-grid, .badges, .nav')) {
+            return;
+          }
+          const ov = getComputedStyle(target).overflowY;
+          const scrollable = (ov === 'auto' || ov === 'scroll' || ov === 'overlay') && target.scrollHeight > target.clientHeight + 2;
+          if (!scrollable) return;
+          if (target !== this && !(typeof target.contains === 'function' && target.contains(this))) return;
+        }
+        const docEl = document.scrollingElement || document.documentElement;
+        const y = isDoc
+          ? (window.scrollY || docEl?.scrollTop || 0)
+          : (target.scrollTop || 0);
+        this._activeScrollEl = isDoc ? docEl : target;
+        this._lastScrollEl = this._activeScrollEl;
+        this._writeStoredScroll(this._currentScrollKey(), y);
+      };
+      window.addEventListener('scroll', this._onAnyScroll, { capture: true, passive: true });
+
+      this._cancelScrollRestore = () => {
+        this._restoringScrollUntil = 0;
+        this._scrollRestoreSeq++;
+      };
+      window.addEventListener('wheel', this._cancelScrollRestore, { passive: true });
+      window.addEventListener('touchmove', this._cancelScrollRestore, { passive: true });
+
+      this._onDialogClosed = () => {
+        if (this._moreInfoScrollSnap && this._moreInfoScrollSnap.key === this._currentScrollKey() && this._moreInfoScrollSnap.y > 0) {
+          const snap = this._moreInfoScrollSnap;
+          this._moreInfoScrollSnap = null;
+          this._restoreScroll(snap.key, snap.y, snap.el);
+        }
+      };
+      window.addEventListener('dialog-closed', this._onDialogClosed);
       this._syncRouteFromHash(false);
     }
+    this._onContainerScroll = (e) => {
+      if (Date.now() < this._restoringScrollUntil || !this._data) return;
+      const sc = e.currentTarget;
+      if (!sc) return;
+      this._activeScrollEl = sc;
+      this._lastScrollEl = sc;
+      this._writeStoredScroll(this._currentScrollKey(), sc.scrollTop || 0);
+    };
+    this._syncHeaderPortal();
     this._syncToolbar();
     this._load();
     this._subscribe();
   }
 
+  _bindScrollContainer() {
+    const sc = this._getScrollContainer();
+    const docEl = typeof document !== 'undefined' ? (document.scrollingElement || document.documentElement) : null;
+    if (!sc || sc === docEl || sc === document.body) return sc;
+    if (this._boundScrollEl !== sc && this._onContainerScroll) {
+      if (this._boundScrollEl) {
+        this._boundScrollEl.removeEventListener('scroll', this._onContainerScroll);
+      }
+      sc.addEventListener('scroll', this._onContainerScroll, { passive: true });
+      this._boundScrollEl = sc;
+    }
+    return sc;
+  }
+
+  _nextComposedParent(el) {
+    if (!el) return null;
+    if (el.assignedSlot) return el.assignedSlot;
+    if (el.parentElement) return el.parentElement;
+    const rn = el.getRootNode?.();
+    return rn instanceof ShadowRoot ? rn.host : null;
+  }
+
+  _findHaHeaderRoot() {
+    if (typeof document === 'undefined') return null;
+    let node = this;
+    while (node) {
+      if (node.tagName === 'HUI-ROOT' && node.shadowRoot) {
+        const sr = node.shadowRoot;
+        const toolbar = sr.querySelector('.header .toolbar, .toolbar');
+        if (toolbar) {
+          return {
+            root: node,
+            shadowRoot: sr,
+            header: sr.querySelector('.header') || toolbar.parentElement,
+            toolbar,
+            actionItems: toolbar.querySelector('.action-items') || toolbar,
+          };
+        }
+      }
+      node = this._nextComposedParent(node);
+    }
+    return null;
+  }
+
+  _teardownHeaderPortal() {
+    this._headerObserver?.disconnect();
+    this._headerObserver = null;
+    if (this._headerPortalRoot?.shadowRoot) {
+      this._headerPortalRoot.shadowRoot.getElementById('cd-ha-header-actions')?.remove();
+      this._headerPortalRoot.shadowRoot.getElementById('cd-ha-header-edit-banner')?.remove();
+    } else if (typeof document !== 'undefined') {
+      document.querySelectorAll('hui-root').forEach((hr) => {
+        hr.shadowRoot?.getElementById('cd-ha-header-actions')?.remove();
+        hr.shadowRoot?.getElementById('cd-ha-header-edit-banner')?.remove();
+      });
+    }
+    this._headerPortalRoot = null;
+    this._headerPortaled = false;
+  }
+
+  _syncHeaderPortal() {
+    const haHeader = this._findHaHeaderRoot();
+    const isAdmin = !!this._data?.user?.is_admin;
+
+    if (!haHeader) {
+      if (this._headerPortaled) {
+        this._teardownHeaderPortal();
+      }
+      this._wizardBtn?.removeAttribute('data-portaled');
+      this._editBtn?.removeAttribute('data-portaled');
+      this._settingsBtn?.removeAttribute('data-portaled');
+      if (this._editMode && this._editBanner && this._stickyBannerSlot && this._editBanner.parentNode !== this._stickyBannerSlot) {
+        this._stickyBannerSlot.replaceChildren(this._editBanner);
+      } else if (!this._editMode) {
+        this._editBanner?.remove();
+      }
+      return;
+    }
+
+    this._headerPortaled = true;
+    this._headerPortalRoot = haHeader.root;
+    this._wizardBtn?.setAttribute('data-portaled', '');
+    this._editBtn?.setAttribute('data-portaled', '');
+    this._settingsBtn?.setAttribute('data-portaled', '');
+    this._editBanner?.remove();
+
+    const sr = haHeader.shadowRoot;
+    if (!this._headerObserver && sr) {
+      this._headerObserver = new MutationObserver(debounce(() => {
+        if (!this.isConnected) return;
+        const missingActions = isAdmin && !sr.getElementById('cd-ha-header-actions');
+        const missingBanner = this._editMode && !sr.getElementById('cd-ha-header-edit-banner');
+        if (missingActions || missingBanner) this._syncHeaderPortal();
+      }, 60));
+      this._headerObserver.observe(sr, { childList: true, subtree: true });
+    }
+
+    let actionHost = sr.getElementById('cd-ha-header-actions');
+    if (!isAdmin) {
+      actionHost?.remove();
+    } else {
+      if (!actionHost) {
+        actionHost = h('div', {
+          id: 'cd-ha-header-actions',
+          style: {
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '2px',
+            marginRight: '4px',
+            paddingRight: '6px',
+            borderRight: '1px solid rgba(128,128,128,0.28)',
+          },
+        });
+        const mkPortalBtn = (ic, label, onClick) => {
+          const btn = h('button', {
+            type: 'button',
+            title: label,
+            'aria-label': label,
+            style: {
+              width: '40px',
+              height: '40px',
+              minWidth: '40px',
+              borderRadius: '50%',
+              border: '0',
+              background: 'transparent',
+              color: 'inherit',
+              cursor: 'pointer',
+              display: 'inline-grid',
+              placeItems: 'center',
+              padding: '0',
+            },
+            onClick,
+          }, icon(ic));
+          return btn;
+        };
+        const pWizard = mkPortalBtn('mdi:plus-circle-outline', 'Gerät einrichten', () => this._openWizard());
+        const pEdit = mkPortalBtn('mdi:pencil', 'Bearbeitungsmodus', () => this._toggleEditMode());
+        const pSettings = mkPortalBtn('mdi:cog-outline', 'Dashboard einrichten', () => this._openSettings());
+        actionHost.append(pWizard, pEdit, pSettings);
+        haHeader.actionItems.prepend(actionHost);
+      }
+      const pEditBtn = actionHost.children?.[1];
+      if (pEditBtn) {
+        pEditBtn.style.background = this._editMode ? 'var(--primary-color, #03a9f4)' : 'transparent';
+        pEditBtn.style.color = this._editMode ? '#fff' : 'inherit';
+        pEditBtn.toggleAttribute('data-active', !!this._editMode);
+      }
+    }
+
+    let pBanner = sr.getElementById('cd-ha-header-edit-banner');
+    if (this._editMode && haHeader.header) {
+      if (!pBanner) {
+        pBanner = h('div', {
+          id: 'cd-ha-header-edit-banner',
+          style: {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            padding: '6px 16px',
+            background: 'color-mix(in srgb, var(--primary-color, #03a9f4) 22%, var(--app-header-background-color, #1a1a1a))',
+            borderTop: '1px solid var(--primary-color, #03a9f4)',
+            color: 'var(--app-header-text-color, var(--primary-text-color, #fff))',
+            fontSize: '13px',
+            fontWeight: '600',
+          },
+        },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0' } },
+          h('ha-icon', { icon: 'mdi:pencil', style: { color: 'var(--primary-color, #03a9f4)', '--mdc-icon-size': '18px' } }),
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, 'Bearbeitungsmodus: Kachel oder Raum tippen')),
+        h('button', {
+          type: 'button',
+          style: {
+            padding: '5px 14px',
+            minHeight: '32px',
+            borderRadius: '16px',
+            border: '0',
+            background: 'var(--primary-color, #03a9f4)',
+            color: '#fff',
+            fontSize: '12px',
+            fontWeight: '700',
+            cursor: 'pointer',
+            flex: 'none',
+          },
+          onClick: () => this._toggleEditMode(),
+        }, 'Fertig'));
+        haHeader.header.append(pBanner);
+      }
+    } else {
+      pBanner?.remove();
+    }
+  }
+
   _syncToolbar() {
     if (!this._toolbar) return;
+    this._syncHeaderPortal();
+    this._bindScrollContainer();
     const anyVisible = [this._menuBtn, this._backBtn, this._wizardBtn, this._editBtn, this._settingsBtn]
-      .some((b) => b && !b.hidden);
+      .some((b) => b && !b.hidden && !b.hasAttribute('data-portaled'));
     this._toolbar.hidden = !anyVisible;
+    if (this._stickyHeader) {
+      const hasBanner = !!this._stickyBannerSlot?.children?.length;
+      this._stickyHeader.hidden = !anyVisible && !hasBanner;
+    }
   }
 
   _syncRouteFromHash(shouldRender = true) {
     if (typeof window === 'undefined') return;
-    if (shouldRender && this._data) this._saveCurrentScroll();
+    if (shouldRender && this._data) {
+      const prevKey = this._currentScrollKey();
+      const { el, y } = this._readScrollY();
+      if (y > 0 || !this._scrollPositions.has(prevKey)) {
+        this._writeStoredScroll(prevKey, y);
+        this._lastScrollEl = el;
+      }
+    }
     const raw = (window.location.hash || '').replace(/^#/, '');
     const params = new URLSearchParams(raw);
     const v = params.get('view');
@@ -204,21 +502,59 @@ class CompanionDashboardPanel extends HTMLElement {
     return `view:${this._activeView || 'overview'}`;
   }
 
-  _getScrollContainer() {
-    if (this.scrollTop > 0) return this;
-    let el = this.parentElement || (this.getRootNode?.() instanceof ShadowRoot ? this.getRootNode().host : null);
-    while (el) {
-      if (el.scrollHeight > el.clientHeight + 2) {
-        const ov = getComputedStyle(el).overflowY;
-        if (ov === 'auto' || ov === 'scroll' || ov === 'overlay') return el;
+  _scrollStorageKey(key) {
+    const path = typeof window !== 'undefined' ? window.location.pathname : '';
+    return `cd_scroll_v1:${path}:${key}`;
+  }
+
+  _readStoredScroll(key) {
+    if (this._scrollPositions.has(key)) return this._scrollPositions.get(key);
+    try {
+      const raw = sessionStorage.getItem(this._scrollStorageKey(key));
+      if (raw !== null) {
+        const n = Number(raw);
+        if (Number.isFinite(n) && n >= 0) return n;
       }
-      el = el.parentElement || (el.getRootNode?.() instanceof ShadowRoot ? el.getRootNode().host : null);
+    } catch (_) { /* ignore */ }
+    return undefined;
+  }
+
+  _writeStoredScroll(key, y) {
+    const clean = Math.max(0, Math.round(Number(y) || 0));
+    this._scrollPositions.set(key, clean);
+    try {
+      sessionStorage.setItem(this._scrollStorageKey(key), String(clean));
+    } catch (_) { /* ignore */ }
+  }
+
+  _getScrollContainer() {
+    if (this._activeScrollEl && this._activeScrollEl.isConnected) {
+      const docEl = document.scrollingElement || document.documentElement;
+      if (this._activeScrollEl === docEl || this._activeScrollEl.scrollHeight > this._activeScrollEl.clientHeight + 2) {
+        return this._activeScrollEl;
+      }
     }
-    return document.scrollingElement || document.documentElement;
+    if (this.scrollTop > 0) return this;
+    let firstOverflow = null;
+    let el = this._nextComposedParent(this);
+    while (el) {
+      if (el instanceof Element) {
+        const ov = getComputedStyle(el).overflowY;
+        const isScrollStyle = ov === 'auto' || ov === 'scroll' || ov === 'overlay';
+        if (isScrollStyle && el.scrollHeight > el.clientHeight + 2) {
+          return el;
+        }
+        if (!firstOverflow && (isScrollStyle || el.id === 'view' || /^(HUI-VIEW-CONTAINER|HA-PANEL-LOVELACE)$/.test(el.tagName || ''))) {
+          firstOverflow = el;
+        }
+      }
+      el = this._nextComposedParent(el);
+    }
+    return firstOverflow || document.scrollingElement || document.documentElement;
   }
 
   _readScrollY() {
-    const el = this._getScrollContainer();
+    const el = this._bindScrollContainer() || this._getScrollContainer();
     const docEl = document.scrollingElement || document.documentElement;
     if (!el || el === docEl || el === document.body) {
       const y = (typeof window !== 'undefined' ? window.scrollY : 0) || docEl?.scrollTop || 0;
@@ -230,34 +566,52 @@ class CompanionDashboardPanel extends HTMLElement {
   _writeScrollY(y, elHint = null) {
     const targetY = Math.max(0, Number(y) || 0);
     const docEl = document.scrollingElement || document.documentElement;
-    const el = (elHint && elHint.isConnected) ? elHint : this._getScrollContainer();
+    const el = (elHint && elHint.isConnected) ? elHint : (this._bindScrollContainer() || this._getScrollContainer());
     if (!el || el === docEl || el === document.body) {
       if (typeof window !== 'undefined') window.scrollTo(0, targetY);
       if (docEl) docEl.scrollTop = targetY;
-      return;
+      return docEl ? docEl.scrollTop : targetY;
     }
     el.scrollTop = targetY;
+    return el.scrollTop;
   }
 
   _saveCurrentScroll() {
     const { el, y } = this._readScrollY();
-    this._scrollPositions.set(this._currentScrollKey(), y);
+    this._writeStoredScroll(this._currentScrollKey(), y);
     this._lastScrollEl = el;
   }
 
-  _restoreScroll(key, fallback = 0) {
-    const targetY = this._scrollPositions.has(key) ? this._scrollPositions.get(key) : fallback;
+  _restoreScroll(key, fallback = 0, elHintArg = null) {
+    const stored = this._readStoredScroll(key);
+    const targetY = stored !== undefined ? stored : fallback;
     const seq = ++this._scrollRestoreSeq;
-    const elHint = this._lastScrollEl;
-    this._writeScrollY(targetY, elHint);
-    requestAnimationFrame(() => {
-      if (seq !== this._scrollRestoreSeq) return;
-      this._writeScrollY(targetY, elHint);
-      setTimeout(() => {
-        if (seq !== this._scrollRestoreSeq) return;
-        this._writeScrollY(targetY, elHint);
-      }, 60);
-    });
+    const elHint = elHintArg || this._lastScrollEl || this._activeScrollEl;
+    if (targetY > 0) this._restoringScrollUntil = Date.now() + 260;
+    let settled = false;
+    const apply = () => {
+      if (seq !== this._scrollRestoreSeq || settled) return true;
+      const actual = this._writeScrollY(targetY, elHint);
+      if (targetY > 0 && Math.abs((actual || 0) - targetY) <= 2) {
+        settled = true;
+        this._restoringScrollUntil = 0;
+        return true;
+      }
+      return targetY === 0;
+    };
+    apply();
+    if (!settled) {
+      requestAnimationFrame(() => {
+        if (apply()) return;
+        requestAnimationFrame(() => {
+          if (apply()) return;
+          setTimeout(() => {
+            if (apply()) return;
+            setTimeout(() => { apply(); }, 120);
+          }, 80);
+        });
+      });
+    }
   }
 
   _navigate(target) {
@@ -336,6 +690,8 @@ class CompanionDashboardPanel extends HTMLElement {
 
     this._destroyComponents();
     const { config, layout, user } = this._data;
+    const scale = ['small', 'medium', 'large'].includes(config?.ui_scale) ? config.ui_scale : 'medium';
+    this.setAttribute('data-scale', scale);
     const ctx = {
       hass: this._hass,
       presets: config.color_presets || [],
@@ -363,9 +719,6 @@ class CompanionDashboardPanel extends HTMLElement {
       this._nav = this._makeNavBar(config, user);
       this._components = [this._warningDetail];
       this._content.replaceChildren(this._warningDetail.el, this._nav.el);
-      if (this._editMode && this._editBanner) {
-        this._content.prepend(this._editBanner);
-      }
       this._push();
       this._content.style.minHeight = prevMinH;
       this._restoreScroll(renderKey, 0);
@@ -384,9 +737,6 @@ class CompanionDashboardPanel extends HTMLElement {
         this._nav = this._makeNavBar(config, user);
         this._components = [this._roomDetail];
         this._content.replaceChildren(this._roomDetail.el, this._nav.el);
-        if (this._editMode && this._editBanner) {
-          this._content.prepend(this._editBanner);
-        }
         this._push();
         this._content.style.minHeight = prevMinH;
         this._restoreScroll(renderKey, 0);
@@ -425,9 +775,6 @@ class CompanionDashboardPanel extends HTMLElement {
         this._nav = this._makeNavBar(config, user);
         this._components = [viewInst];
         this._content.replaceChildren(viewInst.el, this._nav.el);
-        if (this._editMode && this._editBanner) {
-          this._content.prepend(this._editBanner);
-        }
         this._push();
         this._content.style.minHeight = prevMinH;
         if (activeView === 'security' && this._pendingSecuritySmokeScroll) {
@@ -493,10 +840,6 @@ class CompanionDashboardPanel extends HTMLElement {
       this._ro.observe(this._roomsWrap);
     }
 
-    if (this._editMode && this._editBanner) {
-      this._content.prepend(this._editBanner);
-    }
-
     this._push();
     this._content.style.minHeight = prevMinH;
     this._restoreScroll(renderKey, 0);
@@ -507,7 +850,9 @@ class CompanionDashboardPanel extends HTMLElement {
     const winW = (typeof window !== 'undefined' ? window.innerWidth : 0) || 1000;
     const width = this._roomsWrap.clientWidth || this._content?.clientWidth || winW;
     const gap = 12;
-    const colCount = Math.max(1, Math.min(this._rooms.length, Math.floor((width + gap) / 360)));
+    const scale = this.getAttribute('data-scale') || 'medium';
+    const minColW = scale === 'large' ? 400 : scale === 'small' ? 320 : 360;
+    const colCount = Math.max(1, Math.min(this._rooms.length, Math.floor((width + gap) / minColW)));
 
     if (colCount === this._colCount && this._roomsCols?.length === colCount) return;
     this._colCount = colCount;
@@ -631,10 +976,10 @@ class CompanionDashboardPanel extends HTMLElement {
             onClick: () => this._toggleEditMode(),
           }, 'Fertig'));
       }
-      this._content?.prepend(this._editBanner);
     } else {
       this._editBanner?.remove();
     }
+    this._syncToolbar();
     this._push();
   }
 

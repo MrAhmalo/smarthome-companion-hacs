@@ -25,9 +25,14 @@ const STYLES = `
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
+  --cd-scale: 1;
+  --cd-pad-scale: 1;
 }
+:host([data-scale="small"]) { --cd-scale: 0.88; --cd-pad-scale: 0.86; }
+:host([data-scale="medium"]) { --cd-scale: 1; --cd-pad-scale: 1; }
+:host([data-scale="large"]) { --cd-scale: 1.14; --cd-pad-scale: 1.12; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-ha-icon { --mdc-icon-size: 22px; display: inline-flex; align-items: center; justify-content: center; }
+ha-icon { --mdc-icon-size: calc(22px * var(--cd-scale)); display: inline-flex; align-items: center; justify-content: center; }
 @keyframes cdSpin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -51,6 +56,21 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 }
 
 /* ── Toolbar / header ── */
+.cd-sticky-header {
+  position: sticky;
+  top: var(--safe-top, 0px);
+  z-index: 40;
+  background: color-mix(in srgb, var(--primary-background-color, #111) 90%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  margin: 0 calc(-16px - var(--safe-right)) 4px calc(-16px - var(--safe-left));
+  padding: 0 calc(16px + var(--safe-right)) 0 calc(16px + var(--safe-left));
+}
+.cd-sticky-header[hidden],
+.cd-sticky-header:not(:has(.toolbar:not([hidden]), .edit-mode-banner)) {
+  display: none !important;
+}
+.icon-btn[data-portaled] { display: none !important; }
 .toolbar { display: flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 2px; min-width: 0; }
 .toolbar:not(:has(> button:not([hidden]))) { display: none; }
 .toolbar .spacer { flex: 1; min-width: 8px; }
@@ -180,20 +200,21 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 }
 .device-room-header ha-icon { color: var(--cd-accent); --mdc-icon-size: 18px; flex: none; }
 .device-room-header .room-count { font-size: 12px; font-weight: 500; color: var(--cd-secondary); }
-.greeting { text-align: center; margin: 0 0 10px; }
-.greeting h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.3px; }
+.greeting { text-align: center; margin: 0 0 calc(10px * var(--cd-pad-scale)); }
+.greeting h1 { margin: 0; font-size: calc(24px * var(--cd-scale)); font-weight: 600; letter-spacing: -0.3px; }
 .badges {
-  display: flex; gap: 8px; overflow-x: auto; justify-content: center; flex-wrap: wrap;
-  padding: 4px 0 14px; scrollbar-width: none;
+  display: flex; gap: calc(8px * var(--cd-pad-scale)); overflow-x: auto; justify-content: center; flex-wrap: wrap;
+  padding: calc(4px * var(--cd-pad-scale)) 0 calc(14px * var(--cd-pad-scale)); scrollbar-width: none;
 }
 .badges:not(:has(> :not([hidden]))) { display: none; }
 .badge {
-  display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 14px 0 10px;
-  border-radius: 19px; background: var(--cd-card); cursor: pointer; border: 0; white-space: nowrap;
-  font-size: 14px; font-weight: 500; --badge-color: var(--cd-accent); position: relative;
+  display: inline-flex; align-items: center; gap: calc(6px * var(--cd-pad-scale)); min-height: calc(38px * var(--cd-scale));
+  padding: 0 calc(14px * var(--cd-pad-scale)) 0 calc(10px * var(--cd-pad-scale));
+  border-radius: 999px; background: var(--cd-card); cursor: pointer; border: 0; white-space: nowrap;
+  font-size: calc(14px * var(--cd-scale)); font-weight: 500; --badge-color: var(--cd-accent); position: relative;
 }
 .badge::after { content: ''; position: absolute; inset: -3px 0; }
-.badge ha-icon { --mdc-icon-size: 20px; color: var(--badge-color); }
+.badge ha-icon { --mdc-icon-size: calc(20px * var(--cd-scale)); color: var(--badge-color); }
 .badge .badge-name { color: var(--cd-secondary); font-weight: 400; }
 .badge:active { transform: scale(0.97); }
 
@@ -219,22 +240,17 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .empty ha-icon { --mdc-icon-size: 48px; opacity: .5; }
 
 /* ── Room (expander) ── */
-.room-head { display: flex; align-items: center; gap: 10px; padding: 10px; min-height: 40px; cursor: pointer; user-select: none; position: relative; touch-action: manipulation; }
+.room-head { display: flex; align-items: center; gap: calc(10px * var(--cd-pad-scale)); padding: calc(10px * var(--cd-pad-scale)); min-height: calc(40px * var(--cd-scale)); cursor: pointer; user-select: none; position: relative; touch-action: manipulation; }
 .room-icon {
-  flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  flex: none; width: calc(40px * var(--cd-scale)); height: calc(40px * var(--cd-scale)); border-radius: 50%; display: grid; place-items: center;
   color: var(--cd-accent); background: rgba(3, 169, 244, 0.15);
   background: color-mix(in srgb, var(--cd-accent) 16%, transparent);
 }
 .room-title { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
-.room-name { font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
-.room-meta { display: flex; gap: 8px; flex-wrap: wrap; overflow: hidden; font-size: 12px; color: var(--cd-secondary); margin-top: 3px; line-height: 1.2; }
-.room-meta[hidden], .room-meta:empty { display: none !important; }
-.room-meta span { display: inline-flex; align-items: center; gap: 3px; }
-.room-meta ha-icon { --mdc-icon-size: 14px; }
-.room-meta .alert { color: var(--cd-active); font-weight: 600; }
-.room-controls { display: flex; gap: 6px; flex-shrink: 0; }
+.room-name { font-size: calc(16px * var(--cd-scale)); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
+.room-controls { display: flex; gap: calc(6px * var(--cd-pad-scale)); flex-shrink: 0; }
 .ctrl-btn {
-  position: relative; width: 38px; height: 38px; border-radius: 50%; border: 0; cursor: pointer;
+  position: relative; width: calc(38px * var(--cd-scale)); height: calc(38px * var(--cd-scale)); border-radius: 50%; border: 0; cursor: pointer;
   display: grid; place-items: center; background: var(--cd-tile-bg); color: var(--cd-secondary);
   transition: transform .15s, background .15s, color .15s; touch-action: manipulation;
 }
@@ -245,7 +261,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   background: color-mix(in srgb, var(--group-color, var(--cd-active)) 18%, transparent);
 }
 .chevron {
-  flex: none; width: 38px; height: 38px; border-radius: 50%;
+  flex: none; width: calc(38px * var(--cd-scale)); height: calc(38px * var(--cd-scale)); border-radius: 50%;
   display: grid; place-items: center;
   background: var(--cd-tile-bg); color: var(--cd-secondary);
   transition: transform .28s cubic-bezier(0.22, 1, 0.36, 1);
@@ -255,7 +271,58 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .room-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .3s ease; }
 .room[data-open] .room-body { grid-template-rows: 1fr; }
 .room-body-inner { overflow: hidden; min-height: 0; }
-.tile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 2px 10px 10px; min-width: 0; width: 100%; }
+.tile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: calc(8px * var(--cd-pad-scale)); padding: calc(2px * var(--cd-pad-scale)) calc(10px * var(--cd-pad-scale)) calc(10px * var(--cd-pad-scale)); min-width: 0; width: 100%; }
+.room-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(6px * var(--cd-pad-scale)) calc(12px * var(--cd-pad-scale));
+  padding: calc(8px * var(--cd-pad-scale)) calc(12px * var(--cd-pad-scale)) calc(10px * var(--cd-pad-scale));
+  border-top: 1px solid rgba(128, 128, 128, 0.12);
+  border-top-color: color-mix(in srgb, var(--primary-text-color, #fff) 8%, transparent);
+  min-width: 0;
+}
+.room-status-bar[hidden], .room-status-bar:empty { display: none !important; }
+.room-status-item {
+  --status-color: var(--cd-accent);
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6px * var(--cd-pad-scale));
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  min-width: 0;
+  max-width: 100%;
+}
+.room-status-badge {
+  width: calc(26px * var(--cd-scale));
+  height: calc(26px * var(--cd-scale));
+  border-radius: 50%;
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--status-color);
+  background: color-mix(in srgb, var(--status-color) 16%, transparent);
+}
+.room-status-badge ha-icon { --mdc-icon-size: calc(15px * var(--cd-scale)); }
+.room-status-val {
+  font-size: calc(13px * var(--cd-scale));
+  font-weight: 600;
+  color: var(--cd-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.room-status-item.alert .room-status-badge {
+  color: #fff;
+  background: var(--status-color, #ef4444);
+}
+.room-status-item.alert .room-status-val {
+  color: var(--status-color, #ef4444);
+  font-weight: 700;
+}
 @container cdpage (max-width: 340px) {
   .tile-grid, .group-sub-grid { grid-template-columns: minmax(0, 1fr); }
   .tile.wide { grid-column: span 1; }
@@ -264,7 +331,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 /* ── Tiles ── */
 .tile {
   --tile-color: var(--cd-active);
-  display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px; min-width: 0; max-width: 100%; overflow: hidden; border-radius: var(--cd-tile-radius, 12px);
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: calc(8px * var(--cd-pad-scale)); padding: calc(10px * var(--cd-pad-scale)); min-width: 0; max-width: 100%; overflow: hidden; border-radius: var(--cd-tile-radius, 12px);
   background: var(--cd-tile-bg); transition: background .2s, opacity .2s;
   position: relative; touch-action: manipulation;
 }
@@ -272,7 +339,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 48px;
+  min-height: calc(48px * var(--cd-scale));
   height: 100%;
   box-sizing: border-box;
 }
@@ -287,7 +354,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .tile.group {
   position: relative;
   gap: 0;
-  padding: 10px;
+  padding: calc(10px * var(--cd-pad-scale));
   border: 1px solid transparent;
   box-sizing: border-box;
   transition: background .2s, border-color .2s;
@@ -300,7 +367,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   display: none;
 }
 .tile.group .tile-feature:not([hidden]) {
-  margin-top: 10px;
+  margin-top: calc(10px * var(--cd-pad-scale));
 }
 .tile.group[data-open] {
   background: var(--cd-tile-bg);
@@ -309,15 +376,15 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   box-shadow: none;
 }
 .tile.group.subgroup {
-  padding: 10px;
+  padding: calc(10px * var(--cd-pad-scale));
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(128, 128, 128, 0.12);
   border-color: color-mix(in srgb, var(--primary-text-color, #fff) 8%, transparent);
   grid-column: span 1;
 }
 @media (hover: hover) {
-  .tile:not(.group):hover {
-    background: color-mix(in srgb, var(--primary-text-color, #fff) 8%, var(--cd-tile-bg));
+  .tile:not(.group):not(.media[data-art]):hover {
+    background-color: color-mix(in srgb, var(--primary-text-color, #fff) 8%, var(--cd-tile-bg));
   }
   .tile.group:not(.subgroup):hover:not(:has(.tile.group.subgroup:hover)):not(:has(.tile:hover)) {
     background: color-mix(in srgb, var(--primary-text-color, #fff) 8%, var(--cd-tile-bg));
@@ -386,28 +453,28 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .sel-buttons { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; justify-content: flex-end; flex-wrap: wrap; }
 .btn-label-mobile { display: none; }
 .btn-label-desktop { display: inline; }
-.tile-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tile-main { display: flex; align-items: center; gap: calc(10px * var(--cd-pad-scale)); min-width: 0; }
 .tile-icon {
-  flex: none; width: 38px; height: 38px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center;
+  flex: none; width: calc(38px * var(--cd-scale)); height: calc(38px * var(--cd-scale)); border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center;
   color: var(--tile-color); background: rgba(128, 128, 128, 0.18);
   background: color-mix(in srgb, var(--tile-color) 18%, transparent);
   transition: background .2s, color .2s; position: relative;
 }
 .tile-icon::after { content: ''; position: absolute; inset: -3px; }
 .tile-icon:active { transform: scale(0.92); }
-.tile-info { flex: 1; min-width: 0; cursor: pointer; }
-.tile-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tile-state { font-size: 12px; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tile-btns { display: flex; gap: 4px; flex: none; }
+.tile-info { flex: 1; min-width: 0; cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+.tile-name { font-size: calc(14px * var(--cd-scale)); line-height: 1.2; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-state { font-size: calc(13.5px * var(--cd-scale)); line-height: 1.2; font-weight: 500; color: var(--cd-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-btns { display: flex; gap: calc(4px * var(--cd-pad-scale)); flex: none; }
 .mini-btn {
-  width: 38px; height: 38px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center;
+  width: calc(38px * var(--cd-scale)); height: calc(38px * var(--cd-scale)); border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center;
   flex-shrink: 0; touch-action: manipulation; position: relative;
   background: rgba(128, 128, 128, 0.2); background: color-mix(in srgb, var(--primary-text-color, #fff) 10%, transparent);
 }
 .mini-btn::after { content: ''; position: absolute; inset: -3px; }
 .mini-btn:disabled { opacity: .35; cursor: default; }
 .mini-btn:not(:disabled):active { transform: scale(0.9); }
-.mini-btn ha-icon { --mdc-icon-size: 20px; }
+.mini-btn ha-icon { --mdc-icon-size: calc(20px * var(--cd-scale)); }
 .tile-feature { display: flex; align-items: center; gap: 10px; padding: 0 2px 2px; flex-wrap: wrap; min-width: 0; }
 .tile-feature[hidden] { display: none; }
 .tile:not(.wide) .tile-feature { gap: 6px; padding-top: 2px; }
@@ -462,8 +529,26 @@ input[type=range].slider::-moz-range-thumb {
 
 /* media + climate cards */
 .tile.media { background-size: cover; background-position: center; position: relative; overflow: hidden; }
-.tile.media[data-art] { background-blend-mode: overlay; background-color: rgba(0,0,0,.55); color: #fff; }
-.tile.media[data-art] .tile-state { color: rgba(255,255,255,.75); }
+.tile.media[data-art],
+.tile.media[data-art]:hover {
+  background-blend-mode: overlay;
+  background-color: rgba(0,0,0,.55);
+  background-size: cover;
+  background-position: center;
+  color: #fff;
+  transform: none;
+  transition: none;
+}
+.tile.media[data-art] .tile-state { color: rgba(255,255,255,.82); }
+.tile.media .tile-btns { gap: calc(4px * var(--cd-pad-scale)); }
+.tile.media .mini-btn[data-on] {
+  color: var(--cd-accent, #03a9f4);
+  background: color-mix(in srgb, var(--cd-accent, #03a9f4) 22%, rgba(0, 0, 0, .25));
+}
+@container cdpage (max-width: 420px) {
+  .tile.media .mini-btn { width: calc(32px * var(--cd-scale)); height: calc(32px * var(--cd-scale)); }
+  .tile.media .mini-btn ha-icon { --mdc-icon-size: calc(18px * var(--cd-scale)); }
+}
 
 /* ── Alerts ── */
 .alert-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--cd-radius); cursor: pointer; }
@@ -569,15 +654,15 @@ input[type=range].slider::-moz-range-thumb {
 /* ── Bottom nav ── */
 .nav {
   position: fixed; left: 50%; bottom: calc(12px + var(--safe-bottom)); transform: translateX(-50%); z-index: 5;
-  display: flex; gap: 8px; padding: 8px; border-radius: 28px;
+  display: flex; gap: calc(8px * var(--cd-pad-scale)); padding: calc(8px * var(--cd-pad-scale)); border-radius: 28px;
   max-width: calc(100vw - 24px - var(--safe-left) - var(--safe-right));
   overflow-x: auto; scrollbar-width: none;
   background: var(--cd-card); box-shadow: 0 4px 24px rgba(0,0,0,.35);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
 }
 .nav-btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 52px; min-height: 44px; height: 46px;
-  padding: 0 18px; border-radius: 23px; border: 0; cursor: pointer; background: var(--cd-tile-bg); font-weight: 600; font-size: 14px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: calc(8px * var(--cd-pad-scale)); min-width: 52px; min-height: calc(44px * var(--cd-scale)); height: calc(46px * var(--cd-scale));
+  padding: 0 calc(18px * var(--cd-pad-scale)); border-radius: 23px; border: 0; cursor: pointer; background: var(--cd-tile-bg); font-weight: 600; font-size: calc(14px * var(--cd-scale)); flex: none;
 }
 .nav-btn:active { transform: scale(0.96); }
 
@@ -1121,7 +1206,7 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
 .cover-detail-row {
   display: flex; flex-direction: column; gap: 10px; min-width: 0; width: 100%; max-width: 100%; overflow: hidden; position: relative;
   padding: 12px 14px; border-radius: var(--cd-tile-radius, 12px); background: var(--cd-tile-bg);
-  transition: background .15s;
+  transition: background .15s; cursor: pointer;
 }
 .cover-detail-top {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; width: 100%;
@@ -1132,8 +1217,8 @@ details.sub summary { cursor: pointer; font-size: 13px; font-weight: 600; paddin
   color: #9c27b0; background: rgba(156, 39, 176, 0.18);
 }
 .cover-detail-texts { flex: 1; min-width: 0; overflow: hidden; }
-.cover-detail-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cover-detail-state { font-size: 12px; color: #ce93d8; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cover-detail-name { font-size: calc(14px * var(--cd-scale)); line-height: 1.2; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cover-detail-state { font-size: calc(13.5px * var(--cd-scale)); line-height: 1.2; color: #ce93d8; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cover-slider-wrap {
   display: flex; align-items: center; gap: 8px; padding: 0 2px; min-width: 0; width: 100%; overflow: hidden;
 }
@@ -1383,11 +1468,39 @@ details.adv-options summary {
 }
 
 /* ── Mobile Dialog, Safe-Area & Touch Responsive ── */
+@container cdpage (max-width: 560px) {
+  .subview-head { padding: 12px; gap: 10px; }
+  .subview-actions { width: 100%; display: flex; flex-wrap: wrap; gap: 8px; }
+  .subview-actions .btn { flex: 1 1 auto; min-height: 40px; padding: 0 12px; }
+  .blinds-room-head { padding: 12px; gap: 8px; }
+  .blinds-room-body { padding: 0 10px 10px; gap: 8px; }
+  .blinds-room-title { font-size: calc(15px * var(--cd-scale)); }
+  .blinds-room-actions { gap: 6px; }
+  .blinds-room-actions .mini-btn { width: calc(36px * var(--cd-scale)); height: calc(36px * var(--cd-scale)); }
+  .cover-detail-row { padding: 12px; gap: 10px; }
+  .cover-detail-top { flex-wrap: wrap; gap: 10px; }
+  .cover-detail-info { flex: 1 1 100%; }
+  .cover-detail-name { font-size: calc(15px * var(--cd-scale)); white-space: normal; line-height: 1.25; }
+  .cover-detail-state { font-size: calc(13.5px * var(--cd-scale)); }
+  .cover-detail-row .tile-btns { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; max-width: none; }
+  .cover-detail-row .mini-btn { width: 100%; height: calc(40px * var(--cd-scale)); border-radius: 12px; }
+  .cover-detail-row .mini-btn ha-icon { --mdc-icon-size: calc(22px * var(--cd-scale)); }
+  .cover-slider-wrap input[type=range].slider { height: 28px; border-radius: 14px; }
+  .cover-slider-wrap input[type=range].slider::-webkit-slider-runnable-track { height: 28px; border-radius: 14px; }
+  .cover-slider-wrap input[type=range].slider::-webkit-slider-thumb { height: 16px; margin-top: 6px; }
+  .cover-slider-wrap input[type=range].slider::-moz-range-track { height: 28px; border-radius: 14px; }
+  .cover-slider-wrap input[type=range].slider::-moz-range-thumb { height: 16px; }
+}
+
 @media (max-width: 650px) {
   .page {
     padding: var(--safe-top) calc(10px + var(--safe-right)) calc(92px + var(--safe-bottom)) calc(10px + var(--safe-left));
   }
-  .greeting h1 { font-size: 22px; }
+  .cd-sticky-header {
+    margin: 0 calc(-10px - var(--safe-right)) 4px calc(-10px - var(--safe-left));
+    padding: 0 calc(10px + var(--safe-right)) 0 calc(10px + var(--safe-left));
+  }
+  .greeting h1 { font-size: calc(22px * var(--cd-scale)); }
   .edit-mode-banner { padding: 10px 12px; gap: 10px; flex-wrap: wrap; }
   .edit-mode-banner-info span { white-space: normal; line-height: 1.3; }
   .edit-mode-banner-btn { padding: 8px 14px; min-height: 40px; }
@@ -1788,6 +1901,30 @@ details.adv-options summary {
   from { opacity: 0; transform: translateY(42px); }
   to { opacity: 1; transform: translateY(0); }
 }
+@container cdpage (max-width: 560px) {
+  .subview-head { padding: 12px; gap: 10px; }
+  .subview-actions { width: 100%; display: flex; flex-wrap: wrap; gap: 8px; }
+  .subview-actions .btn { flex: 1 1 auto; min-height: 40px; padding: 0 12px; }
+  .blinds-room-head { padding: 12px; gap: 8px; }
+  .blinds-room-body { padding: 0 10px 10px; gap: 8px; }
+  .blinds-room-title { font-size: calc(15px * var(--cd-scale)); }
+  .blinds-room-actions { gap: 6px; }
+  .blinds-room-actions .mini-btn { width: calc(36px * var(--cd-scale)); height: calc(36px * var(--cd-scale)); }
+  .cover-detail-row { padding: 12px; gap: 10px; }
+  .cover-detail-top { flex-wrap: wrap; gap: 10px; }
+  .cover-detail-info { flex: 1 1 100%; }
+  .cover-detail-name { font-size: calc(15px * var(--cd-scale)); white-space: normal; line-height: 1.25; }
+  .cover-detail-state { font-size: calc(13.5px * var(--cd-scale)); }
+  .cover-detail-row .tile-btns { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; max-width: none; }
+  .cover-detail-row .mini-btn { width: 100%; height: calc(40px * var(--cd-scale)); border-radius: 12px; }
+  .cover-detail-row .mini-btn ha-icon { --mdc-icon-size: calc(22px * var(--cd-scale)); }
+  .cover-slider-wrap input[type=range].slider { height: 28px; border-radius: 14px; }
+  .cover-slider-wrap input[type=range].slider::-webkit-slider-runnable-track { height: 28px; border-radius: 14px; }
+  .cover-slider-wrap input[type=range].slider::-webkit-slider-thumb { height: 16px; margin-top: 6px; }
+  .cover-slider-wrap input[type=range].slider::-moz-range-track { height: 28px; border-radius: 14px; }
+  .cover-slider-wrap input[type=range].slider::-moz-range-thumb { height: 16px; }
+}
+
 @media (max-width: 650px) {
   .overlay.wn-overlay {
     align-items: flex-end;
@@ -2210,17 +2347,61 @@ details.adv-options summary {
   width: 100%; min-height: 360px; border: 0; border-radius: 12px; background: #0f172a;
 }
 
+@container cdpage (max-width: 560px) {
+  .subview-head { padding: 12px; gap: 10px; }
+  .subview-actions { width: 100%; display: flex; flex-wrap: wrap; gap: 8px; }
+  .subview-actions .btn { flex: 1 1 auto; min-height: 40px; padding: 0 12px; }
+  .blinds-room-head { padding: 12px; gap: 8px; }
+  .blinds-room-body { padding: 0 10px 10px; gap: 8px; }
+  .blinds-room-title { font-size: calc(15px * var(--cd-scale)); }
+  .blinds-room-actions { gap: 6px; }
+  .blinds-room-actions .mini-btn { width: calc(36px * var(--cd-scale)); height: calc(36px * var(--cd-scale)); }
+  .cover-detail-row { padding: 12px; gap: 10px; }
+  .cover-detail-top { flex-wrap: wrap; gap: 10px; }
+  .cover-detail-info { flex: 1 1 100%; }
+  .cover-detail-name { font-size: calc(15px * var(--cd-scale)); white-space: normal; line-height: 1.25; }
+  .cover-detail-state { font-size: calc(13.5px * var(--cd-scale)); }
+  .cover-detail-row .tile-btns { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; max-width: none; }
+  .cover-detail-row .mini-btn { width: 100%; height: calc(40px * var(--cd-scale)); border-radius: 12px; }
+  .cover-detail-row .mini-btn ha-icon { --mdc-icon-size: calc(22px * var(--cd-scale)); }
+  .cover-slider-wrap input[type=range].slider { height: 28px; border-radius: 14px; }
+  .cover-slider-wrap input[type=range].slider::-webkit-slider-runnable-track { height: 28px; border-radius: 14px; }
+  .cover-slider-wrap input[type=range].slider::-webkit-slider-thumb { height: 16px; margin-top: 6px; }
+  .cover-slider-wrap input[type=range].slider::-moz-range-track { height: 28px; border-radius: 14px; }
+  .cover-slider-wrap input[type=range].slider::-moz-range-thumb { height: 16px; }
+}
+
 @media (max-width: 650px) {
   .room-detail-head { padding: 12px; gap: 10px; }
-  .cover-detail-row { padding: 10px 12px; }
-  .subview-head { padding: 12px; }
+  .cover-detail-row { padding: 12px; gap: 10px; }
+  .subview-head { padding: 12px; gap: 10px; }
+  .subview-actions { width: 100%; display: flex; flex-wrap: wrap; gap: 8px; }
+  .subview-actions .btn { flex: 1 1 auto; min-height: 40px; padding: 0 12px; }
   .subview-section { padding: 12px; }
+  .blinds-room-card { padding: 0; }
+  .blinds-room-head { padding: 12px; gap: 8px; }
+  .blinds-room-body { padding: 0 10px 10px; gap: 8px; }
   .nav { padding: 6px; gap: 4px; max-width: calc(100vw - 16px - var(--safe-left) - var(--safe-right)); }
   .nav-btn { padding: 0 12px; min-width: 44px; height: 42px; min-height: 42px; font-size: 12.5px; gap: 5px; }
 }
 @media (max-width: 520px) {
   .nav-btn:not([data-active]) { padding: 0 10px; min-width: 44px; }
   .nav-btn:not([data-active]) span { display: none; }
+  .blinds-room-title { font-size: calc(15px * var(--cd-scale)); }
+  .blinds-room-actions { gap: 6px; }
+  .blinds-room-actions .mini-btn { width: calc(36px * var(--cd-scale)); height: calc(36px * var(--cd-scale)); }
+  .cover-detail-top { flex-wrap: wrap; gap: 10px; }
+  .cover-detail-info { flex: 1 1 100%; }
+  .cover-detail-name { font-size: calc(15px * var(--cd-scale)); white-space: normal; line-height: 1.25; }
+  .cover-detail-state { font-size: calc(13.5px * var(--cd-scale)); }
+  .cover-detail-row .tile-btns { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; max-width: none; }
+  .cover-detail-row .mini-btn { width: 100%; height: calc(40px * var(--cd-scale)); border-radius: 12px; }
+  .cover-detail-row .mini-btn ha-icon { --mdc-icon-size: calc(22px * var(--cd-scale)); }
+  .cover-slider-wrap input[type=range].slider { height: 28px; border-radius: 14px; }
+  .cover-slider-wrap input[type=range].slider::-webkit-slider-runnable-track { height: 28px; border-radius: 14px; }
+  .cover-slider-wrap input[type=range].slider::-webkit-slider-thumb { height: 16px; margin-top: 6px; }
+  .cover-slider-wrap input[type=range].slider::-moz-range-track { height: 28px; border-radius: 14px; }
+  .cover-slider-wrap input[type=range].slider::-moz-range-thumb { height: 16px; }
 }
 
 /* ── Smoke Detector Room & Home Alerts ── */
@@ -2321,6 +2502,54 @@ details.adv-options summary {
   outline-offset: 2px;
   cursor: pointer !important;
 }
+
+/* ── Global Scale Selector & Scaled Secondary Cards ── */
+.scale-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.scale-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 12px 10px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(128,128,128,.22);
+  background: var(--cd-tile-bg);
+  color: inherit;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color .15s, background .15s, transform .1s;
+}
+.scale-card ha-icon { --mdc-icon-size: 22px; color: var(--cd-secondary); }
+.scale-card-title { font-size: 13px; font-weight: 700; color: var(--cd-text); }
+.scale-card-sub { font-size: 11px; color: var(--cd-secondary); line-height: 1.25; }
+.scale-card[data-selected] {
+  border-color: var(--cd-accent);
+  background: color-mix(in srgb, var(--cd-accent) 16%, transparent);
+}
+.scale-card[data-selected] ha-icon { color: var(--cd-accent); }
+.scale-card:active { transform: scale(0.97); }
+@media (max-width: 480px) {
+  .scale-options { grid-template-columns: minmax(0, 1fr); }
+}
+
+.alert-card { padding: calc(12px * var(--cd-pad-scale)) calc(14px * var(--cd-pad-scale)); gap: calc(12px * var(--cd-pad-scale)); }
+.alert-card .a-title { font-size: calc(15px * var(--cd-scale)); }
+.alert-card .a-sub { font-size: calc(12px * var(--cd-scale)); }
+.announce-row { padding: calc(12px * var(--cd-pad-scale)) calc(14px * var(--cd-pad-scale)); gap: calc(12px * var(--cd-pad-scale)); }
+.announce-name { font-size: calc(14px * var(--cd-scale)); }
+.trash-card .bin { padding: calc(10px * var(--cd-pad-scale)) calc(14px * var(--cd-pad-scale)); gap: calc(12px * var(--cd-pad-scale)); }
+.bin-label { font-size: calc(13px * var(--cd-scale)); }
+.bin .when { font-size: calc(11.5px * var(--cd-scale)); }
+.subview-head { padding: calc(14px * var(--cd-pad-scale)) calc(16px * var(--cd-pad-scale)); }
+.subview-title { font-size: calc(19px * var(--cd-scale)); }
+.room-detail-title { font-size: calc(20px * var(--cd-scale)); }
+.kpi-val { font-size: calc(19px * var(--cd-scale)); }
+.kpi-top { font-size: calc(12px * var(--cd-scale)); }
+.kpi-sub { font-size: calc(12px * var(--cd-scale)); }
 `;
 // ─── END: lib/styles.js ───
 
@@ -4786,7 +5015,7 @@ function _hasIdentifierPrefix(d, prefixes) {
 function isBridgeOrCoordinator(d, devEntities = []) {
   if (!d) return false;
   const hay = `${d.name_by_user || ''} ${d.name || ''} ${d.manufacturer || ''} ${d.model || ''}`.toLowerCase();
-  if (/(?:zigbee2mqtt\s*bridge|zha\s*coordinator|coordinator|zigbee.*bridge|hue\s*bridge|conbee|raspbee|sonoff\s*zigbee.*dongle)/i.test(hay)) {
+  if (/(?:zigbee2mqtt\s*bridge|zha\s*coordinator|coordinator|zigbee.*bridge|hue\s*bridge|conbee|raspbee|sonoff\s*zigbee.*dongle|zbdongle|skyconnect|home\s*assistant\s*connect\s*zbt|slzb-?\d+|cc2652|cc1352|ezsp)/i.test(hay)) {
     return true;
   }
   if (_hasIdentifierPrefix(d, ['zigbee2mqtt_bridge', 'bridge_0x'])) return true;
@@ -4857,7 +5086,7 @@ function isIrrelevantDeviceOrIntegration(d, devEntities = []) {
   }
 
   // Host/container CPU, RAM, Disk & system stats (only when device carries no smart-home actuators)
-  const hasRealActuator = devEntities.some((e) => !e.disabled_by && !e.hidden_by && isControllableActuator(e));
+  const hasRealActuator = devEntities.some((e) => !e.disabled_by && isControllableActuator(e));
   const isSystemText = !hasRealActuator && (
     name.includes('hacs') || mfg.includes('hacs') ||
     name.includes('forecast') || mfg.includes('met.no') ||
@@ -4898,8 +5127,8 @@ function isOwnIntegrationDevice(d, entities = []) {
 function getPendingChannelsForDevice(device, entities, configuredCfg) {
   if (!configuredCfg || !device) return [];
   if (device.isVirtualEntity) return [];
-  const devEntities = entities.filter((e) => e.device_id === device.id && !e.disabled_by && !e.hidden_by);
-  const controllable = devEntities.filter(isControllableActuator);
+  const devEntities = entities.filter((e) => e.device_id === device.id && !e.disabled_by);
+  const controllable = devEntities.filter((e) => isControllableActuator(e));
   if (!controllable.length) return [];
 
   const subs = configuredCfg.entities?.sub_entities;
@@ -4922,9 +5151,9 @@ function getPendingChannelsForDevice(device, entities, configuredCfg) {
  * Filter out configuration, diagnostic, and internal utility switches.
  * Only genuine controllable actuators are treated as device channels.
  */
-function isControllableActuator(e) {
+function isControllableActuator(e, { allowDisabledUser = false } = {}) {
   if (!e || !e.entity_id) return false;
-  if (e.disabled_by || e.hidden_by) return false;
+  if (e.disabled_by && !(allowDisabledUser && e.disabled_by === 'user')) return false;
   if (isOwnIntegrationEntity(e)) return false;
   if (e.entity_category === 'config' || e.entity_category === 'diagnostic') return false;
   if (IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase())) return false;
@@ -5026,8 +5255,11 @@ function createWizardDeviceElements({
 
   const devEntities = device.isVirtualEntity
     ? entities.filter((e) => e.entity_id === device.entity_id && !e.disabled_by)
-    : entities.filter((e) => e.device_id === device.id && !e.disabled_by && !e.hidden_by && !isOwnIntegrationEntity(e));
-  const controllable = devEntities.filter(isControllableActuator);
+    : entities.filter((e) => e.device_id === device.id && !e.disabled_by && !isOwnIntegrationEntity(e));
+  const controllable = devEntities.filter((e) => isControllableActuator(e));
+  const disabledUserActuators = (!device.isVirtualEntity && controllable.length === 0)
+    ? entities.filter((e) => e.device_id === device.id && e.disabled_by === 'user' && !isOwnIntegrationEntity(e) && isControllableActuator(e, { allowDisabledUser: true }))
+    : [];
   const pendingChannels = isConfigured ? getPendingChannelsForDevice(device, entities, configuredCfg) : [];
 
   const chk = h('button', {
@@ -5053,6 +5285,8 @@ function createWizardDeviceElements({
     }
   } else if (device.isVirtualEntity) {
     badges.push(h('span', { class: 'badge-tag' }, icon('mdi:lightbulb-group-outline'), 'Lichtgruppe'));
+  } else if (controllable.length === 0 && disabledUserActuators.length > 0) {
+    badges.push(h('span', { class: 'badge-tag pending-channels' }, icon('mdi:power-plug-off-outline'), 'In HA deaktiviert'));
   } else if (controllable.length > 1) {
     badges.push(h('button', {
       class: 'btn-channels-toggle',
@@ -5149,6 +5383,14 @@ function createDeviceRoomSection(areaName, cardElements, itemCount = cardElement
 // Tile component: one entity as a HA-tile-like card (lights, switches, covers, climate, media, sensors).
 const COLOR_MODES = ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'];
 
+// Home Assistant MediaPlayerEntityFeature bitmasks (explicitly NO seek bits)
+const MP_PAUSE = 1;
+const MP_PREVIOUS_TRACK = 16;
+const MP_NEXT_TRACK = 32;
+const MP_TURN_ON = 128;
+const MP_TURN_OFF = 256;
+const MP_PLAY = 16384;
+
 function lightSupport(st) {
   const modes = st?.attributes?.supported_color_modes || [];
   return {
@@ -5232,6 +5474,10 @@ class Tile {
         e.preventDefault();
         const targetId = this.deviceId || this.spec?.device_id || this.entityId;
         this.ctx.onOpenDevice?.(targetId);
+        return;
+      }
+      if (this.kind === 'media_player' && !e.target.closest('button') && !e.target.closest('.tile-info')) {
+        moreInfo(this.el, this.entityId);
       }
     }, true);
 
@@ -5259,11 +5505,44 @@ class Tile {
   }
 
   _buildMedia() {
-    this.btnPlay = h('button', {
-      class: 'mini-btn', 'aria-label': 'Wiedergabe',
-      onClick: (e) => { e.stopPropagation(); this._service('media_player', 'media_play_pause'); },
-    }, icon('mdi:play-pause'));
-    this.btns.append(this.btnPlay);
+    const mk = (ic, label, hidden, fn) => h('button', {
+      type: 'button',
+      class: 'mini-btn',
+      'aria-label': label,
+      title: label,
+      hidden,
+      onClick: (e) => { e.stopPropagation(); fn(); },
+    }, icon(ic));
+
+    this.btnPower = mk('mdi:power', 'Ein/Aus', true, () => {
+      const st = this._st;
+      const feats = Number(st?.attributes?.supported_features || 0);
+      const isOff = !st || st.state === 'off' || st.state === 'standby';
+      if (isOff) {
+        if (feats & MP_TURN_ON) this._service('media_player', 'turn_on');
+        else this._service('media_player', 'toggle');
+      } else {
+        if (feats & MP_TURN_OFF) this._service('media_player', 'turn_off');
+        else this._service('media_player', 'toggle');
+      }
+    });
+    this.btnPrev = mk('mdi:skip-previous', 'Vorheriger Titel', true, () => this._service('media_player', 'media_previous_track'));
+    this.btnPlay = mk('mdi:play', 'Wiedergabe / Pause', true, () => {
+      const st = this._st;
+      const feats = Number(st?.attributes?.supported_features || 0);
+      if ((feats & MP_PLAY) && (feats & MP_PAUSE)) {
+        this._service('media_player', 'media_play_pause');
+      } else if (st?.state === 'playing' && (feats & MP_PAUSE)) {
+        this._service('media_player', 'media_pause');
+      } else if (feats & MP_PLAY) {
+        this._service('media_player', 'media_play');
+      } else {
+        this._service('media_player', 'media_play_pause');
+      }
+    });
+    this.btnNext = mk('mdi:skip-next', 'Nächster Titel', true, () => this._service('media_player', 'media_next_track'));
+
+    this.btns.append(this.btnPower, this.btnPrev, this.btnPlay, this.btnNext);
     this.el.classList.add('media');
   }
 
@@ -5392,7 +5671,7 @@ class Tile {
     const subSensorSig = Array.isArray(this.spec.sub_sensors)
       ? this.spec.sub_sensors.map((s) => `${s.entity_id}:${hass.states[s.entity_id]?.state}`).join(',')
       : '';
-    const stateKey = `${st?.state}|${st?.attributes?.brightness}|${st?.attributes?.current_position}|${st?.attributes?.rgb_color}|${st?.last_updated}|${pw?.state}|${this._optimisticOn}|${this.spec.icon}|${this.spec.category}|${subSensorSig}`;
+    const stateKey = `${st?.state}|${st?.attributes?.brightness}|${st?.attributes?.current_position}|${st?.attributes?.rgb_color}|${st?.attributes?.supported_features}|${st?.attributes?.entity_picture}|${st?.attributes?.media_title}|${st?.last_updated}|${pw?.state}|${this._optimisticOn}|${this.spec.icon}|${this.spec.category}|${subSensorSig}`;
     if (this._rendered && this._stateKey === stateKey) return;
     this._rendered = true;
     this._stateKey = stateKey;
@@ -5434,8 +5713,10 @@ class Tile {
   }
 
   _stateText(hass, st, pw, active) {
-    if (this.spec.category === 'bodenmessgeraet' && Array.isArray(this.spec.sub_sensors) && this.spec.sub_sensors.length > 0) {
-      const orderWeight = { moisture: 0, soil_moisture: 0, humidity: 0, temperature: 1 };
+    if (['bodenmessgeraet', 'raummessgeraet'].includes(this.spec.category) && Array.isArray(this.spec.sub_sensors) && this.spec.sub_sensors.length > 0) {
+      const orderWeight = this.spec.category === 'bodenmessgeraet'
+        ? { moisture: 0, soil_moisture: 0, humidity: 0, temperature: 1, motion: 2 }
+        : { temperature: 0, humidity: 1, moisture: 2, motion: 3 };
       const sorted = [...this.spec.sub_sensors].sort((a, b) => (orderWeight[a.type] ?? 5) - (orderWeight[b.type] ?? 5));
       const parts = [];
       for (const s of sorted) {
@@ -5498,8 +5779,27 @@ class Tile {
       this.el.style.backgroundImage = '';
       delete this.el.dataset.art;
     }
-    this.btnPlay.disabled = unavailable || st?.state === 'off';
+
+    const feats = Number(st?.attributes?.supported_features || 0);
+    const isOff = !st || st.state === 'off' || st.state === 'standby';
+    const canPower = (feats & (MP_TURN_ON | MP_TURN_OFF)) !== 0;
+    const canPrev = (feats & MP_PREVIOUS_TRACK) !== 0;
+    const canPlayPause = (feats & (MP_PLAY | MP_PAUSE)) !== 0;
+    const canNext = (feats & MP_NEXT_TRACK) !== 0;
+
+    this.btnPower.hidden = !canPower;
+    this.btnPower.disabled = unavailable || (isOff ? !(feats & MP_TURN_ON) : !(feats & MP_TURN_OFF));
+    this.btnPower.toggleAttribute('data-on', !unavailable && !isOff);
+
+    this.btnPrev.hidden = !canPrev;
+    this.btnPrev.disabled = unavailable || isOff;
+
+    this.btnPlay.hidden = !canPlayPause;
+    this.btnPlay.disabled = unavailable || isOff || (st?.state === 'playing' ? !(feats & MP_PAUSE) : !(feats & MP_PLAY));
     this.btnPlay.firstChild?.setAttribute('icon', st?.state === 'playing' ? 'mdi:pause' : 'mdi:play');
+
+    this.btnNext.hidden = !canNext;
+    this.btnNext.disabled = unavailable || isOff;
   }
 
   _updateLight(st, active) {
@@ -6171,7 +6471,6 @@ class Room {
       onClick: (e) => { e.stopPropagation(); this.ctx.onOpenRoom?.(this.spec.area_id); },
     }, icon('mdi:arrow-right'));
 
-    this.metaEl = h('div', { class: 'room-meta', hidden: true });
     this.controlsEl = h('div', { class: 'room-controls' }, ...this.groups.map((g) => g.btn), this.detailBtn);
 
     this.head = h('div', {
@@ -6192,7 +6491,7 @@ class Room {
       },
     },
       h('div', { class: 'room-icon' }, icon(spec.icon)),
-      h('div', { class: 'room-title' }, h('div', { class: 'room-name' }, spec.name), this.metaEl),
+      h('div', { class: 'room-title' }, h('div', { class: 'room-name' }, spec.name)),
       this.controlsEl,
       icon('mdi:chevron-down', 'chevron'),
       editBorder(17));
@@ -6215,12 +6514,14 @@ class Room {
       'data-area-id': spec.area_id,
     }, this.tiles.map((t) => t.el));
     this.grid.__roomInstance = this;
+    this.statusBar = h('div', { class: 'room-status-bar', hidden: true });
     this.el = h('div', {
       class: 'card room',
       'data-area-id': spec.area_id,
     },
       this.head,
-      h('div', { class: 'room-body' }, h('div', { class: 'room-body-inner' }, this.grid)));
+      h('div', { class: 'room-body' }, h('div', { class: 'room-body-inner' }, this.grid)),
+      this.statusBar);
     this.el.__roomInstance = this;
     this._applyOpen();
     applySmartTileLayout(this.tiles, this.grid);
@@ -6458,13 +6759,8 @@ class Room {
       g.btn.toggleAttribute('data-on', count > 0);
     }
 
-    // Header meta: temperature, humidity, alerts
+    // Bottom compact status bar (configured room sensors + smoke/motion alerts)
     const { sensors } = this.spec;
-    const chips = [];
-    const temp = sensors.temperature?.length ? average(hass, sensors.temperature) : null;
-    const hum = sensors.humidity?.length ? average(hass, sensors.humidity) : null;
-    if (temp) chips.push(h('span', {}, icon('mdi:thermometer'), temp));
-    if (hum) chips.push(h('span', {}, icon('mdi:water-percent'), hum));
     const isSensorOn = (id) => {
       const st = hass.states[id];
       if (!st) return false;
@@ -6477,35 +6773,115 @@ class Room {
       const v = String(st.state || '').toLowerCase();
       return ['on', 'detected', 'smoke', 'alarm', 'true'].includes(v);
     };
+
+    const barSmokeIds = Array.isArray(sensors.smoke) ? sensors.smoke : [];
     const tileSmokeIds = (this.spec.tiles || [])
       .filter((t) => effectiveCategory(t) === 'rauchmelder' && t.entity_id)
       .map((t) => t.entity_id);
-    const allSmokeIds = Array.from(new Set([...(sensors.smoke || []), ...tileSmokeIds]));
+    const allSmokeIds = Array.from(new Set([...barSmokeIds, ...tileSmokeIds]));
     const smokeTriggered = allSmokeIds.some(isSmokeTriggered);
     this.el.toggleAttribute('data-smoke-alarm', smokeTriggered);
-    if (allSmokeIds.length > 0) {
-      if (smokeTriggered) {
-        chips.push(h('span', { class: 'smoke-header-chip alert', title: 'Rauchalarm!' }, icon('mdi:smoke-detector-alert'), 'Rauch!'));
-      } else {
-        chips.push(h('span', { class: 'smoke-header-chip', title: 'Rauchmelder aktiv' }, icon('mdi:smoke-detector')));
-      }
+
+    const statusEntries = [];
+    const pushStatus = ({ ic, val, color, alert = false, entityId = null, title = '' }) => {
+      statusEntries.push({
+        key: `${ic}|${val}|${alert ? 1 : 0}|${color || ''}`,
+        node: h('button', {
+          type: 'button',
+          class: `room-status-item${alert ? ' alert' : ''}`,
+          title: title || undefined,
+          style: color ? { '--status-color': color } : undefined,
+          onClick: (e) => {
+            e.stopPropagation();
+            if (this.ctx?.isEditMode?.()) {
+              this.ctx.onEditRoom?.(this.spec);
+              return;
+            }
+            if (entityId) moreInfo(this.el, entityId);
+          },
+        },
+        h('span', { class: 'room-status-badge' }, icon(ic)),
+        h('span', { class: 'room-status-val' }, val)),
+      });
+    };
+
+    if (barSmokeIds.length > 0) {
+      const barSmokeAlarm = barSmokeIds.some(isSmokeTriggered);
+      pushStatus({
+        ic: barSmokeAlarm ? 'mdi:smoke-detector-alert' : 'mdi:smoke-detector',
+        val: barSmokeAlarm ? 'Alarm!' : 'OK',
+        color: barSmokeAlarm ? '#ef4444' : '#22c55e',
+        alert: barSmokeAlarm,
+        entityId: barSmokeIds[0],
+        title: barSmokeAlarm ? 'Rauchalarm!' : 'Rauchmelder OK',
+      });
     }
+
+    const temp = sensors.temperature?.length ? average(hass, sensors.temperature) : null;
+    if (temp) {
+      pushStatus({
+        ic: 'mdi:thermometer',
+        val: temp,
+        color: '#ff7043',
+        entityId: sensors.temperature[0],
+        title: 'Temperatur',
+      });
+    }
+
+    const hum = sensors.humidity?.length ? average(hass, sensors.humidity) : null;
+    if (hum) {
+      pushStatus({
+        ic: 'mdi:water-percent',
+        val: hum,
+        color: '#29b6f6',
+        entityId: sensors.humidity[0],
+        title: 'Luftfeuchtigkeit',
+      });
+    }
+
     const moistIds = sensors.moisture || [];
     const numericMoistIds = moistIds.filter((id) => numeric(hass.states[id]) !== null);
     const binaryMoistIds = moistIds.filter((id) => numeric(hass.states[id]) === null);
     const moistAvg = numericMoistIds.length ? average(hass, numericMoistIds) : null;
-    if (moistAvg) chips.push(h('span', {}, icon('mdi:sprout'), moistAvg));
-    if ((sensors.motion || []).some(isSensorOn)) {
-      chips.push(h('span', { class: 'alert' }, icon('mdi:motion-sensor'), 'Bewegung'));
+    if (moistAvg) {
+      pushStatus({
+        ic: 'mdi:sprout',
+        val: moistAvg,
+        color: '#4caf50',
+        entityId: numericMoistIds[0],
+        title: 'Bodenfeuchtigkeit',
+      });
     }
-    if (binaryMoistIds.some(isSensorOn)) {
-      chips.push(h('span', { class: 'alert' }, icon('mdi:water-alert'), 'Feuchtigkeit'));
+    if (binaryMoistIds.length > 0) {
+      const wet = binaryMoistIds.some(isSensorOn);
+      pushStatus({
+        ic: 'mdi:water-alert',
+        val: wet ? 'Feucht' : 'Trocken',
+        color: wet ? '#ef4444' : '#26c6da',
+        alert: wet,
+        entityId: binaryMoistIds[0],
+        title: 'Feuchtigkeitsmelder',
+      });
     }
-    const key = `${chips.map((c) => c.textContent || c.getAttribute('title') || '').join('|')}|${smokeTriggered ? 1 : 0}`;
-    if (key !== this._metaKey) {
-      this._metaKey = key;
-      this.metaEl.replaceChildren(...chips);
-      this.metaEl.hidden = chips.length === 0;
+
+    const motionIds = sensors.motion || [];
+    if (motionIds.length > 0) {
+      const motionActive = motionIds.some(isSensorOn);
+      pushStatus({
+        ic: motionActive ? 'mdi:motion-sensor' : 'mdi:motion-sensor-off',
+        val: motionActive ? 'Bewegung' : 'Ruhig',
+        color: motionActive ? '#e91e63' : '#9b9b9b',
+        alert: motionActive,
+        entityId: motionIds[0],
+        title: 'Bewegung / Anwesenheit',
+      });
+    }
+
+    const key = `${statusEntries.map((x) => x.key).join('||')}|${smokeTriggered ? 1 : 0}`;
+    if (key !== this._statusKey) {
+      this._statusKey = key;
+      this.statusBar.replaceChildren(...statusEntries.map((x) => x.node));
+      this.statusBar.hidden = statusEntries.length === 0;
     }
   }
 }
@@ -6586,7 +6962,11 @@ function createCoverRow(spec, { getHass, ctx } = {}) {
     h('div', { class: 'cover-detail-top' },
       h('div', {
         class: 'cover-detail-info',
-        onClick: () => { if (ctx?.isEditMode?.()) openEditDevice(); },
+        onClick: (e) => {
+          e.stopPropagation();
+          if (ctx?.isEditMode?.()) { openEditDevice(); return; }
+          moreInfo(e.currentTarget, spec.entity_id);
+        },
       },
         h('div', { class: 'cover-detail-icon' }, iconEl),
         h('div', { class: 'cover-detail-texts' }, nameEl, stateEl)),
@@ -6594,14 +6974,19 @@ function createCoverRow(spec, { getHass, ctx } = {}) {
     sliderWrap,
     ctx ? editBorder(10) : null);
 
-  if (ctx) {
-    row.addEventListener('pointerdown', (e) => {
-      if (ctx.isEditMode?.()) { e.stopPropagation(); e.preventDefault(); }
-    }, true);
-    row.addEventListener('click', (e) => {
-      if (ctx.isEditMode?.()) { e.stopPropagation(); e.preventDefault(); openEditDevice(); }
-    }, true);
-  }
+  row.addEventListener('pointerdown', (e) => {
+    if (ctx?.isEditMode?.()) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+  row.addEventListener('click', (e) => {
+    if (ctx?.isEditMode?.()) {
+      e.stopPropagation();
+      e.preventDefault();
+      openEditDevice();
+      return;
+    }
+    if (e.target.closest('button, input.slider, .cover-slider-wrap, .cover-detail-info')) return;
+    moreInfo(row, spec.entity_id);
+  }, true);
 
   return {
     spec, row, iconEl, stateEl, slider, btnUp, btnStop, btnDown,
@@ -8819,8 +9204,34 @@ class Settings {
   _tabNavAndDesign() {
     this.draft.nav ||= [];
     this.draft.views ||= {};
+    if (!['small', 'medium', 'large'].includes(this.draft.ui_scale)) {
+      this.draft.ui_scale = 'medium';
+    }
     const viewsCfg = this.draft.views;
     const presets = (this.draft.color_presets ||= []);
+
+    const SCALE_CHOICES = [
+      ['small', 'Klein', 'Kompakt · mehr Übersicht'],
+      ['medium', 'Mittel', 'Standard · ausgewogen'],
+      ['large', 'Groß', 'Größere Schrift & Icons'],
+    ];
+    const scaleRow = h('div', { class: 'scale-options', role: 'group', 'aria-label': 'Dashboard-Skalierung' });
+    const renderScaleRow = () => scaleRow.replaceChildren(...SCALE_CHOICES.map(([val, title, sub]) => {
+      const selected = this.draft.ui_scale === val;
+      return h('button', {
+        type: 'button',
+        class: `scale-card${selected ? ' selected' : ''}`,
+        ...(selected ? { 'data-selected': '' } : {}),
+        onClick: () => {
+          this.draft.ui_scale = val;
+          renderScaleRow();
+        },
+      },
+      icon('mdi:format-size'),
+      h('div', { class: 'scale-card-title' }, title),
+      h('div', { class: 'scale-card-sub' }, sub));
+    }));
+    renderScaleRow();
 
     // Built-in theme views configuration cards
     const viewCards = BUILTIN_VIEWS.filter((v) => v.id !== 'overview').map((v) => {
@@ -8883,6 +9294,10 @@ class Settings {
     renderColors();
 
     return [
+      this._title('Darstellung & Skalierung'),
+      this._hint('• Globale Größe für Schriften, Icons & Abstände'),
+      scaleRow,
+
       this._title('Untere Navigationsleiste'),
       this._hint('• Direktsprung zu eingebauten Ansichten\n• Reihenfolge per Drag & Drop oder Pfeile'),
       this._list(this.draft.nav, {
@@ -9995,13 +10410,12 @@ class DeviceWizard {
     if (isIrrelevantDeviceOrIntegration(d, devAllEnts)) return false;
 
     const devEntities = devAllEnts.filter(
-      (e) => !e.hidden_by
-        && !isOwnIntegrationEntity(e)
+      (e) => !isOwnIntegrationEntity(e)
         && e.entity_category !== 'config'
         && e.entity_category !== 'diagnostic'
         && !IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase()),
     );
-    const controllable = devEntities.filter(isControllableActuator);
+    const controllable = devEntities.filter((e) => isControllableActuator(e));
     const relevantSensors = devEntities.filter((e) => {
       const dom = domainOf(e.entity_id);
       if (dom !== 'sensor' && dom !== 'binary_sensor') return false;
@@ -10014,7 +10428,19 @@ class DeviceWizard {
       if (ROOM_SENSOR_DEVICE_CLASSES.has(dc)) return true;
       return true;
     });
-    if (!controllable.length && !relevantSensors.length) return false;
+    if (!controllable.length && !relevantSensors.length) {
+      const disabledUserActuators = (this.entities || []).filter(
+        (e) => e.device_id === d.id
+          && e.disabled_by === 'user'
+          && !isOwnIntegrationEntity(e)
+          && e.entity_category !== 'config'
+          && e.entity_category !== 'diagnostic'
+          && !IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase())
+          && isControllableActuator(e, { allowDisabledUser: true }),
+      );
+      if (disabledUserActuators.length > 0) return true;
+      return false;
+    }
     return true;
   }
 
@@ -10200,7 +10626,27 @@ class DeviceWizard {
     });
 
     if (!filtered.length && !hasAnyGroups) {
-      this.deviceListEl.replaceChildren(h('div', { class: 'empty' }, icon('mdi:devices'), h('div', {}, 'Keine Geräte')));
+      let configuredMatchCount = 0;
+      if (q && this.statusFilter === 'unconfigured') {
+        const modeCandidates = this._getModeFilteredCandidates(this._getSelectableCandidates());
+        for (const d of modeCandidates) {
+          if (!this._getConfiguredConfigForCandidate(d)) continue;
+          const hay = `${d.name_by_user || d.name || ''} ${d.manufacturer || ''} ${d.model || ''} ${areaMap.get(d.area_id) || ''} ${d.entity_id || ''}`.toLowerCase();
+          if (hay.includes(q)) configuredMatchCount++;
+        }
+        for (const g of Object.values(this.groups)) {
+          if (`${g.name || ''} ${areaMap.get(g.area_id) || ''}`.toLowerCase().includes(q)) configuredMatchCount++;
+        }
+      }
+      this.deviceListEl.replaceChildren(h('div', { class: 'empty' },
+        icon('mdi:devices'),
+        h('div', {}, 'Keine Geräte'),
+        configuredMatchCount > 0 ? h('div', { style: { marginTop: '10px' } },
+          h('button', {
+            type: 'button',
+            class: 'btn secondary small',
+            onClick: () => { this.statusFilter = 'all'; this._renderStep0(); },
+          }, `${configuredMatchCount} eingerichtete Treffer anzeigen`)) : null));
       this.selectionSlot.replaceChildren();
       return;
     }
@@ -11014,7 +11460,6 @@ class DeviceWizard {
     const devTileKey = d.isVirtualEntity ? d.id : `dev:${d.id}`;
     this.pinned = pinnedList.includes(devTileKey) || pinnedList.some((k) => String(k).startsWith(`d:${d.id}:`)) || !!existing?.options?.pinned;
     this.displayMode = existing?.options?.display_mode || 'individual';
-    this.sensorPlacement = existing?.options?.sensor_placement || 'tile';
     let rawName = existing?.custom_name || d.name_by_user || d.name || '';
     if (!existing?.custom_name) {
       rawName = this._stripRoomName(rawName, this.selectedAreaId);
@@ -11028,12 +11473,26 @@ class DeviceWizard {
         : this.entities.filter((e) => e.device_id === d.id)
     ).filter(
       (e) => !e.disabled_by
-        && !e.hidden_by
         && !isOwnIntegrationEntity(e)
         && e.entity_category !== 'config'
         && e.entity_category !== 'diagnostic',
     );
-    const controllable = devEntities.filter(isControllableActuator);
+    let controllable = devEntities.filter((e) => isControllableActuator(e));
+    const reenableIds = new Set();
+    if (!controllable.length && !d.isVirtualEntity) {
+      const disabledActs = this.entities.filter(
+        (e) => e.device_id === d.id
+          && e.disabled_by === 'user'
+          && !isOwnIntegrationEntity(e)
+          && e.entity_category !== 'config'
+          && e.entity_category !== 'diagnostic'
+          && isControllableActuator(e, { allowDisabledUser: true }),
+      );
+      if (disabledActs.length) {
+        controllable = disabledActs;
+        disabledActs.forEach((e) => reenableIds.add(e.entity_id));
+      }
+    }
     const sensors = devEntities.filter((e) => domainOf(e.entity_id) === 'sensor');
     const smokeEntities = devEntities.filter((e) => this._isSmokeEntity(e));
     const devLabel = `${d.name_by_user || d.name || ''} ${d.model || ''}`;
@@ -11054,6 +11513,7 @@ class DeviceWizard {
         name: e.name || e.original_name || this.hass?.states?.[e.entity_id]?.attributes?.friendly_name || e.entity_id,
         detectedType,
         type,
+        placement: (saved?.placement === 'tile' || saved?.placement === 'room') ? saved.placement : null,
       };
     });
 
@@ -11079,6 +11539,8 @@ class DeviceWizard {
     else if (!controllable.length && this.sensorEntities.some((s) => s.detectedType === 'temperature' || s.detectedType === 'humidity')) autoCat = 'raummessgeraet';
 
     this.selectedCategory = existing?.category || autoCat;
+    const defaultPlacement = ['bodenmessgeraet', 'rauchmelder'].includes(this.selectedCategory) ? 'tile' : 'room';
+    this.sensorPlacement = existing?.options?.sensor_placement || defaultPlacement;
 
     // Sub-entities / channels
     const existingSubs = existing?.entities?.sub_entities || {};
@@ -11134,6 +11596,7 @@ class DeviceWizard {
         energy: chEnergy,
         _autoPower: autoChPower,
         _autoEnergy: autoChEnergy,
+        _wasDisabledByUser: reenableIds.has(e.entity_id),
         presence_simulation: !!(sub.presence_simulation || (idx === 0 && existing?.entities?.presence_simulation)),
         force_own_row: sub.force_own_row !== undefined ? !!sub.force_own_row : !!existing?.options?.force_own_row,
       };
@@ -11279,9 +11742,10 @@ class DeviceWizard {
     h('div', { class: 'switch-ui' }));
 
     let soilPlacementBlock = null;
-    if (this.selectedCategory === 'bodenmessgeraet' || this.selectedCategory === 'rauchmelder') {
+    if (['bodenmessgeraet', 'rauchmelder', 'raummessgeraet', 'bewegungsmelder'].includes(this.selectedCategory)) {
+      const catMeta = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory);
+      const accent = catMeta?.color || 'var(--cd-accent)';
       const isSmoke = this.selectedCategory === 'rauchmelder';
-      const accent = isSmoke ? '#ef4444' : '#4caf50';
       const mkPlaceOption = (val, ic, title, desc) => {
         const active = this.sensorPlacement === val;
         return h('div', {
@@ -11301,12 +11765,8 @@ class DeviceWizard {
       soilPlacementBlock = h('div', { style: { marginTop: '12px' } },
         h('div', { class: 'section-title' }, 'Anzeige im Raum'),
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-          isSmoke
-            ? mkPlaceOption('tile', 'mdi:smoke-detector', 'Eigene Gerätekachel', 'Als Kachel oben im Raum')
-            : mkPlaceOption('tile', 'mdi:sprout', 'Eigene Gerätekachel', 'Feuchtigkeit & Temperatur als Kachel'),
-          isSmoke
-            ? mkPlaceOption('room', 'mdi:home-alert-outline', 'Oben in Raumkachel', 'Icon im Header · Alarm färbt Raum rot')
-            : mkPlaceOption('room', 'mdi:home-thermometer-outline', 'Oben in Raumkachel', 'Messwerte in Raumkopfzeile')));
+          mkPlaceOption('tile', catMeta?.icon || 'mdi:card-outline', 'Eigene Gerätekachel', isSmoke ? 'Als Kachel oben im Raum' : 'Als reguläre Kachel im Raum'),
+          mkPlaceOption('room', 'mdi:dock-bottom', 'Raum-Statusleiste', isSmoke ? 'Unten in Raumkachel · Alarm färbt Raum rot' : 'Kompakt unten in der Raumkachel')));
     }
 
     this.body.replaceChildren(
@@ -11330,13 +11790,16 @@ class DeviceWizard {
     if (!this.sensorEntities || !this.sensorEntities.length) return null;
 
     const isSoil = this.selectedCategory === 'bodenmessgeraet';
+    const isSensorCat = ['bodenmessgeraet', 'raummessgeraet', 'bewegungsmelder'].includes(this.selectedCategory);
+    const sensorCatMeta = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory);
     let soilPlacementRow = null;
-    if (isSoil) {
+    if (isSensorCat) {
+      const accent = sensorCatMeta?.color || '#4caf50';
       const mkSoilBtn = (val, ic, title, desc) => {
         const active = this.sensorPlacement === val;
         return h('div', {
           class: `cat-card${active ? ' active' : ''}`,
-          style: { '--cat-color': '#4caf50', flex: '1 1 160px', minWidth: '0', textAlign: 'left', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '10px' },
+          style: { '--cat-color': accent, flex: '1 1 160px', minWidth: '0', textAlign: 'left', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '10px' },
           ...(active ? { 'data-selected': '' } : {}),
           onClick: () => {
             this.sensorPlacement = val;
@@ -11351,8 +11814,8 @@ class DeviceWizard {
       soilPlacementRow = h('div', { style: { marginBottom: '12px' } },
         h('div', { class: 'section-title' }, 'Platzierung'),
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-          mkSoilBtn('tile', 'mdi:sprout', 'Eigene Gerätekachel', 'Feuchtigkeit & Temperatur als Kachel'),
-          mkSoilBtn('room', 'mdi:home-thermometer-outline', 'Oben in Raumkachel', 'Messwerte in Raumkopfzeile')));
+          mkSoilBtn('tile', sensorCatMeta?.icon || 'mdi:card-outline', 'Eigene Gerätekachel', 'Als reguläre Kachel im Raum'),
+          mkSoilBtn('room', 'mdi:dock-bottom', 'Raum-Statusleiste', 'Kompakt unten in der Raumkachel')));
     }
 
     const cards = this.sensorEntities.map((s) => {
@@ -11403,12 +11866,29 @@ class DeviceWizard {
         ? h('span', { class: 'badge-tag ok auto-badge' }, icon('mdi:check-circle'), 'Auto')
         : null;
 
+      const effectivePlac = s.placement || this.sensorPlacement || 'room';
+      const placementDd = new CustomDropdown({
+        options: [
+          { value: 'room', label: 'Raum-Statusleiste', icon: 'mdi:dock-bottom' },
+          { value: 'tile', label: 'Eigene Gerätekachel', icon: 'mdi:card-outline' },
+        ],
+        value: effectivePlac,
+        onChange: (val) => {
+          s.placement = val;
+        },
+      });
+      this._dropdowns.push(placementDd);
+      const placementField = h('div', { class: 'field', ...(s.type === 'ignore' ? { hidden: true } : {}) },
+        h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Darstellung im Raum')),
+        placementDd.el);
+
       const typeDd = new CustomDropdown({
         options: ROOM_SENSOR_TYPES,
         value: s.type,
         onChange: (val) => {
           s.type = val;
           card.style.opacity = val === 'ignore' ? '0.55' : '';
+          placementField.hidden = val === 'ignore';
           if (autoBadge) {
             autoBadge.hidden = val !== s.detectedType || val === 'ignore';
           }
@@ -11424,9 +11904,11 @@ class DeviceWizard {
           h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
             autoBadge,
             h('span', { class: 'badge-tag' }, liveVal))),
-        h('div', { class: 'field' },
-          h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Typ auf Raumkachel')),
-          typeDd.el));
+        h('div', { class: 'fields' },
+          h('div', { class: 'field' },
+            h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Sensortyp')),
+            typeDd.el),
+          placementField));
 
       return card;
     });
@@ -11434,7 +11916,7 @@ class DeviceWizard {
     return h('div', { style: { marginTop: '14px' } },
       soilPlacementRow,
       h('div', { class: 'section-title' }, isSoil ? 'Messwerte & Kanäle' : 'Raumsensoren'),
-      h('div', { class: 'hint', style: { marginBottom: '8px' } }, isSoil ? 'Gewünschte Bodenwerte aktivieren' : 'Werte für Raumkachel wählen'),
+      h('div', { class: 'hint', style: { marginBottom: '8px' } }, isSoil ? 'Gewünschte Bodenwerte aktivieren' : 'Typ & Darstellung für Raum wählen'),
       ...cards);
   }
 
@@ -11890,17 +12372,38 @@ class DeviceWizard {
         // Entity renames (only set name for multi-channel entities; keep single-channel Friendly Name intact)
         for (const ch of activeChannels) {
           try {
+            const entEntry = this.entities.find((e) => e.entity_id === ch.entity_id);
             const payload = {
               type: 'config/entity_registry/update',
               entity_id: ch.entity_id,
               area_id: (this.displayMode !== 'bundled' && ch.area_id) ? ch.area_id : (this.selectedAreaId || null),
             };
+            if (ch._wasDisabledByUser || entEntry?.disabled_by === 'user') {
+              payload.disabled_by = null;
+              if (entEntry) entEntry.disabled_by = null;
+            }
             if (isMultiDevice && ch.name) {
               payload.name = ch.name;
             }
             await this.hass.callWS(payload);
           } catch (err) {
             console.warn('[wizard] entity rename failed', err);
+          }
+        }
+      } else {
+        for (const ch of activeChannels) {
+          const entEntry = this.entities.find((e) => e.entity_id === ch.entity_id);
+          if (ch._wasDisabledByUser || entEntry?.disabled_by === 'user') {
+            try {
+              await this.hass.callWS({
+                type: 'config/entity_registry/update',
+                entity_id: ch.entity_id,
+                disabled_by: null,
+              });
+              if (entEntry) entEntry.disabled_by = null;
+            } catch (err) {
+              console.warn('[wizard] entity re-enable failed', err);
+            }
           }
         }
       }
@@ -11943,6 +12446,12 @@ class DeviceWizard {
           || (this.selectedCategory === 'solar' ? (this.powerEntityId || this.energyEntityId || this.sensorEntities.find((s) => s.type !== 'ignore')?.entity_id) : undefined)
           || (this.selectedCategory === 'bodenmessgeraet' && this.sensorPlacement === 'tile'
             ? (this.sensorEntities.find((s) => s.type === 'moisture')?.entity_id || this.sensorEntities.find((s) => s.type !== 'ignore')?.entity_id)
+            : undefined)
+          || (this.selectedCategory === 'raummessgeraet' && this.sensorPlacement === 'tile'
+            ? (this.sensorEntities.find((s) => s.type === 'temperature')?.entity_id || this.sensorEntities.find((s) => s.type !== 'ignore')?.entity_id)
+            : undefined)
+          || (this.selectedCategory === 'bewegungsmelder' && this.sensorPlacement === 'tile'
+            ? (this.sensorEntities.find((s) => s.type === 'motion')?.entity_id || this.sensorEntities.find((s) => s.type !== 'ignore')?.entity_id)
             : undefined);
         const fallbackPrimaryEnt = fallbackPrimaryId ? this.entities.find((e) => e.entity_id === fallbackPrimaryId) : null;
         entitiesConfig = {
@@ -11962,6 +12471,7 @@ class DeviceWizard {
           original_id: s.entity_id,
           type: s.type,
           enabled: s.type !== 'ignore',
+          ...(s.placement ? { placement: s.placement } : {}),
         };
       }
       entitiesConfig.room_sensors = room_sensors;
@@ -11975,8 +12485,8 @@ class DeviceWizard {
       if (isMultiDevice) {
         nextOptions.display_mode = this.displayMode;
       }
-      if (this.selectedCategory === 'bodenmessgeraet' || this.selectedCategory === 'rauchmelder') {
-        nextOptions.sensor_placement = this.sensorPlacement || 'tile';
+      if (['bodenmessgeraet', 'rauchmelder', 'raummessgeraet', 'bewegungsmelder'].includes(this.selectedCategory)) {
+        nextOptions.sensor_placement = this.sensorPlacement || (['bodenmessgeraet', 'rauchmelder'].includes(this.selectedCategory) ? 'tile' : 'room');
       }
 
       if (this.selectedCategory === 'rauchmelder' && (this.smokeEntityId || entitiesConfig.primary)) {
@@ -13432,14 +13942,18 @@ class BlindsView {
       this._offlineSec.hidden = true;
     }
 
-    // Build entity -> room map (first from layout.rooms tiles, then HA area_id)
+    // Build entity -> room and tile spec map (first from layout.rooms tiles, then HA area_id)
     const entityToRoom = new Map();
+    const tileByEntityId = new Map();
     const roomById = new Map();
     for (const r of rooms) {
       if (!r?.area_id) continue;
       roomById.set(r.area_id, r);
       for (const t of r.tiles || []) {
-        if (t.entity_id?.startsWith('cover.')) entityToRoom.set(t.entity_id, r.area_id);
+        if (t.entity_id?.startsWith('cover.')) {
+          entityToRoom.set(t.entity_id, r.area_id);
+          tileByEntityId.set(t.entity_id, t);
+        }
       }
     }
 
@@ -13479,13 +13993,19 @@ class BlindsView {
       }
       const isOpen = !!this._roomOpen.get(rId);
 
+      const rowCtx = {
+        ...(this.ctx || {}),
+        isEditMode: () => Boolean(this.ctx?.isEditMode?.() ?? this.ctx?.editMode),
+      };
       const rows = ids.map((id) => {
         const st = states[id];
+        const tMeta = tileByEntityId.get(id);
         const spec = {
+          ...(tMeta || {}),
           entity_id: id,
-          name: st?.attributes?.friendly_name || id,
+          name: tMeta?.name || st?.attributes?.friendly_name || id,
         };
-        const ctrl = createCoverRow(spec, { getHass: () => this.hass });
+        const ctrl = createCoverRow(spec, { getHass: () => this.hass, ctx: rowCtx });
         this._rowCtrls.set(id, ctrl);
         return ctrl.row;
       });
@@ -14805,6 +15325,12 @@ class CompanionDashboardPanel extends HTMLElement {
     this._scrollPositions = new Map();
     this._renderedKey = null;
     this._scrollRestoreSeq = 0;
+    this._restoringScrollUntil = 0;
+    this._activeScrollEl = null;
+    this._moreInfoScrollSnap = null;
+    this._headerPortaled = false;
+    this._headerObserver = null;
+    this._headerPortalRoot = null;
     this._components = [];
     this._data = null;
     this._raf = 0;
@@ -14858,8 +15384,30 @@ class CompanionDashboardPanel extends HTMLElement {
     this._unsub = null;
     this._ro?.disconnect();
     this._ro = null;
+    this._teardownHeaderPortal();
+    if (this._boundScrollEl && this._onContainerScroll) {
+      this._boundScrollEl.removeEventListener('scroll', this._onContainerScroll);
+      this._boundScrollEl = null;
+    }
+    if (this._onMoreInfo) {
+      this.removeEventListener('hass-more-info', this._onMoreInfo);
+      this._onMoreInfo = null;
+    }
     if (typeof window !== 'undefined') {
       window.removeEventListener('popstate', this._onPopState);
+      if (this._onAnyScroll) {
+        window.removeEventListener('scroll', this._onAnyScroll, true);
+        this._onAnyScroll = null;
+      }
+      if (this._cancelScrollRestore) {
+        window.removeEventListener('wheel', this._cancelScrollRestore);
+        window.removeEventListener('touchmove', this._cancelScrollRestore);
+        this._cancelScrollRestore = null;
+      }
+      if (this._onDialogClosed) {
+        window.removeEventListener('dialog-closed', this._onDialogClosed);
+        this._onDialogClosed = null;
+      }
     }
     this._destroyComponents();
     this._roomModal?.destroy?.();
@@ -14913,28 +15461,298 @@ class CompanionDashboardPanel extends HTMLElement {
     this._content = h('div');
     this._toolbar = h('div', { class: 'toolbar' },
       this._menuBtn, this._backBtn, h('div', { class: 'spacer' }), this._wizardBtn, this._editBtn, this._settingsBtn);
-    this._page = h('div', { class: 'page' }, this._toolbar, this._content);
+    this._stickyBannerSlot = h('div', { class: 'sticky-banner-slot' });
+    this._stickyHeader = h('div', { class: 'cd-sticky-header' }, this._toolbar, this._stickyBannerSlot);
+    this._page = h('div', { class: 'page' }, this._stickyHeader, this._content);
     this.shadowRoot.replaceChildren(style, this._page);
+
+    this._onMoreInfo = () => {
+      const key = this._currentScrollKey();
+      const { el, y } = this._readScrollY();
+      if (y > 0) this._writeStoredScroll(key, y);
+      this._lastScrollEl = el;
+      this._moreInfoScrollSnap = {
+        key,
+        y: Math.max(y, this._readStoredScroll(key) || 0),
+        el: this._activeScrollEl || el,
+      };
+    };
+    this.addEventListener('hass-more-info', this._onMoreInfo);
 
     if (typeof window !== 'undefined') {
       window.addEventListener('popstate', this._onPopState);
+      this._onAnyScroll = (e) => {
+        if (Date.now() < this._restoringScrollUntil || !this._data) return;
+        const target = e.target;
+        if (!target) return;
+        const isDoc = target === document || target === window || target === document.documentElement || target === document.body;
+        if (!isDoc) {
+          if (!(target instanceof Element)) return;
+          if (target.closest?.('.dialog-body, .overlay, .ep-list, .cdd-list, .ip-grid, .badges, .nav')) {
+            return;
+          }
+          const ov = getComputedStyle(target).overflowY;
+          const scrollable = (ov === 'auto' || ov === 'scroll' || ov === 'overlay') && target.scrollHeight > target.clientHeight + 2;
+          if (!scrollable) return;
+          if (target !== this && !(typeof target.contains === 'function' && target.contains(this))) return;
+        }
+        const docEl = document.scrollingElement || document.documentElement;
+        const y = isDoc
+          ? (window.scrollY || docEl?.scrollTop || 0)
+          : (target.scrollTop || 0);
+        this._activeScrollEl = isDoc ? docEl : target;
+        this._lastScrollEl = this._activeScrollEl;
+        this._writeStoredScroll(this._currentScrollKey(), y);
+      };
+      window.addEventListener('scroll', this._onAnyScroll, { capture: true, passive: true });
+
+      this._cancelScrollRestore = () => {
+        this._restoringScrollUntil = 0;
+        this._scrollRestoreSeq++;
+      };
+      window.addEventListener('wheel', this._cancelScrollRestore, { passive: true });
+      window.addEventListener('touchmove', this._cancelScrollRestore, { passive: true });
+
+      this._onDialogClosed = () => {
+        if (this._moreInfoScrollSnap && this._moreInfoScrollSnap.key === this._currentScrollKey() && this._moreInfoScrollSnap.y > 0) {
+          const snap = this._moreInfoScrollSnap;
+          this._moreInfoScrollSnap = null;
+          this._restoreScroll(snap.key, snap.y, snap.el);
+        }
+      };
+      window.addEventListener('dialog-closed', this._onDialogClosed);
       this._syncRouteFromHash(false);
     }
+    this._onContainerScroll = (e) => {
+      if (Date.now() < this._restoringScrollUntil || !this._data) return;
+      const sc = e.currentTarget;
+      if (!sc) return;
+      this._activeScrollEl = sc;
+      this._lastScrollEl = sc;
+      this._writeStoredScroll(this._currentScrollKey(), sc.scrollTop || 0);
+    };
+    this._syncHeaderPortal();
     this._syncToolbar();
     this._load();
     this._subscribe();
   }
 
+  _bindScrollContainer() {
+    const sc = this._getScrollContainer();
+    const docEl = typeof document !== 'undefined' ? (document.scrollingElement || document.documentElement) : null;
+    if (!sc || sc === docEl || sc === document.body) return sc;
+    if (this._boundScrollEl !== sc && this._onContainerScroll) {
+      if (this._boundScrollEl) {
+        this._boundScrollEl.removeEventListener('scroll', this._onContainerScroll);
+      }
+      sc.addEventListener('scroll', this._onContainerScroll, { passive: true });
+      this._boundScrollEl = sc;
+    }
+    return sc;
+  }
+
+  _nextComposedParent(el) {
+    if (!el) return null;
+    if (el.assignedSlot) return el.assignedSlot;
+    if (el.parentElement) return el.parentElement;
+    const rn = el.getRootNode?.();
+    return rn instanceof ShadowRoot ? rn.host : null;
+  }
+
+  _findHaHeaderRoot() {
+    if (typeof document === 'undefined') return null;
+    let node = this;
+    while (node) {
+      if (node.tagName === 'HUI-ROOT' && node.shadowRoot) {
+        const sr = node.shadowRoot;
+        const toolbar = sr.querySelector('.header .toolbar, .toolbar');
+        if (toolbar) {
+          return {
+            root: node,
+            shadowRoot: sr,
+            header: sr.querySelector('.header') || toolbar.parentElement,
+            toolbar,
+            actionItems: toolbar.querySelector('.action-items') || toolbar,
+          };
+        }
+      }
+      node = this._nextComposedParent(node);
+    }
+    return null;
+  }
+
+  _teardownHeaderPortal() {
+    this._headerObserver?.disconnect();
+    this._headerObserver = null;
+    if (this._headerPortalRoot?.shadowRoot) {
+      this._headerPortalRoot.shadowRoot.getElementById('cd-ha-header-actions')?.remove();
+      this._headerPortalRoot.shadowRoot.getElementById('cd-ha-header-edit-banner')?.remove();
+    } else if (typeof document !== 'undefined') {
+      document.querySelectorAll('hui-root').forEach((hr) => {
+        hr.shadowRoot?.getElementById('cd-ha-header-actions')?.remove();
+        hr.shadowRoot?.getElementById('cd-ha-header-edit-banner')?.remove();
+      });
+    }
+    this._headerPortalRoot = null;
+    this._headerPortaled = false;
+  }
+
+  _syncHeaderPortal() {
+    const haHeader = this._findHaHeaderRoot();
+    const isAdmin = !!this._data?.user?.is_admin;
+
+    if (!haHeader) {
+      if (this._headerPortaled) {
+        this._teardownHeaderPortal();
+      }
+      this._wizardBtn?.removeAttribute('data-portaled');
+      this._editBtn?.removeAttribute('data-portaled');
+      this._settingsBtn?.removeAttribute('data-portaled');
+      if (this._editMode && this._editBanner && this._stickyBannerSlot && this._editBanner.parentNode !== this._stickyBannerSlot) {
+        this._stickyBannerSlot.replaceChildren(this._editBanner);
+      } else if (!this._editMode) {
+        this._editBanner?.remove();
+      }
+      return;
+    }
+
+    this._headerPortaled = true;
+    this._headerPortalRoot = haHeader.root;
+    this._wizardBtn?.setAttribute('data-portaled', '');
+    this._editBtn?.setAttribute('data-portaled', '');
+    this._settingsBtn?.setAttribute('data-portaled', '');
+    this._editBanner?.remove();
+
+    const sr = haHeader.shadowRoot;
+    if (!this._headerObserver && sr) {
+      this._headerObserver = new MutationObserver(debounce(() => {
+        if (!this.isConnected) return;
+        const missingActions = isAdmin && !sr.getElementById('cd-ha-header-actions');
+        const missingBanner = this._editMode && !sr.getElementById('cd-ha-header-edit-banner');
+        if (missingActions || missingBanner) this._syncHeaderPortal();
+      }, 60));
+      this._headerObserver.observe(sr, { childList: true, subtree: true });
+    }
+
+    let actionHost = sr.getElementById('cd-ha-header-actions');
+    if (!isAdmin) {
+      actionHost?.remove();
+    } else {
+      if (!actionHost) {
+        actionHost = h('div', {
+          id: 'cd-ha-header-actions',
+          style: {
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '2px',
+            marginRight: '4px',
+            paddingRight: '6px',
+            borderRight: '1px solid rgba(128,128,128,0.28)',
+          },
+        });
+        const mkPortalBtn = (ic, label, onClick) => {
+          const btn = h('button', {
+            type: 'button',
+            title: label,
+            'aria-label': label,
+            style: {
+              width: '40px',
+              height: '40px',
+              minWidth: '40px',
+              borderRadius: '50%',
+              border: '0',
+              background: 'transparent',
+              color: 'inherit',
+              cursor: 'pointer',
+              display: 'inline-grid',
+              placeItems: 'center',
+              padding: '0',
+            },
+            onClick,
+          }, icon(ic));
+          return btn;
+        };
+        const pWizard = mkPortalBtn('mdi:plus-circle-outline', 'Gerät einrichten', () => this._openWizard());
+        const pEdit = mkPortalBtn('mdi:pencil', 'Bearbeitungsmodus', () => this._toggleEditMode());
+        const pSettings = mkPortalBtn('mdi:cog-outline', 'Dashboard einrichten', () => this._openSettings());
+        actionHost.append(pWizard, pEdit, pSettings);
+        haHeader.actionItems.prepend(actionHost);
+      }
+      const pEditBtn = actionHost.children?.[1];
+      if (pEditBtn) {
+        pEditBtn.style.background = this._editMode ? 'var(--primary-color, #03a9f4)' : 'transparent';
+        pEditBtn.style.color = this._editMode ? '#fff' : 'inherit';
+        pEditBtn.toggleAttribute('data-active', !!this._editMode);
+      }
+    }
+
+    let pBanner = sr.getElementById('cd-ha-header-edit-banner');
+    if (this._editMode && haHeader.header) {
+      if (!pBanner) {
+        pBanner = h('div', {
+          id: 'cd-ha-header-edit-banner',
+          style: {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            padding: '6px 16px',
+            background: 'color-mix(in srgb, var(--primary-color, #03a9f4) 22%, var(--app-header-background-color, #1a1a1a))',
+            borderTop: '1px solid var(--primary-color, #03a9f4)',
+            color: 'var(--app-header-text-color, var(--primary-text-color, #fff))',
+            fontSize: '13px',
+            fontWeight: '600',
+          },
+        },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0' } },
+          h('ha-icon', { icon: 'mdi:pencil', style: { color: 'var(--primary-color, #03a9f4)', '--mdc-icon-size': '18px' } }),
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, 'Bearbeitungsmodus: Kachel oder Raum tippen')),
+        h('button', {
+          type: 'button',
+          style: {
+            padding: '5px 14px',
+            minHeight: '32px',
+            borderRadius: '16px',
+            border: '0',
+            background: 'var(--primary-color, #03a9f4)',
+            color: '#fff',
+            fontSize: '12px',
+            fontWeight: '700',
+            cursor: 'pointer',
+            flex: 'none',
+          },
+          onClick: () => this._toggleEditMode(),
+        }, 'Fertig'));
+        haHeader.header.append(pBanner);
+      }
+    } else {
+      pBanner?.remove();
+    }
+  }
+
   _syncToolbar() {
     if (!this._toolbar) return;
+    this._syncHeaderPortal();
+    this._bindScrollContainer();
     const anyVisible = [this._menuBtn, this._backBtn, this._wizardBtn, this._editBtn, this._settingsBtn]
-      .some((b) => b && !b.hidden);
+      .some((b) => b && !b.hidden && !b.hasAttribute('data-portaled'));
     this._toolbar.hidden = !anyVisible;
+    if (this._stickyHeader) {
+      const hasBanner = !!this._stickyBannerSlot?.children?.length;
+      this._stickyHeader.hidden = !anyVisible && !hasBanner;
+    }
   }
 
   _syncRouteFromHash(shouldRender = true) {
     if (typeof window === 'undefined') return;
-    if (shouldRender && this._data) this._saveCurrentScroll();
+    if (shouldRender && this._data) {
+      const prevKey = this._currentScrollKey();
+      const { el, y } = this._readScrollY();
+      if (y > 0 || !this._scrollPositions.has(prevKey)) {
+        this._writeStoredScroll(prevKey, y);
+        this._lastScrollEl = el;
+      }
+    }
     const raw = (window.location.hash || '').replace(/^#/, '');
     const params = new URLSearchParams(raw);
     const v = params.get('view');
@@ -14977,21 +15795,59 @@ class CompanionDashboardPanel extends HTMLElement {
     return `view:${this._activeView || 'overview'}`;
   }
 
-  _getScrollContainer() {
-    if (this.scrollTop > 0) return this;
-    let el = this.parentElement || (this.getRootNode?.() instanceof ShadowRoot ? this.getRootNode().host : null);
-    while (el) {
-      if (el.scrollHeight > el.clientHeight + 2) {
-        const ov = getComputedStyle(el).overflowY;
-        if (ov === 'auto' || ov === 'scroll' || ov === 'overlay') return el;
+  _scrollStorageKey(key) {
+    const path = typeof window !== 'undefined' ? window.location.pathname : '';
+    return `cd_scroll_v1:${path}:${key}`;
+  }
+
+  _readStoredScroll(key) {
+    if (this._scrollPositions.has(key)) return this._scrollPositions.get(key);
+    try {
+      const raw = sessionStorage.getItem(this._scrollStorageKey(key));
+      if (raw !== null) {
+        const n = Number(raw);
+        if (Number.isFinite(n) && n >= 0) return n;
       }
-      el = el.parentElement || (el.getRootNode?.() instanceof ShadowRoot ? el.getRootNode().host : null);
+    } catch (_) { /* ignore */ }
+    return undefined;
+  }
+
+  _writeStoredScroll(key, y) {
+    const clean = Math.max(0, Math.round(Number(y) || 0));
+    this._scrollPositions.set(key, clean);
+    try {
+      sessionStorage.setItem(this._scrollStorageKey(key), String(clean));
+    } catch (_) { /* ignore */ }
+  }
+
+  _getScrollContainer() {
+    if (this._activeScrollEl && this._activeScrollEl.isConnected) {
+      const docEl = document.scrollingElement || document.documentElement;
+      if (this._activeScrollEl === docEl || this._activeScrollEl.scrollHeight > this._activeScrollEl.clientHeight + 2) {
+        return this._activeScrollEl;
+      }
     }
-    return document.scrollingElement || document.documentElement;
+    if (this.scrollTop > 0) return this;
+    let firstOverflow = null;
+    let el = this._nextComposedParent(this);
+    while (el) {
+      if (el instanceof Element) {
+        const ov = getComputedStyle(el).overflowY;
+        const isScrollStyle = ov === 'auto' || ov === 'scroll' || ov === 'overlay';
+        if (isScrollStyle && el.scrollHeight > el.clientHeight + 2) {
+          return el;
+        }
+        if (!firstOverflow && (isScrollStyle || el.id === 'view' || /^(HUI-VIEW-CONTAINER|HA-PANEL-LOVELACE)$/.test(el.tagName || ''))) {
+          firstOverflow = el;
+        }
+      }
+      el = this._nextComposedParent(el);
+    }
+    return firstOverflow || document.scrollingElement || document.documentElement;
   }
 
   _readScrollY() {
-    const el = this._getScrollContainer();
+    const el = this._bindScrollContainer() || this._getScrollContainer();
     const docEl = document.scrollingElement || document.documentElement;
     if (!el || el === docEl || el === document.body) {
       const y = (typeof window !== 'undefined' ? window.scrollY : 0) || docEl?.scrollTop || 0;
@@ -15003,34 +15859,52 @@ class CompanionDashboardPanel extends HTMLElement {
   _writeScrollY(y, elHint = null) {
     const targetY = Math.max(0, Number(y) || 0);
     const docEl = document.scrollingElement || document.documentElement;
-    const el = (elHint && elHint.isConnected) ? elHint : this._getScrollContainer();
+    const el = (elHint && elHint.isConnected) ? elHint : (this._bindScrollContainer() || this._getScrollContainer());
     if (!el || el === docEl || el === document.body) {
       if (typeof window !== 'undefined') window.scrollTo(0, targetY);
       if (docEl) docEl.scrollTop = targetY;
-      return;
+      return docEl ? docEl.scrollTop : targetY;
     }
     el.scrollTop = targetY;
+    return el.scrollTop;
   }
 
   _saveCurrentScroll() {
     const { el, y } = this._readScrollY();
-    this._scrollPositions.set(this._currentScrollKey(), y);
+    this._writeStoredScroll(this._currentScrollKey(), y);
     this._lastScrollEl = el;
   }
 
-  _restoreScroll(key, fallback = 0) {
-    const targetY = this._scrollPositions.has(key) ? this._scrollPositions.get(key) : fallback;
+  _restoreScroll(key, fallback = 0, elHintArg = null) {
+    const stored = this._readStoredScroll(key);
+    const targetY = stored !== undefined ? stored : fallback;
     const seq = ++this._scrollRestoreSeq;
-    const elHint = this._lastScrollEl;
-    this._writeScrollY(targetY, elHint);
-    requestAnimationFrame(() => {
-      if (seq !== this._scrollRestoreSeq) return;
-      this._writeScrollY(targetY, elHint);
-      setTimeout(() => {
-        if (seq !== this._scrollRestoreSeq) return;
-        this._writeScrollY(targetY, elHint);
-      }, 60);
-    });
+    const elHint = elHintArg || this._lastScrollEl || this._activeScrollEl;
+    if (targetY > 0) this._restoringScrollUntil = Date.now() + 260;
+    let settled = false;
+    const apply = () => {
+      if (seq !== this._scrollRestoreSeq || settled) return true;
+      const actual = this._writeScrollY(targetY, elHint);
+      if (targetY > 0 && Math.abs((actual || 0) - targetY) <= 2) {
+        settled = true;
+        this._restoringScrollUntil = 0;
+        return true;
+      }
+      return targetY === 0;
+    };
+    apply();
+    if (!settled) {
+      requestAnimationFrame(() => {
+        if (apply()) return;
+        requestAnimationFrame(() => {
+          if (apply()) return;
+          setTimeout(() => {
+            if (apply()) return;
+            setTimeout(() => { apply(); }, 120);
+          }, 80);
+        });
+      });
+    }
   }
 
   _navigate(target) {
@@ -15109,6 +15983,8 @@ class CompanionDashboardPanel extends HTMLElement {
 
     this._destroyComponents();
     const { config, layout, user } = this._data;
+    const scale = ['small', 'medium', 'large'].includes(config?.ui_scale) ? config.ui_scale : 'medium';
+    this.setAttribute('data-scale', scale);
     const ctx = {
       hass: this._hass,
       presets: config.color_presets || [],
@@ -15136,9 +16012,6 @@ class CompanionDashboardPanel extends HTMLElement {
       this._nav = this._makeNavBar(config, user);
       this._components = [this._warningDetail];
       this._content.replaceChildren(this._warningDetail.el, this._nav.el);
-      if (this._editMode && this._editBanner) {
-        this._content.prepend(this._editBanner);
-      }
       this._push();
       this._content.style.minHeight = prevMinH;
       this._restoreScroll(renderKey, 0);
@@ -15157,9 +16030,6 @@ class CompanionDashboardPanel extends HTMLElement {
         this._nav = this._makeNavBar(config, user);
         this._components = [this._roomDetail];
         this._content.replaceChildren(this._roomDetail.el, this._nav.el);
-        if (this._editMode && this._editBanner) {
-          this._content.prepend(this._editBanner);
-        }
         this._push();
         this._content.style.minHeight = prevMinH;
         this._restoreScroll(renderKey, 0);
@@ -15198,9 +16068,6 @@ class CompanionDashboardPanel extends HTMLElement {
         this._nav = this._makeNavBar(config, user);
         this._components = [viewInst];
         this._content.replaceChildren(viewInst.el, this._nav.el);
-        if (this._editMode && this._editBanner) {
-          this._content.prepend(this._editBanner);
-        }
         this._push();
         this._content.style.minHeight = prevMinH;
         if (activeView === 'security' && this._pendingSecuritySmokeScroll) {
@@ -15266,10 +16133,6 @@ class CompanionDashboardPanel extends HTMLElement {
       this._ro.observe(this._roomsWrap);
     }
 
-    if (this._editMode && this._editBanner) {
-      this._content.prepend(this._editBanner);
-    }
-
     this._push();
     this._content.style.minHeight = prevMinH;
     this._restoreScroll(renderKey, 0);
@@ -15280,7 +16143,9 @@ class CompanionDashboardPanel extends HTMLElement {
     const winW = (typeof window !== 'undefined' ? window.innerWidth : 0) || 1000;
     const width = this._roomsWrap.clientWidth || this._content?.clientWidth || winW;
     const gap = 12;
-    const colCount = Math.max(1, Math.min(this._rooms.length, Math.floor((width + gap) / 360)));
+    const scale = this.getAttribute('data-scale') || 'medium';
+    const minColW = scale === 'large' ? 400 : scale === 'small' ? 320 : 360;
+    const colCount = Math.max(1, Math.min(this._rooms.length, Math.floor((width + gap) / minColW)));
 
     if (colCount === this._colCount && this._roomsCols?.length === colCount) return;
     this._colCount = colCount;
@@ -15404,10 +16269,10 @@ class CompanionDashboardPanel extends HTMLElement {
             onClick: () => this._toggleEditMode(),
           }, 'Fertig'));
       }
-      this._content?.prepend(this._editBanner);
     } else {
       this._editBanner?.remove();
     }
+    this._syncToolbar();
     this._push();
   }
 

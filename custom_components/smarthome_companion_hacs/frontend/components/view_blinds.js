@@ -312,14 +312,18 @@ export class BlindsView {
       this._offlineSec.hidden = true;
     }
 
-    // Build entity -> room map (first from layout.rooms tiles, then HA area_id)
+    // Build entity -> room and tile spec map (first from layout.rooms tiles, then HA area_id)
     const entityToRoom = new Map();
+    const tileByEntityId = new Map();
     const roomById = new Map();
     for (const r of rooms) {
       if (!r?.area_id) continue;
       roomById.set(r.area_id, r);
       for (const t of r.tiles || []) {
-        if (t.entity_id?.startsWith('cover.')) entityToRoom.set(t.entity_id, r.area_id);
+        if (t.entity_id?.startsWith('cover.')) {
+          entityToRoom.set(t.entity_id, r.area_id);
+          tileByEntityId.set(t.entity_id, t);
+        }
       }
     }
 
@@ -359,13 +363,19 @@ export class BlindsView {
       }
       const isOpen = !!this._roomOpen.get(rId);
 
+      const rowCtx = {
+        ...(this.ctx || {}),
+        isEditMode: () => Boolean(this.ctx?.isEditMode?.() ?? this.ctx?.editMode),
+      };
       const rows = ids.map((id) => {
         const st = states[id];
+        const tMeta = tileByEntityId.get(id);
         const spec = {
+          ...(tMeta || {}),
           entity_id: id,
-          name: st?.attributes?.friendly_name || id,
+          name: tMeta?.name || st?.attributes?.friendly_name || id,
         };
-        const ctrl = createCoverRow(spec, { getHass: () => this.hass });
+        const ctrl = createCoverRow(spec, { getHass: () => this.hass, ctx: rowCtx });
         this._rowCtrls.set(id, ctrl);
         return ctrl.row;
       });

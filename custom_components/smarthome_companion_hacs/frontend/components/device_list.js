@@ -50,7 +50,7 @@ function _hasIdentifierPrefix(d, prefixes) {
 export function isBridgeOrCoordinator(d, devEntities = []) {
   if (!d) return false;
   const hay = `${d.name_by_user || ''} ${d.name || ''} ${d.manufacturer || ''} ${d.model || ''}`.toLowerCase();
-  if (/(?:zigbee2mqtt\s*bridge|zha\s*coordinator|coordinator|zigbee.*bridge|hue\s*bridge|conbee|raspbee|sonoff\s*zigbee.*dongle)/i.test(hay)) {
+  if (/(?:zigbee2mqtt\s*bridge|zha\s*coordinator|coordinator|zigbee.*bridge|hue\s*bridge|conbee|raspbee|sonoff\s*zigbee.*dongle|zbdongle|skyconnect|home\s*assistant\s*connect\s*zbt|slzb-?\d+|cc2652|cc1352|ezsp)/i.test(hay)) {
     return true;
   }
   if (_hasIdentifierPrefix(d, ['zigbee2mqtt_bridge', 'bridge_0x'])) return true;
@@ -121,7 +121,7 @@ export function isIrrelevantDeviceOrIntegration(d, devEntities = []) {
   }
 
   // Host/container CPU, RAM, Disk & system stats (only when device carries no smart-home actuators)
-  const hasRealActuator = devEntities.some((e) => !e.disabled_by && !e.hidden_by && isControllableActuator(e));
+  const hasRealActuator = devEntities.some((e) => !e.disabled_by && isControllableActuator(e));
   const isSystemText = !hasRealActuator && (
     name.includes('hacs') || mfg.includes('hacs') ||
     name.includes('forecast') || mfg.includes('met.no') ||
@@ -162,8 +162,8 @@ export function isOwnIntegrationDevice(d, entities = []) {
 export function getPendingChannelsForDevice(device, entities, configuredCfg) {
   if (!configuredCfg || !device) return [];
   if (device.isVirtualEntity) return [];
-  const devEntities = entities.filter((e) => e.device_id === device.id && !e.disabled_by && !e.hidden_by);
-  const controllable = devEntities.filter(isControllableActuator);
+  const devEntities = entities.filter((e) => e.device_id === device.id && !e.disabled_by);
+  const controllable = devEntities.filter((e) => isControllableActuator(e));
   if (!controllable.length) return [];
 
   const subs = configuredCfg.entities?.sub_entities;
@@ -186,9 +186,9 @@ export function getPendingChannelsForDevice(device, entities, configuredCfg) {
  * Filter out configuration, diagnostic, and internal utility switches.
  * Only genuine controllable actuators are treated as device channels.
  */
-export function isControllableActuator(e) {
+export function isControllableActuator(e, { allowDisabledUser = false } = {}) {
   if (!e || !e.entity_id) return false;
-  if (e.disabled_by || e.hidden_by) return false;
+  if (e.disabled_by && !(allowDisabledUser && e.disabled_by === 'user')) return false;
   if (isOwnIntegrationEntity(e)) return false;
   if (e.entity_category === 'config' || e.entity_category === 'diagnostic') return false;
   if (IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase())) return false;
@@ -290,8 +290,11 @@ export function createWizardDeviceElements({
 
   const devEntities = device.isVirtualEntity
     ? entities.filter((e) => e.entity_id === device.entity_id && !e.disabled_by)
-    : entities.filter((e) => e.device_id === device.id && !e.disabled_by && !e.hidden_by && !isOwnIntegrationEntity(e));
-  const controllable = devEntities.filter(isControllableActuator);
+    : entities.filter((e) => e.device_id === device.id && !e.disabled_by && !isOwnIntegrationEntity(e));
+  const controllable = devEntities.filter((e) => isControllableActuator(e));
+  const disabledUserActuators = (!device.isVirtualEntity && controllable.length === 0)
+    ? entities.filter((e) => e.device_id === device.id && e.disabled_by === 'user' && !isOwnIntegrationEntity(e) && isControllableActuator(e, { allowDisabledUser: true }))
+    : [];
   const pendingChannels = isConfigured ? getPendingChannelsForDevice(device, entities, configuredCfg) : [];
 
   const chk = h('button', {
@@ -317,6 +320,8 @@ export function createWizardDeviceElements({
     }
   } else if (device.isVirtualEntity) {
     badges.push(h('span', { class: 'badge-tag' }, icon('mdi:lightbulb-group-outline'), 'Lichtgruppe'));
+  } else if (controllable.length === 0 && disabledUserActuators.length > 0) {
+    badges.push(h('span', { class: 'badge-tag pending-channels' }, icon('mdi:power-plug-off-outline'), 'In HA deaktiviert'));
   } else if (controllable.length > 1) {
     badges.push(h('button', {
       class: 'btn-channels-toggle',

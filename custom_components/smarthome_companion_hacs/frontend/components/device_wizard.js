@@ -394,13 +394,12 @@ export class DeviceWizard {
     if (isIrrelevantDeviceOrIntegration(d, devAllEnts)) return false;
 
     const devEntities = devAllEnts.filter(
-      (e) => !e.hidden_by
-        && !isOwnIntegrationEntity(e)
+      (e) => !isOwnIntegrationEntity(e)
         && e.entity_category !== 'config'
         && e.entity_category !== 'diagnostic'
         && !IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase()),
     );
-    const controllable = devEntities.filter(isControllableActuator);
+    const controllable = devEntities.filter((e) => isControllableActuator(e));
     const relevantSensors = devEntities.filter((e) => {
       const dom = domainOf(e.entity_id);
       if (dom !== 'sensor' && dom !== 'binary_sensor') return false;
@@ -413,7 +412,19 @@ export class DeviceWizard {
       if (ROOM_SENSOR_DEVICE_CLASSES.has(dc)) return true;
       return true;
     });
-    if (!controllable.length && !relevantSensors.length) return false;
+    if (!controllable.length && !relevantSensors.length) {
+      const disabledUserActuators = (this.entities || []).filter(
+        (e) => e.device_id === d.id
+          && e.disabled_by === 'user'
+          && !isOwnIntegrationEntity(e)
+          && e.entity_category !== 'config'
+          && e.entity_category !== 'diagnostic'
+          && !IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase())
+          && isControllableActuator(e, { allowDisabledUser: true }),
+      );
+      if (disabledUserActuators.length > 0) return true;
+      return false;
+    }
     return true;
   }
 
@@ -599,7 +610,27 @@ export class DeviceWizard {
     });
 
     if (!filtered.length && !hasAnyGroups) {
-      this.deviceListEl.replaceChildren(h('div', { class: 'empty' }, icon('mdi:devices'), h('div', {}, 'Keine Geräte')));
+      let configuredMatchCount = 0;
+      if (q && this.statusFilter === 'unconfigured') {
+        const modeCandidates = this._getModeFilteredCandidates(this._getSelectableCandidates());
+        for (const d of modeCandidates) {
+          if (!this._getConfiguredConfigForCandidate(d)) continue;
+          const hay = `${d.name_by_user || d.name || ''} ${d.manufacturer || ''} ${d.model || ''} ${areaMap.get(d.area_id) || ''} ${d.entity_id || ''}`.toLowerCase();
+          if (hay.includes(q)) configuredMatchCount++;
+        }
+        for (const g of Object.values(this.groups)) {
+          if (`${g.name || ''} ${areaMap.get(g.area_id) || ''}`.toLowerCase().includes(q)) configuredMatchCount++;
+        }
+      }
+      this.deviceListEl.replaceChildren(h('div', { class: 'empty' },
+        icon('mdi:devices'),
+        h('div', {}, 'Keine Geräte'),
+        configuredMatchCount > 0 ? h('div', { style: { marginTop: '10px' } },
+          h('button', {
+            type: 'button',
+            class: 'btn secondary small',
+            onClick: () => { this.statusFilter = 'all'; this._renderStep0(); },
+          }, `${configuredMatchCount} eingerichtete Treffer anzeigen`)) : null));
       this.selectionSlot.replaceChildren();
       return;
     }
@@ -1413,7 +1444,6 @@ export class DeviceWizard {
     const devTileKey = d.isVirtualEntity ? d.id : `dev:${d.id}`;
     this.pinned = pinnedList.includes(devTileKey) || pinnedList.some((k) => String(k).startsWith(`d:${d.id}:`)) || !!existing?.options?.pinned;
     this.displayMode = existing?.options?.display_mode || 'individual';
-    this.sensorPlacement = existing?.options?.sensor_placement || 'tile';
     let rawName = existing?.custom_name || d.name_by_user || d.name || '';
     if (!existing?.custom_name) {
       rawName = this._stripRoomName(rawName, this.selectedAreaId);
@@ -1427,12 +1457,26 @@ export class DeviceWizard {
         : this.entities.filter((e) => e.device_id === d.id)
     ).filter(
       (e) => !e.disabled_by
-        && !e.hidden_by
         && !isOwnIntegrationEntity(e)
         && e.entity_category !== 'config'
         && e.entity_category !== 'diagnostic',
     );
-    const controllable = devEntities.filter(isControllableActuator);
+    let controllable = devEntities.filter((e) => isControllableActuator(e));
+    const reenableIds = new Set();
+    if (!controllable.length && !d.isVirtualEntity) {
+      const disabledActs = this.entities.filter(
+        (e) => e.device_id === d.id
+          && e.disabled_by === 'user'
+          && !isOwnIntegrationEntity(e)
+          && e.entity_category !== 'config'
+          && e.entity_category !== 'diagnostic'
+          && isControllableActuator(e, { allowDisabledUser: true }),
+      );
+      if (disabledActs.length) {
+        controllable = disabledActs;
+        disabledActs.forEach((e) => reenableIds.add(e.entity_id));
+      }
+    }
     const sensors = devEntities.filter((e) => domainOf(e.entity_id) === 'sensor');
     const smokeEntities = devEntities.filter((e) => this._isSmokeEntity(e));
     const devLabel = `${d.name_by_user || d.name || ''} ${d.model || ''}`;
@@ -1453,6 +1497,7 @@ export class DeviceWizard {
         name: e.name || e.original_name || this.hass?.states?.[e.entity_id]?.attributes?.friendly_name || e.entity_id,
         detectedType,
         type,
+        placement: (saved?.placement === 'tile' || saved?.placement === 'room') ? saved.placement : null,
       };
     });
 
@@ -1478,6 +1523,8 @@ export class DeviceWizard {
     else if (!controllable.length && this.sensorEntities.some((s) => s.detectedType === 'temperature' || s.detectedType === 'humidity')) autoCat = 'raummessgeraet';
 
     this.selectedCategory = existing?.category || autoCat;
+    const defaultPlacement = ['bodenmessgeraet', 'rauchmelder'].includes(this.selectedCategory) ? 'tile' : 'room';
+    this.sensorPlacement = existing?.options?.sensor_placement || defaultPlacement;
 
     // Sub-entities / channels
     const existingSubs = existing?.entities?.sub_entities || {};
@@ -1533,6 +1580,7 @@ export class DeviceWizard {
         energy: chEnergy,
         _autoPower: autoChPower,
         _autoEnergy: autoChEnergy,
+        _wasDisabledByUser: reenableIds.has(e.entity_id),
         presence_simulation: !!(sub.presence_simulation || (idx === 0 && existing?.entities?.presence_simulation)),
         force_own_row: sub.force_own_row !== undefined ? !!sub.force_own_row : !!existing?.options?.force_own_row,
       };
@@ -1678,9 +1726,10 @@ export class DeviceWizard {
     h('div', { class: 'switch-ui' }));
 
     let soilPlacementBlock = null;
-    if (this.selectedCategory === 'bodenmessgeraet' || this.selectedCategory === 'rauchmelder') {
+    if (['bodenmessgeraet', 'rauchmelder', 'raummessgeraet', 'bewegungsmelder'].includes(this.selectedCategory)) {
+      const catMeta = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory);
+      const accent = catMeta?.color || 'var(--cd-accent)';
       const isSmoke = this.selectedCategory === 'rauchmelder';
-      const accent = isSmoke ? '#ef4444' : '#4caf50';
       const mkPlaceOption = (val, ic, title, desc) => {
         const active = this.sensorPlacement === val;
         return h('div', {
@@ -1700,12 +1749,8 @@ export class DeviceWizard {
       soilPlacementBlock = h('div', { style: { marginTop: '12px' } },
         h('div', { class: 'section-title' }, 'Anzeige im Raum'),
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-          isSmoke
-            ? mkPlaceOption('tile', 'mdi:smoke-detector', 'Eigene Gerätekachel', 'Als Kachel oben im Raum')
-            : mkPlaceOption('tile', 'mdi:sprout', 'Eigene Gerätekachel', 'Feuchtigkeit & Temperatur als Kachel'),
-          isSmoke
-            ? mkPlaceOption('room', 'mdi:home-alert-outline', 'Oben in Raumkachel', 'Icon im Header · Alarm färbt Raum rot')
-            : mkPlaceOption('room', 'mdi:home-thermometer-outline', 'Oben in Raumkachel', 'Messwerte in Raumkopfzeile')));
+          mkPlaceOption('tile', catMeta?.icon || 'mdi:card-outline', 'Eigene Gerätekachel', isSmoke ? 'Als Kachel oben im Raum' : 'Als reguläre Kachel im Raum'),
+          mkPlaceOption('room', 'mdi:dock-bottom', 'Raum-Statusleiste', isSmoke ? 'Unten in Raumkachel · Alarm färbt Raum rot' : 'Kompakt unten in der Raumkachel')));
     }
 
     this.body.replaceChildren(
@@ -1729,13 +1774,16 @@ export class DeviceWizard {
     if (!this.sensorEntities || !this.sensorEntities.length) return null;
 
     const isSoil = this.selectedCategory === 'bodenmessgeraet';
+    const isSensorCat = ['bodenmessgeraet', 'raummessgeraet', 'bewegungsmelder'].includes(this.selectedCategory);
+    const sensorCatMeta = DEVICE_CATEGORIES.find((c) => c.id === this.selectedCategory);
     let soilPlacementRow = null;
-    if (isSoil) {
+    if (isSensorCat) {
+      const accent = sensorCatMeta?.color || '#4caf50';
       const mkSoilBtn = (val, ic, title, desc) => {
         const active = this.sensorPlacement === val;
         return h('div', {
           class: `cat-card${active ? ' active' : ''}`,
-          style: { '--cat-color': '#4caf50', flex: '1 1 160px', minWidth: '0', textAlign: 'left', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '10px' },
+          style: { '--cat-color': accent, flex: '1 1 160px', minWidth: '0', textAlign: 'left', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '10px' },
           ...(active ? { 'data-selected': '' } : {}),
           onClick: () => {
             this.sensorPlacement = val;
@@ -1750,8 +1798,8 @@ export class DeviceWizard {
       soilPlacementRow = h('div', { style: { marginBottom: '12px' } },
         h('div', { class: 'section-title' }, 'Platzierung'),
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-          mkSoilBtn('tile', 'mdi:sprout', 'Eigene Gerätekachel', 'Feuchtigkeit & Temperatur als Kachel'),
-          mkSoilBtn('room', 'mdi:home-thermometer-outline', 'Oben in Raumkachel', 'Messwerte in Raumkopfzeile')));
+          mkSoilBtn('tile', sensorCatMeta?.icon || 'mdi:card-outline', 'Eigene Gerätekachel', 'Als reguläre Kachel im Raum'),
+          mkSoilBtn('room', 'mdi:dock-bottom', 'Raum-Statusleiste', 'Kompakt unten in der Raumkachel')));
     }
 
     const cards = this.sensorEntities.map((s) => {
@@ -1802,12 +1850,29 @@ export class DeviceWizard {
         ? h('span', { class: 'badge-tag ok auto-badge' }, icon('mdi:check-circle'), 'Auto')
         : null;
 
+      const effectivePlac = s.placement || this.sensorPlacement || 'room';
+      const placementDd = new CustomDropdown({
+        options: [
+          { value: 'room', label: 'Raum-Statusleiste', icon: 'mdi:dock-bottom' },
+          { value: 'tile', label: 'Eigene Gerätekachel', icon: 'mdi:card-outline' },
+        ],
+        value: effectivePlac,
+        onChange: (val) => {
+          s.placement = val;
+        },
+      });
+      this._dropdowns.push(placementDd);
+      const placementField = h('div', { class: 'field', ...(s.type === 'ignore' ? { hidden: true } : {}) },
+        h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Darstellung im Raum')),
+        placementDd.el);
+
       const typeDd = new CustomDropdown({
         options: ROOM_SENSOR_TYPES,
         value: s.type,
         onChange: (val) => {
           s.type = val;
           card.style.opacity = val === 'ignore' ? '0.55' : '';
+          placementField.hidden = val === 'ignore';
           if (autoBadge) {
             autoBadge.hidden = val !== s.detectedType || val === 'ignore';
           }
@@ -1823,9 +1888,11 @@ export class DeviceWizard {
           h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
             autoBadge,
             h('span', { class: 'badge-tag' }, liveVal))),
-        h('div', { class: 'field' },
-          h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Typ auf Raumkachel')),
-          typeDd.el));
+        h('div', { class: 'fields' },
+          h('div', { class: 'field' },
+            h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Sensortyp')),
+            typeDd.el),
+          placementField));
 
       return card;
     });
@@ -1833,7 +1900,7 @@ export class DeviceWizard {
     return h('div', { style: { marginTop: '14px' } },
       soilPlacementRow,
       h('div', { class: 'section-title' }, isSoil ? 'Messwerte & Kanäle' : 'Raumsensoren'),
-      h('div', { class: 'hint', style: { marginBottom: '8px' } }, isSoil ? 'Gewünschte Bodenwerte aktivieren' : 'Werte für Raumkachel wählen'),
+      h('div', { class: 'hint', style: { marginBottom: '8px' } }, isSoil ? 'Gewünschte Bodenwerte aktivieren' : 'Typ & Darstellung für Raum wählen'),
       ...cards);
   }
 
@@ -2289,17 +2356,38 @@ export class DeviceWizard {
         // Entity renames (only set name for multi-channel entities; keep single-channel Friendly Name intact)
         for (const ch of activeChannels) {
           try {
+            const entEntry = this.entities.find((e) => e.entity_id === ch.entity_id);
             const payload = {
               type: 'config/entity_registry/update',
               entity_id: ch.entity_id,
               area_id: (this.displayMode !== 'bundled' && ch.area_id) ? ch.area_id : (this.selectedAreaId || null),
             };
+            if (ch._wasDisabledByUser || entEntry?.disabled_by === 'user') {
+              payload.disabled_by = null;
+              if (entEntry) entEntry.disabled_by = null;
+            }
             if (isMultiDevice && ch.name) {
               payload.name = ch.name;
             }
             await this.hass.callWS(payload);
           } catch (err) {
             console.warn('[wizard] entity rename failed', err);
+          }
+        }
+      } else {
+        for (const ch of activeChannels) {
+          const entEntry = this.entities.find((e) => e.entity_id === ch.entity_id);
+          if (ch._wasDisabledByUser || entEntry?.disabled_by === 'user') {
+            try {
+              await this.hass.callWS({
+                type: 'config/entity_registry/update',
+                entity_id: ch.entity_id,
+                disabled_by: null,
+              });
+              if (entEntry) entEntry.disabled_by = null;
+            } catch (err) {
+              console.warn('[wizard] entity re-enable failed', err);
+            }
           }
         }
       }
@@ -2342,6 +2430,12 @@ export class DeviceWizard {
           || (this.selectedCategory === 'solar' ? (this.powerEntityId || this.energyEntityId || this.sensorEntities.find((s) => s.type !== 'ignore')?.entity_id) : undefined)
           || (this.selectedCategory === 'bodenmessgeraet' && this.sensorPlacement === 'tile'
             ? (this.sensorEntities.find((s) => s.type === 'moisture')?.entity_id || this.sensorEntities.find((s) => s.type !== 'ignore')?.entity_id)
+            : undefined)
+          || (this.selectedCategory === 'raummessgeraet' && this.sensorPlacement === 'tile'
+            ? (this.sensorEntities.find((s) => s.type === 'temperature')?.entity_id || this.sensorEntities.find((s) => s.type !== 'ignore')?.entity_id)
+            : undefined)
+          || (this.selectedCategory === 'bewegungsmelder' && this.sensorPlacement === 'tile'
+            ? (this.sensorEntities.find((s) => s.type === 'motion')?.entity_id || this.sensorEntities.find((s) => s.type !== 'ignore')?.entity_id)
             : undefined);
         const fallbackPrimaryEnt = fallbackPrimaryId ? this.entities.find((e) => e.entity_id === fallbackPrimaryId) : null;
         entitiesConfig = {
@@ -2361,6 +2455,7 @@ export class DeviceWizard {
           original_id: s.entity_id,
           type: s.type,
           enabled: s.type !== 'ignore',
+          ...(s.placement ? { placement: s.placement } : {}),
         };
       }
       entitiesConfig.room_sensors = room_sensors;
@@ -2374,8 +2469,8 @@ export class DeviceWizard {
       if (isMultiDevice) {
         nextOptions.display_mode = this.displayMode;
       }
-      if (this.selectedCategory === 'bodenmessgeraet' || this.selectedCategory === 'rauchmelder') {
-        nextOptions.sensor_placement = this.sensorPlacement || 'tile';
+      if (['bodenmessgeraet', 'rauchmelder', 'raummessgeraet', 'bewegungsmelder'].includes(this.selectedCategory)) {
+        nextOptions.sensor_placement = this.sensorPlacement || (['bodenmessgeraet', 'rauchmelder'].includes(this.selectedCategory) ? 'tile' : 'room');
       }
 
       if (this.selectedCategory === 'rauchmelder' && (this.smokeEntityId || entitiesConfig.primary)) {
