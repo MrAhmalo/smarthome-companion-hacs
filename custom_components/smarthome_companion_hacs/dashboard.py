@@ -439,6 +439,10 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
 
     def add_tile(area_id, tile):
         eid = tile.get("entity_id")
+        if eid and eid in hidden_ent_ids:
+            return
+        if tile.get("device_id") in hidden_dev_ids:
+            return
         if eid:
             if eid in seen_entities:
                 return
@@ -452,7 +456,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
 
     def make_tile(
         key, entry, entity_id, name, category, icon, device,
-        power=None, energy=None, force_own_row=False, area_override=None, sub_sensors=None,
+        power=None, energy=None, force_own_row=False, area_override=None, sub_sensors=None, hybrid_id=None,
     ):
         cat = categories.get(category, {}) if category else {}
         area_id = valid_area(area_override) or valid_area(
@@ -470,6 +474,8 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
             "energy": energy,
             "force_own_row": bool(force_own_row),
         }
+        if hybrid_id:
+            tile_obj["hybrid_id"] = hybrid_id
         if sub_sensors:
             tile_obj["sub_sensors"] = sub_sensors
         return area_id, tile_obj
@@ -480,8 +486,17 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
             return entity_id
         return None
 
+    _raw_hidden = (
+        store.get_hidden_hybrid_ids() if hasattr(store, "get_hidden_hybrid_ids") else (set(), set())
+    )
+    hidden_dev_ids, hidden_ent_ids = (
+        _raw_hidden if isinstance(_raw_hidden, tuple) and len(_raw_hidden) == 2 else (set(), set())
+    )
+
     # ── Devices configured in the Companion device manager ──
     for device_id, cfg in store.get_devices().items():
+        if device_id in hidden_dev_ids:
+            continue
         is_virtual = str(device_id).startswith("entity:")
         device = None if is_virtual else dev_reg.async_get(device_id)
         if not is_virtual and device is None:
@@ -528,6 +543,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                     resolve_aux(sub.get("power")), resolve_aux(sub.get("energy")),
                     force_own_row=sub_force,
                     area_override=sub.get("area_id"),
+                    hybrid_id=cfg.get("hybrid_id"),
                 )
                 child_pairs.append((area_id, tile))
 
@@ -538,7 +554,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                 for _, ch_tile in child_pairs:
                     seen_entities.add(ch_tile["entity_id"])
                     _record_configured_entity(ch_tile.get("entity_id"), device_id, ch_tile.get("category") or category, ch_tile.get("name"), bundled_area)
-                add_tile(bundled_area, {
+                bundled_tile = {
                     "key": f"bundled:{device_id}",
                     "device_id": device_id,
                     "is_group": True,
@@ -549,7 +565,10 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                     "entity_ids": [ct["entity_id"] for _, ct in child_pairs],
                     "children": [ct for _, ct in child_pairs],
                     "force_own_row": True,
-                })
+                }
+                if cfg.get("hybrid_id"):
+                    bundled_tile["hybrid_id"] = cfg.get("hybrid_id")
+                add_tile(bundled_area, bundled_tile)
                 emitted_primary_tile = True
             else:
                 for area_id, tile in child_pairs:
@@ -612,6 +631,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                         force_own_row=dev_force,
                         sub_sensors=sub_sensors or None,
                         area_override=p_area,
+                        hybrid_id=cfg.get("hybrid_id"),
                     )
                     tile["device_id"] = device_id
                     add_tile(area_id, tile)
@@ -860,6 +880,7 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
 
             group_entry = (
                 by_uid.get(("light", f"smarthome_companion_group_light_{gid}"))
+                or by_uid.get(("cover", f"smarthome_companion_group_cover_{gid}"))
                 or by_uid.get(("switch", f"smarthome_companion_group_switch_{gid}"))
             )
             group_eid = group_entry.entity_id if group_entry else None
@@ -867,6 +888,8 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                 safe_gid = re.sub(r"[^a-zA-Z0-9_]", "_", str(gid)).lower()
                 if hass.states.get(f"group.{safe_gid}") is not None:
                     group_eid = f"group.{safe_gid}"
+            grp_power_entry = by_uid.get(("sensor", f"smarthome_companion_group_sensor_{gid}_power"))
+            grp_energy_entry = by_uid.get(("sensor", f"smarthome_companion_group_sensor_{gid}_energy"))
             return {
                 "key": f"group:{gid}",
                 "is_group": True,
@@ -877,6 +900,8 @@ def build_layout(hass, store, config: dict, user_id: str | None, edit: bool = Fa
                 "icon": g.get("icon") or "mdi:lightbulb-group",
                 "color": cat_info.get("color"),
                 "area_id": area_id,
+                "power": grp_power_entry.entity_id if grp_power_entry else None,
+                "energy": grp_energy_entry.entity_id if grp_energy_entry else None,
                 "entity_ids": unique_eids,
                 "children": child_specs,
             }

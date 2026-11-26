@@ -101,21 +101,28 @@ class SimulationManager:
         config = self.store.data.get("simulation", {})
         actions = config.get("actions", [])
         
+        _raw_hidden = (
+            self.store.get_hidden_hybrid_ids() if hasattr(self.store, "get_hidden_hybrid_ids") else (set(), set())
+        )
+        _, hidden_ent_ids = (
+            _raw_hidden if isinstance(_raw_hidden, tuple) and len(_raw_hidden) == 2 else (set(), set())
+        )
         light_entities = []
         for action in actions:
             if action.get("categoryId") == "lights":
                 mode = action.get("blindsMode", "all")
                 ids = action.get("blindIds", [])
-                
+
                 if mode == "all":
                     for state in self.hass.states.async_all("light"):
-                        light_entities.append(state.entity_id)
+                        if state.entity_id not in hidden_ent_ids:
+                            light_entities.append(state.entity_id)
                 elif mode == "all_except":
                     for state in self.hass.states.async_all("light"):
-                        if state.entity_id not in ids:
+                        if state.entity_id not in ids and state.entity_id not in hidden_ent_ids:
                             light_entities.append(state.entity_id)
                 else:
-                    light_entities.extend(ids)
+                    light_entities.extend(e for e in ids if e not in hidden_ent_ids)
                 
         if active and not was_active:
             _LOGGER.info("Presence simulation ACTIVATED (Active triggers: %s)", self._active_triggers)

@@ -19,6 +19,10 @@ export class MockHass {
     this.configData.tile_order ||= {};
     this.configData.tile_layout ||= {};
     this.configuredDevices = {};
+    this.hybrids = JSON.parse(JSON.stringify(MOCK_DATA.hybrids || {}));
+    this.hybridSettings = { preferred_protocol: 'zigbee', failover_timeout_s: 1.8, event_debounce_ms: 400 };
+    this.dismissedHybridPairs = [];
+    this.hybridProposals = JSON.parse(JSON.stringify(MOCK_DATA.hybrid_proposals || []));
     this.layout = JSON.parse(JSON.stringify(MOCK_DATA.layout));
     for (const room of (this.layout.rooms || [])) {
       for (const t of (room.tiles || [])) {
@@ -75,11 +79,167 @@ export class MockHass {
       return { groups: JSON.parse(JSON.stringify(this.groups)) };
     }
     if (msg.type === 'smarthome_companion/devices/get') {
+      const hiddenDevs = [];
+      for (const hCfg of Object.values(this.hybrids || {})) {
+        for (const tInfo of Object.values(hCfg?.transports || {})) {
+          if (tInfo?.device_id) hiddenDevs.push(tInfo.device_id);
+        }
+      }
       return {
         devices: JSON.parse(JSON.stringify(this.configuredDevices)),
         categories: {},
         groups: JSON.parse(JSON.stringify(this.groups)),
+        hybrids: JSON.parse(JSON.stringify(this.hybrids || {})),
+        hybrid_settings: JSON.parse(JSON.stringify(this.hybridSettings || {})),
+        hidden_hybrid_device_ids: hiddenDevs,
       };
+    }
+    if (msg.type === 'smarthome_companion/hybrids/get') {
+      return {
+        hybrids: JSON.parse(JSON.stringify(this.hybrids || {})),
+        hybrid_settings: JSON.parse(JSON.stringify(this.hybridSettings || {})),
+        dismissed_hybrid_pairs: [...(this.dismissedHybridPairs || [])],
+      };
+    }
+    if (msg.type === 'smarthome_companion/hybrids/discover') {
+      const linkedIds = new Set();
+      for (const hCfg of Object.values(this.hybrids || {})) {
+        for (const tInfo of Object.values(hCfg?.transports || {})) {
+          if (tInfo?.device_id) linkedIds.add(tInfo.device_id);
+        }
+      }
+      const dismissed = new Set(this.dismissedHybridPairs || []);
+      const proposals = (this.hybridProposals || []).filter(
+        (p) => !dismissed.has(p.pair_key) && !(p.devices || []).some((d) => linkedIds.has(d.device_id)),
+      );
+      return {
+        proposals: JSON.parse(JSON.stringify(proposals)),
+        hybrids: JSON.parse(JSON.stringify(this.hybrids || {})),
+        hybrid_settings: JSON.parse(JSON.stringify(this.hybridSettings || {})),
+      };
+    }
+    if (msg.type === 'smarthome_companion/hybrids/dismiss_pair') {
+      if (msg.pair_key && !this.dismissedHybridPairs.includes(msg.pair_key)) {
+        this.dismissedHybridPairs.push(msg.pair_key);
+      }
+      return { success: true, pair_key: msg.pair_key };
+    }
+    if (msg.type === 'smarthome_companion/hybrids/settings') {
+      if (msg.preferred_protocol) this.hybridSettings.preferred_protocol = msg.preferred_protocol;
+      if (msg.failover_timeout_s !== undefined) this.hybridSettings.failover_timeout_s = Number(msg.failover_timeout_s);
+      if (msg.event_debounce_ms !== undefined) this.hybridSettings.event_debounce_ms = Number(msg.event_debounce_ms);
+      return { success: true, hybrid_settings: JSON.parse(JSON.stringify(this.hybridSettings)) };
+    }
+    if (msg.type === 'smarthome_companion/hybrids/save') {
+      const hid = msg.hybrid_id || msg.id || `hybrid_${Date.now()}`;
+      const existing = this.hybrids[hid] || {};
+      const slugify = (s) => String(s || '').toLowerCase()
+        .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+        .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      const name = msg.name || existing.name || 'Hybrid-Gerät';
+      const areaId = msg.area_id !== undefined ? (msg.area_id || '') : (existing.area_id || '');
+      const areaName = this.areas.find((a) => a.area_id === areaId)?.name || '';
+      const baseSlug = [slugify(areaName), slugify(name)].filter(Boolean).join('_').replace(new RegExp(`^(${slugify(areaName)}_)+`), slugify(areaName) ? `${slugify(areaName)}_` : '');
+      const masterDevId = existing.master_device_id || `dev_${hid}`;
+      const transports = {};
+      for (const [proto, val] of Object.entries(msg.transports || existing.transports || {})) {
+        const did = typeof val === 'object' ? val.device_id : val;
+        if (did) transports[proto] = { device_id: did };
+      }
+      const firstProto = msg.preferred_protocol || this.hybridSettings.preferred_protocol || Object.keys(transports)[0] || 'zigbee';
+      const activeProto = transports[firstProto] ? firstProto : (Object.keys(transports)[0] || 'zigbee');
+      const primarySrc = this.entityRegistry.find((e) => e.device_id === transports[activeProto]?.device_id && /^(light|switch|cover)\./.test(e.entity_id));
+      const dom = primarySrc ? primarySrc.entity_id.split('.')[0] : 'switch';
+      const masterEid = `${dom}.${baseSlug || hid}`;
+      if (!this.deviceRegistry.some((d) => d.id === masterDevId)) {
+        this.deviceRegistry.push({
+          id: masterDevId,
+          name,
+          manufacturer: 'SmartHome Companion',
+          model: 'Hybrid Master',
+          area_id: areaId || null,
+          identifiers: [['smarthome_companion_hacs', `hybrid_${hid}`]],
+        });
+      } else {
+        const md = this.deviceRegistry.find((d) => d.id === masterDevId);
+        if (md) { md.name = name; md.area_id = areaId || null; }
+      }
+      if (!this.entityRegistry.some((e) => e.entity_id === masterEid)) {
+        this.entityRegistry.push({
+          entity_id: masterEid,
+          device_id: masterDevId,
+          area_id: areaId || null,
+          platform: 'smarthome_companion_hacs',
+          name,
+          disabled_by: null,
+        });
+      }
+      this.states[masterEid] = {
+        entity_id: masterEid,
+        state: 'off',
+        attributes: { friendly_name: areaName ? `${areaName} ${name}` : name, active_transport: activeProto },
+      };
+      const record = {
+        id: hid,
+        name,
+        area_id: areaId,
+        category: msg.category || existing.category || 'schalter',
+        icon: msg.icon || existing.icon || null,
+        preferred_protocol: msg.preferred_protocol !== undefined ? (msg.preferred_protocol || null) : (existing.preferred_protocol || null),
+        master_device_id: masterDevId,
+        transports,
+        channels: [{ master_entity_id: masterEid, domain: dom, category: msg.category || existing.category || 'schalter', sources: {} }],
+      };
+      this.hybrids[hid] = record;
+      this.configuredDevices[masterDevId] = {
+        device_id: masterDevId,
+        hybrid_id: hid,
+        category: record.category,
+        custom_name: name,
+        area_id: areaId,
+        icon: record.icon,
+        options: { hybrid_id: hid },
+        entities: { primary: masterEid },
+      };
+      const adoptedId = msg.adopted_device_id;
+      if (adoptedId && this.configuredDevices[adoptedId]) delete this.configuredDevices[adoptedId];
+      for (const tInfo of Object.values(transports)) {
+        const tdId = tInfo.device_id;
+        for (const r of (this.layout.rooms || [])) {
+          r.tiles = (r.tiles || []).filter((t) => t.device_id !== tdId);
+        }
+      }
+      const destRoom = (this.layout.rooms || []).find((r) => r.area_id === areaId) || this.layout.rooms?.[0];
+      if (destRoom && !(destRoom.tiles || []).some((t) => t.device_id === masterDevId)) {
+        destRoom.tiles.push({
+          key: `${masterDevId}:${masterEid}`,
+          device_id: masterDevId,
+          hybrid_id: hid,
+          entity_id: masterEid,
+          name,
+          category: record.category,
+          icon: record.icon || 'mdi:lightbulb',
+        });
+      }
+      this._rebuildRoomTileOrder();
+      return { success: true, hybrid: JSON.parse(JSON.stringify(record)) };
+    }
+    if (msg.type === 'smarthome_companion/hybrids/unpair') {
+      const hid = msg.hybrid_id;
+      const hCfg = this.hybrids[hid];
+      if (hCfg) {
+        const mId = hCfg.master_device_id;
+        delete this.hybrids[hid];
+        if (mId) {
+          delete this.configuredDevices[mId];
+          this.deviceRegistry = this.deviceRegistry.filter((d) => d.id !== mId);
+          this.entityRegistry = this.entityRegistry.filter((e) => e.device_id !== mId);
+          for (const r of (this.layout.rooms || [])) {
+            r.tiles = (r.tiles || []).filter((t) => t.device_id !== mId && t.hybrid_id !== hid);
+          }
+        }
+      }
+      return { success: true, hybrid_id: hid };
     }
     if (msg.type === 'smarthome_companion/devices/configure') {
       const devId = msg.device_id;

@@ -12,7 +12,26 @@ class CompanionStore:
         self.hass = hass
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self._save_lock = asyncio.Lock()
-        self.data = {"blinds": {}, "irrigation": {}, "devices": {}, "categories": {}, "dismissed_devices": [], "simulation": {}, "dashboard": None, "migrations": {}}
+        self.data = {
+            "blinds": {},
+            "irrigation": {},
+            "devices": {},
+            "categories": {},
+            "dismissed_devices": [],
+            "simulation": {},
+            "groups": {},
+            "hybrids": {},
+            "hybrid_settings": {
+                "preferred_protocol": "zigbee",
+                "protocol_priority": ["zigbee", "matter", "wlan"],
+                "failover_timeout_s": 1.8,
+                "desync_guard_s": 2.5,
+                "event_debounce_ms": 400,
+            },
+            "dismissed_hybrid_pairs": [],
+            "dashboard": None,
+            "migrations": {},
+        }
 
     async def async_load(self):
         saved = await self._store.async_load()
@@ -25,6 +44,18 @@ class CompanionStore:
             self.data.setdefault("adaptive_light", {})
             self.data.setdefault("simulation", {})
             self.data.setdefault("groups", {})
+            self.data.setdefault("hybrids", {})
+            self.data.setdefault(
+                "hybrid_settings",
+                {
+                    "preferred_protocol": "zigbee",
+                    "protocol_priority": ["zigbee", "matter", "wlan"],
+                    "failover_timeout_s": 1.8,
+                    "desync_guard_s": 2.5,
+                    "event_debounce_ms": 400,
+                },
+            )
+            self.data.setdefault("dismissed_hybrid_pairs", [])
             self.data.setdefault("dashboard", None)
             self.data.setdefault("migrations", {})
 
@@ -104,6 +135,83 @@ class CompanionStore:
     async def save_groups(self, groups_data):
         self.data["groups"] = groups_data
         return await self.async_save()
+
+    # ── Hybrids (Multi-Protocol Devices) ──
+
+    def get_hybrids(self):
+        hybrids = self.data.get("hybrids")
+        return hybrids if isinstance(hybrids, dict) else {}
+
+    async def save_hybrids(self, hybrids_data):
+        self.data["hybrids"] = hybrids_data if isinstance(hybrids_data, dict) else {}
+        return await self.async_save()
+
+    def get_hybrid_settings(self):
+        defaults = {
+            "preferred_protocol": "zigbee",
+            "protocol_priority": ["zigbee", "matter", "wlan"],
+            "failover_timeout_s": 1.8,
+            "desync_guard_s": 2.5,
+            "event_debounce_ms": 400,
+        }
+        cur = self.data.get("hybrid_settings")
+        if not isinstance(cur, dict):
+            return dict(defaults)
+        merged = dict(defaults)
+        merged.update(cur)
+        if merged.get("preferred_protocol") not in ("zigbee", "wlan", "matter"):
+            merged["preferred_protocol"] = "zigbee"
+        return merged
+
+    async def save_hybrid_settings(self, cfg):
+        cur = self.get_hybrid_settings()
+        if isinstance(cfg, dict):
+            cur.update(cfg)
+        pref = cur.get("preferred_protocol")
+        if pref not in ("zigbee", "wlan", "matter"):
+            pref = "zigbee"
+        cur["preferred_protocol"] = pref
+        cur["protocol_priority"] = [pref] + [p for p in ("zigbee", "matter", "wlan") if p != pref]
+        self.data["hybrid_settings"] = cur
+        return await self.async_save()
+
+    def get_dismissed_hybrid_pairs(self):
+        raw = self.data.get("dismissed_hybrid_pairs")
+        return raw if isinstance(raw, list) else []
+
+    async def save_dismissed_hybrid_pairs(self, pairs):
+        self.data["dismissed_hybrid_pairs"] = list(dict.fromkeys(str(p) for p in (pairs or []) if p))
+        return await self.async_save()
+
+    def get_hidden_hybrid_ids(self) -> tuple[set[str], set[str]]:
+        """Return (underlying_device_ids, underlying_entity_ids) hidden from dashboards/automation scans."""
+        dev_ids: set[str] = set()
+        ent_ids: set[str] = set()
+        for h_cfg in self.get_hybrids().values():
+            if not isinstance(h_cfg, dict):
+                continue
+            for t_info in (h_cfg.get("transports") or {}).values():
+                if isinstance(t_info, dict) and t_info.get("device_id"):
+                    dev_ids.add(str(t_info["device_id"]))
+            for ch in h_cfg.get("channels") or []:
+                if not isinstance(ch, dict):
+                    continue
+                for src in (ch.get("sources") or {}).values():
+                    if isinstance(src, dict) and src.get("entity_id"):
+                        ent_ids.add(str(src["entity_id"]))
+            for s_spec in h_cfg.get("sensors") or []:
+                if not isinstance(s_spec, dict):
+                    continue
+                for src in (s_spec.get("sources") or {}).values():
+                    if isinstance(src, dict) and src.get("entity_id"):
+                        ent_ids.add(str(src["entity_id"]))
+            for ev in h_cfg.get("events") or []:
+                if not isinstance(ev, dict):
+                    continue
+                for src in ev.get("sources") or []:
+                    if isinstance(src, dict) and src.get("entity_id"):
+                        ent_ids.add(str(src["entity_id"]))
+        return dev_ids, ent_ids
 
     # ── Categories ──
 

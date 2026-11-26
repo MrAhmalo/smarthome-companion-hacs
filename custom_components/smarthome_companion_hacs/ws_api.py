@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import logging
 import re
 from datetime import datetime
+from typing import Any
 # pyrefly: ignore [missing-import]
 import voluptuous as vol
 # pyrefly: ignore [missing-import]
@@ -16,6 +19,7 @@ from .const import DOMAIN
 from .device_helpers import get_device_by_identifier_compat
 from .util import safe_fire_event
 from .entity_sync import (
+    _suppress_internal_rename_event,
     async_sync_renamed_entities,
     slugify_ha,
     sync_device_entity_ids,
@@ -57,6 +61,13 @@ def async_register_websockets(hass):
     # Simulation
     websocket_api.async_register_command(hass, handle_get_simulation_config)
     websocket_api.async_register_command(hass, handle_save_simulation_config)
+    # Hybrids (Multi-Protocol Devices)
+    websocket_api.async_register_command(hass, handle_get_hybrids)
+    websocket_api.async_register_command(hass, handle_discover_hybrids)
+    websocket_api.async_register_command(hass, handle_save_hybrid)
+    websocket_api.async_register_command(hass, handle_unpair_hybrid)
+    websocket_api.async_register_command(hass, handle_dismiss_hybrid_pair)
+    websocket_api.async_register_command(hass, handle_hybrid_settings)
 
 # ── Helpers ──
 
@@ -126,11 +137,18 @@ def _remove_entity_labels(hass, entity_id: str, labels_to_remove: list[str]):
 @websocket_api.async_response
 async def handle_get_devices(hass, connection, msg):
     store = hass.data[DOMAIN]["store"]
+    hidden_dev_ids, hidden_ent_ids = (
+        store.get_hidden_hybrid_ids() if hasattr(store, "get_hidden_hybrid_ids") else (set(), set())
+    )
     connection.send_result(msg["id"], {
         "devices": store.get_devices(),
         "categories": store.get_categories(),
         "dismissed": store.get_dismissed_devices(),
         "groups": store.get_groups(),
+        "hybrids": store.get_hybrids() if hasattr(store, "get_hybrids") else {},
+        "hybrid_settings": store.get_hybrid_settings() if hasattr(store, "get_hybrid_settings") else {},
+        "hidden_hybrid_device_ids": sorted(hidden_dev_ids),
+        "hidden_hybrid_entity_ids": sorted(hidden_ent_ids),
     })
 
 @websocket_api.websocket_command({
@@ -191,7 +209,13 @@ async def handle_configure_device(hass, connection, msg):
     # Save device config (capture previous device config first to catch prior renames)
     devices = store.get_devices()
     prev_dev = devices.get(device_id)
+    preserved_meta = {}
+    if isinstance(prev_dev, dict):
+        for m_key in ("hybrid_id", "protocol"):
+            if m_key in prev_dev and prev_dev[m_key] is not None:
+                preserved_meta[m_key] = prev_dev[m_key]
     devices[device_id] = {
+        **preserved_meta,
         "category": category,
         "configured_at": datetime.now().isoformat(),
         "custom_name": custom_name,
@@ -454,6 +478,8 @@ async def handle_save_group(hass, connection, msg):
                     update_kwargs["original_name"] = None
             if update_kwargs:
                 try:
+                    if "new_entity_id" in update_kwargs:
+                        _suppress_internal_rename_event(hass, current_eid, update_kwargs["new_entity_id"])
                     ent_reg.async_update_entity(current_eid, **update_kwargs)
                     if "new_entity_id" in update_kwargs:
                         _LOGGER.info("Synchronized group entity ID: %s -> %s", current_eid, target_eid)
@@ -509,15 +535,23 @@ async def handle_delete_group(hass, connection, msg):
                 children.remove(group_id)
         await store.save_groups(groups)
 
-        # Remove Companion group entities & device from HA registries cleanly
+        # Remove ALL Companion group entities & device from HA registries cleanly
         try:
             ent_reg = er.async_get(hass)
-            for dom in ("light", "switch"):
-                eid = ent_reg.async_get_entity_id(dom, DOMAIN, f"smarthome_companion_group_{dom}_{group_id}")
-                if eid:
-                    ent_reg.async_remove(eid)
             dev_reg = dr.async_get(hass)
             dev_entry = get_device_by_identifier_compat(dev_reg, (DOMAIN, f"group_{group_id}"))
+            dev_id_to_clean = dev_entry.id if dev_entry else None
+            group_uid_marker = f"_{group_id}"
+            for e_entry in list(ent_reg.entities.values()):
+                if getattr(e_entry, "platform", None) != DOMAIN:
+                    continue
+                uid = str(getattr(e_entry, "unique_id", "") or "")
+                matches_dev = dev_id_to_clean and getattr(e_entry, "device_id", None) == dev_id_to_clean
+                matches_uid = uid.startswith("smarthome_companion_group_") and (
+                    uid.endswith(group_uid_marker) or f"{group_uid_marker}_" in uid
+                )
+                if matches_dev or matches_uid:
+                    ent_reg.async_remove(e_entry.entity_id)
             if dev_entry:
                 dev_reg.async_remove_device(dev_entry.id)
         except Exception as err:
@@ -845,3 +879,135 @@ async def handle_save_simulation_config(hass, connection, msg):
         await manager.async_reload_config()
         
     connection.send_result(msg["id"], {"success": True})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smarthome_companion/hybrids/get",
+})
+@websocket_api.async_response
+async def handle_get_hybrids(hass, connection, msg):
+    store = hass.data[DOMAIN]["store"]
+    connection.send_result(msg["id"], {
+        "hybrids": store.get_hybrids() if hasattr(store, "get_hybrids") else store.data.get("hybrids", {}),
+        "hybrid_settings": store.get_hybrid_settings() if hasattr(store, "get_hybrid_settings") else store.data.get("hybrid_settings", {}),
+        "dismissed_hybrid_pairs": store.get_dismissed_hybrid_pairs() if hasattr(store, "get_dismissed_hybrid_pairs") else store.data.get("dismissed_hybrid_pairs", []),
+    })
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smarthome_companion/hybrids/discover",
+})
+@websocket_api.async_response
+async def handle_discover_hybrids(hass, connection, msg):
+    from .hybrid_discovery import async_discover_hybrid_pairs
+    store = hass.data[DOMAIN]["store"]
+    proposals = await async_discover_hybrid_pairs(hass, store)
+    connection.send_result(msg["id"], {
+        "proposals": proposals,
+        "hybrids": store.get_hybrids(),
+        "hybrid_settings": store.get_hybrid_settings(),
+    })
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smarthome_companion/hybrids/save",
+    vol.Optional("hybrid_id"): vol.Any(str, None),
+    vol.Optional("id"): vol.Any(str, None),
+    vol.Optional("name"): vol.Any(str, None),
+    vol.Optional("area_id"): vol.Any(str, None),
+    vol.Optional("category"): vol.Any(str, None),
+    vol.Optional("icon"): vol.Any(str, None),
+    vol.Optional("preferred_protocol"): vol.Any(str, None),
+    vol.Optional("transports"): dict,
+    vol.Optional("adopted_device_id"): vol.Any(str, None),
+    vol.Optional("adopted_protocol"): vol.Any(str, None),
+})
+@websocket_api.async_response
+async def handle_save_hybrid(hass, connection, msg):
+    manager = hass.data[DOMAIN].get("hybrid_manager")
+    if manager is None:
+        connection.send_error(msg["id"], "not_ready", "HybridManager is not initialized")
+        return
+    try:
+        hybrid = await manager.async_convert_to_hybrid(dict(msg))
+        connection.send_result(msg["id"], {"success": True, "hybrid": hybrid})
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_format", str(err))
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.exception("Failed saving hybrid device: %s", err)
+        connection.send_error(msg["id"], "save_failed", str(err))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smarthome_companion/hybrids/unpair",
+    vol.Required("hybrid_id"): str,
+    vol.Optional("reclaim_protocol"): vol.Any(str, None),
+})
+@websocket_api.async_response
+async def handle_unpair_hybrid(hass, connection, msg):
+    manager = hass.data[DOMAIN].get("hybrid_manager")
+    if manager is None:
+        connection.send_error(msg["id"], "not_ready", "HybridManager is not initialized")
+        return
+    try:
+        res = await manager.async_unpair_hybrid(
+            msg["hybrid_id"],
+            reclaim_protocol=msg.get("reclaim_protocol"),
+        )
+        connection.send_result(msg["id"], res)
+    except ValueError as err:
+        connection.send_error(msg["id"], "not_found", str(err))
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.exception("Failed unpairing hybrid device: %s", err)
+        connection.send_error(msg["id"], "unpair_failed", str(err))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smarthome_companion/hybrids/dismiss_pair",
+    vol.Optional("pair_key"): str,
+    vol.Optional("device_a"): str,
+    vol.Optional("device_b"): str,
+})
+@websocket_api.async_response
+async def handle_dismiss_hybrid_pair(hass, connection, msg):
+    from .hybrid_discovery import make_pair_key
+    store = hass.data[DOMAIN]["store"]
+    pk = msg.get("pair_key")
+    if not pk and msg.get("device_a") and msg.get("device_b"):
+        pk = make_pair_key(msg["device_a"], msg["device_b"])
+    if not pk:
+        connection.send_error(msg["id"], "invalid_format", "pair_key required")
+        return
+    dismissed = list(store.get_dismissed_hybrid_pairs())
+    if pk not in dismissed:
+        dismissed.append(pk)
+    store.data["dismissed_hybrid_pairs"] = dismissed
+    await store.async_save()
+    connection.send_result(msg["id"], {"success": True, "pair_key": pk})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smarthome_companion/hybrids/settings",
+    vol.Optional("preferred_protocol"): vol.In(["zigbee", "wlan", "matter"]),
+    vol.Optional("failover_timeout_s"): vol.Any(int, float),
+    vol.Optional("event_debounce_ms"): vol.Any(int, float),
+})
+@websocket_api.async_response
+async def handle_hybrid_settings(hass, connection, msg):
+    store = hass.data[DOMAIN]["store"]
+    cur = dict(store.get_hybrid_settings())
+    changed = False
+    if "preferred_protocol" in msg:
+        cur["preferred_protocol"] = msg["preferred_protocol"]
+        changed = True
+    if "failover_timeout_s" in msg:
+        cur["failover_timeout_s"] = max(1.0, min(5.0, float(msg["failover_timeout_s"])))
+        changed = True
+    if "event_debounce_ms" in msg:
+        cur["event_debounce_ms"] = max(100, min(1000, int(msg["event_debounce_ms"])))
+        changed = True
+    if changed:
+        store.data["hybrid_settings"] = cur
+        await store.async_save()
+        safe_fire_event(hass, f"{DOMAIN}_hybrids_updated")
+    connection.send_result(msg["id"], {"success": True, "hybrid_settings": cur})

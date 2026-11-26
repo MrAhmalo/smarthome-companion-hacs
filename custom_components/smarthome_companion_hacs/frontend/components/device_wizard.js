@@ -4,7 +4,7 @@ import { CustomDropdown } from './custom_dropdown.js';
 import { IconPicker } from './icon_picker.js';
 import { SensorConflictModal } from './room_modals.js';
 import {
-  DEVICE_CATEGORIES, isControllableActuator, isOwnIntegrationEntity, isOwnIntegrationDevice,
+  DEVICE_CATEGORIES, isControllableActuator, isOwnIntegrationEntity, isOwnIntegrationDevice, isHybridMasterDevice,
   getPendingChannelsForDevice, createGroupCard, createWizardDeviceElements, createDeviceRoomSection,
   IGNORED_PLATFORMS, ROOM_SENSOR_DEVICE_CLASSES, classifyDeviceProtocol, isBridgeOrCoordinator,
   isIrrelevantDeviceOrIntegration,
@@ -47,11 +47,16 @@ export class DeviceWizard {
     this.searchQuery = '';
     this.preFilterMode = null; // null | 'room' | 'protocol' | 'all'
     this.selectedAreaFilter = '__all__';
-    this.protocolFilter = 'all'; // 'all' | 'zigbee' | 'wifi_other'
+    this.protocolFilter = 'all'; // 'all' | 'zigbee' | 'matter' | 'wifi_other'
     this.statusFilter = 'unconfigured'; // 'unconfigured' | 'all' | 'configured'
     this.selectedDevices = new Set();
     this._expandedDeviceChannels = new Set();
     this.groups = {};
+    this.hybrids = {};
+    this.hybridProposals = [];
+    this.hybridSettings = { preferred_protocol: 'zigbee' };
+    this.hiddenHybridDeviceIds = new Set();
+    this._hybridPreferredProtocol = '';
     this._deviceMap = new Map();
 
     this.isCelebration = false;
@@ -93,12 +98,13 @@ export class DeviceWizard {
   async _load({ preserveStep0 = false } = {}) {
     this.body.replaceChildren(h('div', { class: 'empty' }, icon('mdi:loading'), h('div', { style: { marginTop: '8px' } }, 'Lade Geräte')));
     try {
-      const [devs, ents, areas, setup, dash] = await Promise.all([
+      const [devs, ents, areas, setup, dash, hybDisc] = await Promise.all([
         this.hass.callWS({ type: 'config/device_registry/list' }),
         this.hass.callWS({ type: 'config/entity_registry/list' }),
         this.hass.callWS({ type: 'config/area_registry/list' }),
         this.hass.callWS({ type: 'smarthome_companion/devices/get' }).catch(() => ({ devices: {}, categories: {} })),
         this.hass.callWS({ type: 'smarthome_companion/dashboard/get', edit: true }).catch(() => null),
+        this.hass.callWS({ type: 'smarthome_companion/hybrids/discover' }).catch(() => ({ proposals: [] })),
       ]);
       this.devices = devs || [];
       this.entities = ents || [];
@@ -107,6 +113,10 @@ export class DeviceWizard {
       this.configuredDevices = setup.devices || {};
       this.categories = setup.categories || {};
       this.groups = setup.groups || {};
+      this.hybrids = hybDisc?.hybrids || setup.hybrids || {};
+      this.hybridProposals = Array.isArray(hybDisc?.proposals) ? hybDisc.proposals : [];
+      this.hybridSettings = hybDisc?.hybrid_settings || setup.hybrid_settings || { preferred_protocol: 'zigbee' };
+      this.hiddenHybridDeviceIds = new Set(setup.hidden_hybrid_device_ids || []);
       this._dashboardRooms = dash?.layout?.rooms || [];
       this._dashboardConfig = dash?.config || {};
 
@@ -297,7 +307,7 @@ export class DeviceWizard {
 
   _getSelectableCandidates() {
     const devMap = this._deviceMap || new Map((this.devices || []).map((d) => [d.id, d]));
-    const realDevices = (this.devices || []).filter((d) => this._isCandidateDevice(d));
+    const realDevices = (this.devices || []).filter((d) => !this.hiddenHybridDeviceIds?.has(d.id) && this._isCandidateDevice(d));
     const realDeviceIds = new Set(realDevices.map((d) => d.id));
     const bridgeDeviceIds = new Set(
       (this.devices || [])
@@ -388,18 +398,22 @@ export class DeviceWizard {
 
   _isCandidateDevice(d) {
     if (!d || d.disabled_by) return false;
+    if (this.hiddenHybridDeviceIds?.has(d.id)) return false;
+    const isHybrid = isHybridMasterDevice(d);
     const devAllEnts = (this.entities || []).filter((e) => e.device_id === d.id && !e.disabled_by);
-    if (isBridgeOrCoordinator(d, devAllEnts)) return false;
-    if (d.entry_type === 'service') return false;
-    if (isIrrelevantDeviceOrIntegration(d, devAllEnts)) return false;
+    if (!isHybrid) {
+      if (isBridgeOrCoordinator(d, devAllEnts)) return false;
+      if (d.entry_type === 'service') return false;
+      if (isIrrelevantDeviceOrIntegration(d, devAllEnts)) return false;
+    }
 
     const devEntities = devAllEnts.filter(
-      (e) => !isOwnIntegrationEntity(e)
+      (e) => (isHybrid || !isOwnIntegrationEntity(e))
         && e.entity_category !== 'config'
         && e.entity_category !== 'diagnostic'
         && !IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase()),
     );
-    const controllable = devEntities.filter((e) => isControllableActuator(e));
+    const controllable = devEntities.filter((e) => isControllableActuator(e, { allowOwnHybrid: isHybrid }));
     const relevantSensors = devEntities.filter((e) => {
       const dom = domainOf(e.entity_id);
       if (dom !== 'sensor' && dom !== 'binary_sensor') return false;
@@ -451,8 +465,13 @@ export class DeviceWizard {
 
     if (this.preFilterMode === null && !this.searchQuery) {
       const zigbeeCount = candidates.filter((d) => this._getDeviceProtocol(d) === 'zigbee').length;
-      const wifiCount = candidates.length - zigbeeCount;
+      const matterCount = candidates.filter((d) => this._getDeviceProtocol(d) === 'matter').length;
+      const wifiCount = candidates.length - zigbeeCount - matterCount;
       const roomIds = new Set(candidates.map((d) => d.area_id || '__none__'));
+      const protoDesc = matterCount > 0 ? 'Zigbee · Matter · WLAN' : 'Zigbee vs. WLAN';
+      const protoCountText = matterCount > 0
+        ? `${zigbeeCount} Zigbee · ${matterCount} Matter · ${wifiCount} WLAN`
+        : `${zigbeeCount} Zigbee · ${wifiCount} WLAN`;
 
       const mkPrefilterCard = (mode, ic, title, sub, meta) => h('button', {
         type: 'button',
@@ -471,16 +490,56 @@ export class DeviceWizard {
 
       const grid = h('div', { class: 'wizard-prefilter-grid' },
         mkPrefilterCard('room', 'mdi:floor-plan', 'Nach Raum', 'Nach Home-Assistant-Bereichen filtern', `${roomIds.size} ${roomIds.size === 1 ? 'Raum' : 'Räume'}`),
-        mkPrefilterCard('protocol', 'mdi:zigbee', 'Nach Verbindung', 'Zigbee vs. WLAN', `${zigbeeCount} Zigbee · ${wifiCount} WLAN`),
+        mkPrefilterCard('protocol', 'mdi:zigbee', 'Nach Verbindung', protoDesc, protoCountText),
         mkPrefilterCard('all', 'mdi:devices', 'Alle unterstützten Geräte', 'Komplette bereinigte Geräteliste', `${candidates.length} Geräte`));
+
+      const proposalsBox = (this.hybridProposals && this.hybridProposals.length > 0)
+        ? h('div', { class: 'hybrid-proposals-section' },
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' } },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700', fontSize: '14px' } },
+              icon('mdi:swap-horizontal-bold'),
+              `Erkannte Hybrid-Geräte (${this.hybridProposals.length})`),
+            h('span', { class: 'hint' }, '• Identische Hardware über mehrere Funkwege')),
+          ...this.hybridProposals.map((p) => {
+            const protoLabel = (p.protocols || []).map((pr) => (pr === 'zigbee' ? 'Zigbee' : pr === 'matter' ? 'Matter' : 'WLAN')).join(' + ');
+            const confLabel = p.confidence === 'high' ? 'Sehr sicher' : 'Vorschlag';
+            return h('div', { class: 'hybrid-proposal-card' },
+              h('div', { style: { minWidth: '180px', flex: '1 1 220px' } },
+                h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontWeight: '600' } },
+                  p.suggested_name || 'Hybrid-Gerät',
+                  h('span', { class: 'badge-tag hybrid' }, protoLabel),
+                  h('span', { class: 'badge-tag ok' }, confLabel)),
+                h('div', { class: 'hint', style: { marginTop: '2px' } }, (p.reasons || []).join(' · '))),
+              h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
+                h('button', {
+                  type: 'button',
+                  class: 'btn secondary small',
+                  onClick: async () => {
+                    try {
+                      await this.hass.callWS({ type: 'smarthome_companion/hybrids/dismiss_pair', pair_key: p.pair_key });
+                    } catch (_) { /* non-fatal */ }
+                    this.hybridProposals = this.hybridProposals.filter((x) => x.pair_key !== p.pair_key);
+                    this._renderStep0();
+                  },
+                }, 'Verwerfen'),
+                h('button', {
+                  type: 'button',
+                  class: 'btn primary small',
+                  onClick: () => this._openHybridModal({ proposal: p }),
+                }, icon('mdi:swap-horizontal-bold'), 'Als Hybrid verbinden')));
+          }))
+        : null;
 
       this.deviceListEl = h('div', { class: 'device-list' });
       this.selectionSlot.replaceChildren();
       this.body.replaceChildren(
-        searchWrap,
-        h('div', { class: 'section-title', style: { marginTop: '14px' } }, 'Geräteauswahl eingrenzen'),
-        h('div', { class: 'hint' }, '• Vorfilter wählen oder direkt suchen\n• System- & Kalender-Dienste ausgeblendet'),
-        grid,
+        ...[
+          searchWrap,
+          proposalsBox,
+          h('div', { class: 'section-title', style: { marginTop: '14px' } }, 'Geräteauswahl eingrenzen'),
+          h('div', { class: 'hint' }, '• Vorfilter wählen oder direkt suchen\n• System- & Kalender-Dienste ausgeblendet'),
+          grid,
+        ].filter(Boolean),
       );
       return;
     }
@@ -529,13 +588,16 @@ export class DeviceWizard {
         }, alabel)));
     } else if (this.preFilterMode === 'protocol') {
       const zigbeeCount = candidates.filter((d) => this._getDeviceProtocol(d) === 'zigbee').length;
-      const wifiCount = candidates.length - zigbeeCount;
+      const matterCount = candidates.filter((d) => this._getDeviceProtocol(d) === 'matter').length;
+      const wifiCount = candidates.length - zigbeeCount - matterCount;
+      const protoChips = [
+        ['all', `Alle (${candidates.length})`, 'mdi:devices'],
+        ['zigbee', `Zigbee (${zigbeeCount})`, 'mdi:zigbee'],
+        ...(matterCount > 0 ? [['matter', `Matter (${matterCount})`, 'mdi:hub']] : []),
+        ['wifi_other', `WLAN (${wifiCount})`, 'mdi:wifi'],
+      ];
       subFilterRow = h('div', { class: 'filter-chips', style: { marginBottom: '8px' } },
-        ...[
-          ['all', `Alle (${candidates.length})`, 'mdi:devices'],
-          ['zigbee', `Zigbee (${zigbeeCount})`, 'mdi:zigbee'],
-          ['wifi_other', `WLAN (${wifiCount})`, 'mdi:wifi'],
-        ].map(([pid, plabel, pIcon]) => h('button', {
+        ...protoChips.map(([pid, plabel, pIcon]) => h('button', {
           type: 'button',
           class: 'filter-chip',
           ...(this.protocolFilter === pid ? { 'data-active': '' } : {}),
@@ -600,7 +662,8 @@ export class DeviceWizard {
       const model = (d.model || '').toLowerCase();
       const area = (areaMap.get(d.area_id) || '').toLowerCase();
       const entId = (d.entity_id || '').toLowerCase();
-      const proto = this._getDeviceProtocol(d) === 'zigbee' ? 'zigbee' : 'wlan';
+      const pRaw = this._getDeviceProtocol(d);
+      const proto = pRaw === 'zigbee' ? 'zigbee' : (pRaw === 'matter' ? 'matter' : 'wlan');
       return name.includes(q) || mfg.includes(q) || model.includes(q) || area.includes(q) || entId.includes(q) || proto.includes(q);
     });
 
@@ -820,6 +883,22 @@ export class DeviceWizard {
             }, icon('mdi:plus-box-multiple'),
               h('span', { class: 'btn-label-desktop' }, '+ Gruppe'),
               h('span', { class: 'btn-label-mobile' }, '+ Gruppe'))
+          );
+        }
+        const selectedDevs = selectedList.map((id) => this._deviceMap?.get(id)).filter(Boolean);
+        const canPairHybrid = selectedList.length >= 2 && selectedList.length <= 3
+          && !allGroups
+          && selectedDevs.length === selectedList.length
+          && selectedDevs.every((d) => !d.isVirtualEntity && !isHybridMasterDevice(d) && !this.groups[d.id]);
+        if (canPairHybrid) {
+          buttons.push(
+            h('button', {
+              class: 'btn secondary small',
+              type: 'button',
+              onClick: () => this._openHybridModal({ deviceIds: selectedList }),
+            }, icon('mdi:swap-horizontal-bold'),
+              h('span', { class: 'btn-label-desktop' }, 'Hybrid koppeln'),
+              h('span', { class: 'btn-label-mobile' }, 'Hybrid'))
           );
         }
       }
@@ -1051,6 +1130,9 @@ export class DeviceWizard {
       }
     }
     for (const d of this.devices) {
+      if (this.hiddenHybridDeviceIds?.has(d.id)) continue;
+      const devEnts = (this.entities || []).filter((e) => e.device_id === d.id);
+      if (isOwnIntegrationDevice(d, devEnts) && !isHybridMasterDevice(d)) continue;
       if (!selectedIds.includes(d.id)) {
         const dName = d.name_by_user || d.name || d.id;
         availableToAdd.push({ value: d.id, label: dName, icon: 'mdi:devices' });
@@ -1199,6 +1281,246 @@ export class DeviceWizard {
       showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
       return false;
     }
+  }
+
+  _getHybridForDevice(d) {
+    if (!d) return null;
+    const cfg = this.configuredDevices?.[d.id];
+    const hid = cfg?.hybrid_id;
+    if (hid && this.hybrids?.[hid]) return this.hybrids[hid];
+    for (const hCfg of Object.values(this.hybrids || {})) {
+      if (hCfg && hCfg.master_device_id === d.id) return hCfg;
+    }
+    return null;
+  }
+
+  async _unpairHybrid(hCfg, onAfter = null) {
+    if (!hCfg) return false;
+    const conf = await showConfirmDialog(this.el, {
+      title: 'Hybrid-Verknüpfung trennen?',
+      message: `„${hCfg.name || 'Hybrid'}“ trennen?\n• Bevorzugtes Gerät übernimmt ursprüngliche Basis-ID\n• Bestehende Automationen bleiben erhalten`,
+      confirmLabel: 'Trennen',
+      cancelLabel: 'Abbrechen',
+      danger: true,
+    });
+    if (!conf) return false;
+    try {
+      await this.hass.callWS({ type: 'smarthome_companion/hybrids/unpair', hybrid_id: hCfg.id });
+      showToast(this.el, 'Hybrid-Verknüpfung getrennt');
+      if (onAfter) onAfter();
+      else if (this.directMode) {
+        this._closeWizard();
+        this.onSaved?.(null);
+      } else {
+        this.selectedDevice = null;
+        this.step = 0;
+        await this._load({ preserveStep0: true });
+      }
+      return true;
+    } catch (err) {
+      showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
+      return false;
+    }
+  }
+
+  _openHybridModal({ proposal = null, deviceIds = null, baseDevice = null, baseConfig = null } = {}) {
+    const mapProto = (p) => (p === 'zigbee' ? 'zigbee' : p === 'matter' ? 'matter' : 'wlan');
+    const protoLabel = (p) => (p === 'zigbee' ? 'Zigbee' : p === 'matter' ? 'Matter' : 'WLAN');
+
+    const transports = {}; // proto -> device_id
+    let adoptedDeviceId = null;
+    let adoptedProto = null;
+
+    if (proposal) {
+      for (const devInfo of (proposal.devices || [])) {
+        const pr = mapProto(devInfo.protocol);
+        transports[pr] = devInfo.device_id;
+      }
+      adoptedDeviceId = proposal.adopted_device_id || null;
+      adoptedProto = proposal.adopted_protocol ? mapProto(proposal.adopted_protocol) : null;
+    } else if (baseDevice) {
+      const pr = mapProto(this._getDeviceProtocol(baseDevice));
+      transports[pr] = baseDevice.id;
+      adoptedDeviceId = baseDevice.id;
+      adoptedProto = pr;
+    } else if (Array.isArray(deviceIds)) {
+      for (const id of deviceIds) {
+        const dev = this._deviceMap?.get(id);
+        if (!dev) continue;
+        const pr = mapProto(this._getDeviceProtocol(dev));
+        if (!transports[pr]) transports[pr] = id;
+        if (this.configuredDevices?.[id] && !adoptedDeviceId) {
+          adoptedDeviceId = id;
+          adoptedProto = pr;
+        }
+      }
+    }
+
+    const seedDevs = Object.values(transports).map((id) => this._deviceMap?.get(id)).filter(Boolean);
+    const firstDev = baseDevice || seedDevs[0];
+    let hybName = proposal?.suggested_name || baseConfig?.custom_name || this._stripRoomName(firstDev?.name_by_user || firstDev?.name || 'Hybrid-Gerät', baseDevice?.area_id || proposal?.suggested_area_id) || 'Hybrid-Gerät';
+    let hybArea = proposal?.suggested_area_id || baseDevice?.area_id || '';
+    let hybCat = proposal?.suggested_category || baseConfig?.category || 'schalter';
+    let hybIcon = baseConfig?.icon || '';
+    let hybPrefProto = '';
+
+    const overlay = h('div', { class: 'overlay', style: { zIndex: '1200' } });
+    const nameInput = h('input', {
+      type: 'text',
+      value: hybName,
+      placeholder: 'Gerätename (ohne Zigbee/WLAN)',
+      onInput: (e) => { hybName = e.target.value.trim(); },
+    });
+
+    const areaOptions = [
+      { value: '', label: 'Kein Raum', icon: 'mdi:map-marker-off' },
+      ...this.areas.map((a) => ({ value: a.area_id, label: a.name, icon: this._getRoomIcon(a) })),
+    ];
+    const areaDd = new CustomDropdown({
+      options: areaOptions,
+      value: hybArea,
+      placeholder: 'Raum wählen',
+      onChange: (val) => { hybArea = val; },
+    });
+
+    const catOptions = DEVICE_CATEGORIES.map((c) => ({ value: c.id, label: c.name, icon: c.icon }));
+    const catDd = new CustomDropdown({
+      options: catOptions,
+      value: hybCat,
+      placeholder: 'Kategorie',
+      onChange: (val) => { hybCat = val; },
+    });
+
+    const globalPref = this.hybridSettings?.preferred_protocol || 'zigbee';
+    const prefDd = new CustomDropdown({
+      options: [
+        { value: '', label: `Globaler Standard (${protoLabel(globalPref)})`, icon: 'mdi:earth' },
+        { value: 'zigbee', label: 'Zigbee bevorzugen', icon: 'mdi:zigbee' },
+        { value: 'matter', label: 'Matter bevorzugen', icon: 'mdi:hub' },
+        { value: 'wlan', label: 'WLAN bevorzugen', icon: 'mdi:wifi' },
+      ],
+      value: hybPrefProto,
+      placeholder: 'Funkweg-Priorität',
+      onChange: (val) => { hybPrefProto = val; },
+    });
+
+    const allPickableDevs = this._getSelectableCandidates()
+      .filter((d) => !d.isVirtualEntity && !isHybridMasterDevice(d) && !this.groups[d.id]);
+
+    const transportDropdowns = [];
+    const buildTransportSelect = (proto) => {
+      const opts = [
+        { value: '', label: 'Nicht belegt', icon: 'mdi:close-circle-outline' },
+        ...allPickableDevs.map((d) => {
+          const dp = mapProto(this._getDeviceProtocol(d));
+          const dName = d.name_by_user || d.name || d.id;
+          return {
+            value: d.id,
+            label: `${dName} (${protoLabel(dp)})`,
+            icon: dp === 'zigbee' ? 'mdi:zigbee' : (dp === 'matter' ? 'mdi:hub' : 'mdi:wifi'),
+          };
+        }),
+      ];
+      const dd = new CustomDropdown({
+        options: opts,
+        value: transports[proto] || '',
+        placeholder: `${protoLabel(proto)}-Gerät wählen`,
+        onChange: (val) => {
+          if (val) transports[proto] = val;
+          else delete transports[proto];
+        },
+      });
+      transportDropdowns.push(dd);
+      return h('div', { class: 'field' }, `${protoLabel(proto)}-Gerät`, dd.el);
+    };
+
+    const transportFields = [
+      buildTransportSelect('zigbee'),
+      buildTransportSelect('wlan'),
+      buildTransportSelect('matter'),
+    ];
+
+    const destroyModal = () => {
+      areaDd.destroy();
+      catDd.destroy();
+      prefDd.destroy();
+      transportDropdowns.forEach((d) => d.destroy());
+      overlay.remove();
+    };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) destroyModal(); });
+
+    const saveBtn = h('button', {
+      type: 'button',
+      class: 'btn primary',
+      onClick: async () => {
+        const cleanEntries = Object.entries(transports).filter(([, v]) => !!v);
+        if (cleanEntries.length < 2) {
+          showToast(this.el, 'Mindestens 2 verschiedene Funkwege wählen', { error: true });
+          return;
+        }
+        const usedIds = cleanEntries.map(([, v]) => v);
+        if (new Set(usedIds).size !== usedIds.length) {
+          showToast(this.el, 'Jeder Funkweg benötigt ein eigenes Gerät', { error: true });
+          return;
+        }
+        if (!hybName) {
+          showToast(this.el, 'Name fehlt', { error: true });
+          return;
+        }
+        saveBtn.disabled = true;
+        try {
+          await this.hass.callWS({
+            type: 'smarthome_companion/hybrids/save',
+            name: hybName,
+            area_id: hybArea || '',
+            category: hybCat,
+            icon: hybIcon || undefined,
+            preferred_protocol: hybPrefProto || null,
+            transports: Object.fromEntries(cleanEntries),
+            adopted_device_id: adoptedDeviceId,
+            adopted_protocol: adoptedProto,
+          });
+          destroyModal();
+          this.selectedDevices.clear();
+          showToast(this.el, `Hybrid „${hybName}“ eingerichtet`);
+          if (this.directMode) {
+            this._closeWizard();
+            this.onSaved?.(null);
+          } else {
+            this.selectedDevice = null;
+            this.step = 0;
+            await this._load({ preserveStep0: true });
+            this.onSaved?.(null);
+          }
+        } catch (err) {
+          saveBtn.disabled = false;
+          showToast(this.el, `Fehler: ${err.message || err}`, { error: true });
+        }
+      },
+    }, icon('mdi:check'), 'Hybrid speichern');
+
+    const dialog = h('div', { class: 'dialog group-modal-dialog' },
+      h('div', { class: 'dialog-head' },
+        icon('mdi:swap-horizontal-bold'),
+        h('h2', {}, baseDevice ? 'Als Hybrid erweitern' : 'Hybrid-Gerät verbinden'),
+        h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onClick: destroyModal }, icon('mdi:close'))),
+      h('div', { class: 'dialog-body', style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+        h('div', { class: 'hint' }, '• Master erhält sauberen Basis-Namen & entity_id\n• Einzelgeräte bekommen _zigbee / _wlan / _matter\n• Bestehende Automationen bleiben unterbrechungsfrei erhalten'),
+        h('div', { class: 'field' }, 'Master-Name', nameInput),
+        h('div', { class: 'field' }, 'Raum', areaDd.el),
+        h('div', { class: 'field' }, 'Kategorie', catDd.el),
+        ...transportFields,
+        h('details', { class: 'adv-options' },
+          h('summary', {}, icon('mdi:tune'), 'Erweiterte Funkweg-Priorität'),
+          h('div', { class: 'adv-content' },
+            h('div', { class: 'field' }, 'Bevorzugter Funkweg (Gerät)', prefDd.el)))),
+      h('div', { class: 'dialog-foot' },
+        h('div', { class: 'dialog-foot-actions' },
+          h('button', { type: 'button', class: 'btn', onClick: destroyModal }, 'Abbrechen')),
+        h('div', { class: 'dialog-foot-actions' }, saveBtn)));
+
+    overlay.appendChild(dialog);
+    this.el.appendChild(overlay);
   }
 
   // ═══════════════ Strip Room Name Helper ═══════════════
@@ -1450,14 +1772,17 @@ export class DeviceWizard {
     }
     this.customName = rawName;
 
-    // Related entities (strictly exclude own integration, config & diagnostic entities)
+    // Related entities (strictly exclude non-hybrid internal, config & diagnostic entities)
+    const isHybrid = isHybridMasterDevice(d);
+    this._activeHybridCfg = this._getHybridForDevice(d);
+    this._hybridPreferredProtocol = this._activeHybridCfg?.preferred_protocol || '';
     const devEntities = (
       d.isVirtualEntity
         ? this.entities.filter((e) => e.entity_id === d.entity_id)
         : this.entities.filter((e) => e.device_id === d.id)
     ).filter(
       (e) => !e.disabled_by
-        && !isOwnIntegrationEntity(e)
+        && (isHybrid || !isOwnIntegrationEntity(e))
         && e.entity_category !== 'config'
         && e.entity_category !== 'diagnostic',
     );
@@ -2246,6 +2571,55 @@ export class DeviceWizard {
       h('summary', {}, icon('mdi:cog-outline'), 'Optionen: HA-Sync'),
       h('div', { class: 'adv-content' }, syncCard));
 
+    let hybridSection = null;
+    const d = this.selectedDevice;
+    if (this._activeHybridCfg) {
+      const masterCh = (this._activeHybridCfg.channels || [])[0];
+      const masterEid = masterCh?.master_entity_id || this.channels[0]?.entity_id;
+      const activeProto = masterEid ? this.hass?.states?.[masterEid]?.attributes?.active_transport : null;
+      const protoTxt = activeProto === 'zigbee' ? 'Zigbee' : activeProto === 'matter' ? 'Matter' : activeProto === 'wlan' ? 'WLAN' : 'Automatisch';
+      const globalPref = this.hybridSettings?.preferred_protocol || 'zigbee';
+      const globalLabel = globalPref === 'zigbee' ? 'Zigbee' : globalPref === 'matter' ? 'Matter' : 'WLAN';
+
+      const prefDd = new CustomDropdown({
+        options: [
+          { value: '', label: `Global (${globalLabel})`, icon: 'mdi:earth' },
+          { value: 'zigbee', label: 'Zigbee', icon: 'mdi:zigbee' },
+          { value: 'matter', label: 'Matter', icon: 'mdi:hub' },
+          { value: 'wlan', label: 'WLAN', icon: 'mdi:wifi' },
+        ],
+        value: this._hybridPreferredProtocol || '',
+        onChange: (val) => { this._hybridPreferredProtocol = val || ''; },
+      });
+      this._dropdowns.push(prefDd);
+
+      hybridSection = h('div', { style: { display: 'grid', gap: '8px', marginTop: '6px' } },
+        h('div', { class: 'row-card', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+            icon('mdi:swap-horizontal-bold'),
+            h('span', { style: { fontWeight: '600', fontSize: '13px' } }, 'Aktiver Funkweg')),
+          h('span', { class: 'badge-tag hybrid' }, protoTxt)),
+        h('details', { class: 'adv-options' },
+          h('summary', {}, icon('mdi:tune'), 'Hybrid-Optionen: Funkweg & Trennung'),
+          h('div', { class: 'adv-content', style: { display: 'grid', gap: '10px' } },
+            h('div', { class: 'field' }, 'Bevorzugter Funkweg (Gerät)', prefDd.el),
+            h('button', {
+              type: 'button',
+              class: 'btn danger small',
+              onClick: () => this._unpairHybrid(this._activeHybridCfg),
+            }, icon('mdi:link-off'), 'Hybrid-Verknüpfung trennen'))));
+    } else if (d && !d.isVirtualEntity && !isHybridMasterDevice(d) && this.configuredDevices?.[d.id]) {
+      hybridSection = h('div', { class: 'row-card', style: { marginTop: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' } },
+        h('div', {},
+          h('div', { style: { fontWeight: '600', fontSize: '13px' } }, 'Multi-Protokoll-Erweiterung'),
+          h('div', { class: 'hint' }, '• Zweiten Funkweg (Zigbee/WLAN/Matter) verknüpfen')),
+        h('button', {
+          type: 'button',
+          class: 'btn secondary small',
+          onClick: () => this._openHybridModal({ baseDevice: d, baseConfig: this.configuredDevices[d.id] }),
+        }, icon('mdi:swap-horizontal-bold'), 'Als Hybrid erweitern'));
+    }
+
     const channelSummary = this.channels.length > 1
       ? h('div', { class: 'row-card', style: { marginTop: '8px' } },
         h('div', { style: { fontWeight: '600', fontSize: '13px' } }, `Kanäle (${activeChannels.length})`),
@@ -2260,6 +2634,7 @@ export class DeviceWizard {
       header,
       previewCard,
       channelSummary,
+      hybridSection,
       syncAccordion,
     ].filter(Boolean);
 
@@ -2497,6 +2872,22 @@ export class DeviceWizard {
       });
 
       if (res?.save_failed) throw new Error('Speichern im Backend fehlgeschlagen');
+
+      if (this._activeHybridCfg) {
+        const nextPref = this._hybridPreferredProtocol || null;
+        const curPref = this._activeHybridCfg.preferred_protocol || null;
+        if (nextPref !== curPref || this.customName !== this._activeHybridCfg.name || (this.selectedAreaId || '') !== (this._activeHybridCfg.area_id || '')) {
+          await this.hass.callWS({
+            type: 'smarthome_companion/hybrids/save',
+            hybrid_id: this._activeHybridCfg.id,
+            name: this.customName,
+            area_id: this.selectedAreaId || '',
+            category: this.selectedCategory,
+            icon: this.customIcon || null,
+            preferred_protocol: nextPref,
+          }).catch((e) => console.warn('[wizard] hybrid sync update failed', e));
+        }
+      }
 
       // Persist pin state on dashboard config (for dev:<id> or entity:<id>)
       const pinKey = d.isVirtualEntity ? d.id : `dev:${d.id}`;

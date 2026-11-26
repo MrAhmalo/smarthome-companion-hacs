@@ -16,16 +16,18 @@ _LOGGER = logging.getLogger(__name__)
 MODULE_TITLES: dict[str, str] = {
     "hub": "SmartHome Companion Hub",
     "groups": "SmartHome Gruppen",
+    "hybrids": "SmartHome Hybrid-Geräte",
     "blinds": "SmartHome Rollläden",
     "irrigation": "SmartHome Bewässerung",
 }
 
 MODULE_PLATFORMS: dict[str, list[str]] = {
     "hub": ["sensor"],
-    "groups": ["light", "switch"],
+    "groups": ["light", "switch", "cover", "sensor", "binary_sensor"],
+    "hybrids": ["light", "switch", "cover", "sensor", "binary_sensor", "event"],
     "blinds": ["sensor", "number", "button", "switch", "text", "select"],
     "irrigation": ["sensor", "text"],
-    "legacy": ["sensor", "number", "button", "switch", "text", "select", "light"],
+    "legacy": ["sensor", "number", "button", "switch", "text", "select", "light", "cover", "binary_sensor", "event"],
 }
 
 
@@ -83,6 +85,13 @@ def build_hub_device_info(module: str) -> DeviceInfo:
             manufacturer="SmartHome Companion",
             model="Gruppen · Übersicht",
         )
+    if module == "hybrids":
+        return DeviceInfo(
+            identifiers={(DOMAIN, "hybrids_hub")},
+            name="SmartHome Hybrid-Geräte",
+            manufacturer="SmartHome Companion",
+            model="Hybrid · Übersicht",
+        )
     return DeviceInfo(
         identifiers={(DOMAIN, "simulation_hub")},
         name="SmartHome Companion Hub",
@@ -134,16 +143,58 @@ def build_group_device_info(group_id: str, group_cfg: dict, store=None) -> Devic
     )
 
 
+def build_hybrid_device_info(hybrid_id: str, hybrid_cfg: dict, store=None) -> DeviceInfo:
+    """Return standardized DeviceInfo for a SmartHome Companion multi-protocol Hybrid Master device."""
+    cat_key = (hybrid_cfg.get("category") or "schalter").strip()
+    categories = store.get_categories() if store and hasattr(store, "get_categories") else DEFAULT_CATEGORIES
+    cat_meta = categories.get(cat_key) or DEFAULT_CATEGORIES.get(cat_key) or {}
+    cat_label = cat_meta.get("display_name") or cat_key.title()
+    proto_names = {"zigbee": "Zigbee", "wlan": "WLAN", "matter": "Matter"}
+    protos = [proto_names.get(p, p.upper()) for p in (hybrid_cfg.get("transports") or {}).keys()]
+    proto_txt = " + ".join(protos) if protos else "Hybrid"
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"hybrid_{hybrid_id}")},
+        name=hybrid_cfg.get("name") or "Hybrid-Gerät",
+        manufacturer="SmartHome Companion",
+        model=f"Hybrid · {proto_txt} ({cat_label})",
+        suggested_area=hybrid_cfg.get("area_id") or None,
+    )
+
+
 def resolve_group_child_entities(
     hass,
     store,
     group_id: str,
     domains: tuple[str, ...] = ("light", "switch"),
 ) -> list[str]:
-    """Recursively resolve concrete child entity IDs for a Companion group."""
+    """Recursively resolve concrete child entity IDs for a Companion group (ent_reg first, hybrid-aware)."""
     if not hass or not store:
         return []
     groups = store.get_groups() or {}
+    hybrids = store.get_hybrids() if hasattr(store, "get_hybrids") else {}
+    hidden_dev_ids, hidden_ent_ids = (
+        store.get_hidden_hybrid_ids() if hasattr(store, "get_hidden_hybrid_ids") else (set(), set())
+    )
+    # Build lookup from underlying device_id / entity_id -> Hybrid Master channel entity_id
+    underlying_dev_to_master: dict[str, list[str]] = {}
+    underlying_ent_to_master: dict[str, str] = {}
+    for h_cfg in (hybrids or {}).values():
+        if not isinstance(h_cfg, dict):
+            continue
+        ch_masters = []
+        for ch in h_cfg.get("channels") or []:
+            if not isinstance(ch, dict):
+                continue
+            m_eid = ch.get("master_entity_id")
+            if m_eid and m_eid.split(".")[0] in domains:
+                ch_masters.append(m_eid)
+            for src in (ch.get("sources") or {}).values():
+                if isinstance(src, dict) and src.get("entity_id") and m_eid:
+                    underlying_ent_to_master[src["entity_id"]] = m_eid
+        for t_info in (h_cfg.get("transports") or {}).values():
+            if isinstance(t_info, dict) and t_info.get("device_id") and ch_masters:
+                underlying_dev_to_master[t_info["device_id"]] = ch_masters
+
     g = groups.get(group_id, {})
     ent_reg = None
     dev_reg = None
@@ -155,6 +206,13 @@ def resolve_group_child_entities(
         dev_reg = dr.async_get(hass)
     except Exception:
         dev_reg = None
+
+    def _exists(eid: str) -> bool:
+        if not eid:
+            return False
+        if ent_reg and ent_reg.async_get(eid) is not None:
+            return True
+        return hass.states.get(eid) is not None
 
     eids: list[str] = []
     visited = {group_id}
@@ -168,15 +226,27 @@ def resolve_group_child_entities(
                 resolve(groups[ref].get("children", []))
             elif ref.startswith("d:"):
                 parts = ref.split(":", 2)
-                if len(parts) >= 3 and hass.states.get(parts[2]):
-                    eids.append(parts[2])
-            elif hass.states.get(ref):
+                if len(parts) >= 3:
+                    raw_eid = parts[2]
+                    mapped = underlying_ent_to_master.get(raw_eid, raw_eid)
+                    if mapped not in hidden_ent_ids and _exists(mapped):
+                        eids.append(mapped)
+            elif ref in underlying_ent_to_master:
+                mapped = underlying_ent_to_master[ref]
+                if _exists(mapped):
+                    eids.append(mapped)
+            elif "." in ref and ref not in hidden_ent_ids and _exists(ref):
                 eids.append(ref)
-            elif dev_reg and ent_reg and dev_reg.async_get(ref):
+            elif ref in underlying_dev_to_master:
+                for m_eid in underlying_dev_to_master[ref]:
+                    if _exists(m_eid):
+                        eids.append(m_eid)
+            elif ref not in hidden_dev_ids and dev_reg and ent_reg and dev_reg.async_get(ref):
                 dev_ents = [
                     e.entity_id
                     for e in ent_reg.entities.values()
                     if e.device_id == ref and not e.disabled_by and e.domain in domains
+                    and e.entity_id not in hidden_ent_ids
                 ]
                 eids.extend(dev_ents)
 
@@ -223,6 +293,8 @@ def _target_module_for_entity(entity_entry) -> str | None:
     uid = getattr(entity_entry, "unique_id", "") or ""
     if uid.startswith("smarthome_companion_group_"):
         return "groups"
+    if uid.startswith("smarthome_companion_hybrid_") or uid == "smarthome_companion_integration_info_hybrids":
+        return "hybrids"
     if uid == "smarthome_companion_presence_simulation_active":
         return "hub"
     if uid == "smarthome_companion_integration_info_hub":
@@ -265,6 +337,8 @@ def _target_module_for_device(dev_entry, store) -> str | None:
             return "groups"
         if ident == "groups_hub":
             return "groups"
+        if ident.startswith("hybrid_") or ident == "hybrids_hub":
+            return "hybrids"
         if ident in ("simulation_hub",):
             return "hub"
         if ident in ("irrigation_hub",) or ident.startswith("irrigation_zone_"):
@@ -318,6 +392,14 @@ async def async_organize_and_cleanup_devices(hass, store) -> dict[str, int]:
             manufacturer="SmartHome Companion",
             model="System · Hub & Simulation",
         )
+    if "hybrids" in entries_by_module:
+        dev_reg.async_get_or_create(
+            config_entry_id=entries_by_module["hybrids"],
+            identifiers={(DOMAIN, "hybrids_hub")},
+            name="SmartHome Hybrid-Geräte",
+            manufacturer="SmartHome Companion",
+            model="Hybrid · Übersicht",
+        )
 
     # 2. Reassign devices cleanly to their owning module's config entry
     groups = store.get_groups() if store else {}
@@ -366,6 +448,23 @@ async def async_organize_and_cleanup_devices(hass, store) -> dict[str, int]:
             elif ident == "simulation_hub":
                 if dev.model != "System · Hub & Simulation":
                     update_kwargs["model"] = "System · Hub & Simulation"
+            elif ident == "hybrids_hub":
+                if dev.model != "Hybrid · Übersicht":
+                    update_kwargs["model"] = "Hybrid · Übersicht"
+            elif ident.startswith("hybrid_"):
+                hid = ident[len("hybrid_") :]
+                _raw_hyb = store.get_hybrids() if store and hasattr(store, "get_hybrids") else {}
+                hybrids = _raw_hyb if isinstance(_raw_hyb, dict) else {}
+                h_cfg = hybrids.get(hid)
+                if isinstance(h_cfg, dict):
+                    cat_key = (h_cfg.get("category") or "schalter").strip()
+                    cats = store.get_categories() if store else DEFAULT_CATEGORIES
+                    cat_label = (cats.get(cat_key) or DEFAULT_CATEGORIES.get(cat_key) or {}).get("display_name") or cat_key.title()
+                    p_map = {"zigbee": "Zigbee", "wlan": "WLAN", "matter": "Matter"}
+                    p_txt = " + ".join(p_map.get(p, p.upper()) for p in (h_cfg.get("transports") or {}).keys()) or "Hybrid"
+                    desired_model = f"Hybrid · {p_txt} ({cat_label})"
+                    if dev.model != desired_model:
+                        update_kwargs["model"] = desired_model
 
         if target_entry_id not in dev.config_entries:
             update_kwargs["add_config_entry_id"] = target_entry_id
@@ -408,7 +507,7 @@ async def async_organize_and_cleanup_devices(hass, store) -> dict[str, int]:
         # Keep active singleton control hubs even if temporarily entity-less during module transition
         idents = {ident for _, ident in dev.identifiers}
         has_attached = dev.id in attached_dev_ids
-        if idents & {"hub", "irrigation_hub", "simulation_hub", "groups_hub"}:
+        if idents & {"hub", "irrigation_hub", "simulation_hub", "groups_hub", "hybrids_hub"}:
             # Remove only if a SECOND duplicate hub exists without entities
             if has_attached:
                 continue

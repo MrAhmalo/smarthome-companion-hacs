@@ -385,4 +385,5 @@ export const MOCK_DATA = {
       ],
     },
   },
+  hybrid_proposals: [],
 };

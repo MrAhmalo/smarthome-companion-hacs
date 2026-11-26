@@ -29,6 +29,7 @@ from .sun_manager import SunManager
 from .irrigation_manager import IrrigationManager
 from .adaptive_light_manager import AdaptiveLightManager
 from .simulation_manager import SimulationManager
+from .hybrid_manager import HybridManager
 from .dashboard import (
     async_register_dashboard_panel,
     async_register_dashboard_websockets,
@@ -51,9 +52,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         store = CompanionStore(hass)
         await store.async_load()
         sun_manager = SunManager(hass, store)
-        
+        hybrid_manager = HybridManager(hass, store)
+        await hybrid_manager.async_setup()
+
         hass.data[DOMAIN]["store"] = store
         hass.data[DOMAIN]["sun_manager"] = sun_manager
+        hass.data[DOMAIN]["hybrid_manager"] = hybrid_manager
         
         async_register_websockets(hass)
         async_register_dashboard_websockets(hass)
@@ -205,7 +209,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         }
         flow_mgr = getattr(hass.config_entries, "flow", None)
         if flow_mgr is not None and "legacy" not in existing_modules:
-            for auto_mod in ("groups", "hub"):
+            for auto_mod in ("groups", "hub", "hybrids"):
                 if auto_mod not in existing_modules:
                     hass.async_create_task(
                         flow_mgr.async_init(
@@ -278,6 +282,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         entry_platforms.pop(entry.entry_id, None)
         if not entry_platforms:
+            hm = domain_data.get("hybrid_manager")
+            if hm:
+                hm.unload()
             async_remove_dashboard_panel(hass)
             hass.data.pop(DOMAIN, None)
     return unload_ok

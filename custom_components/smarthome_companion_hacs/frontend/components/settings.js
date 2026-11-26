@@ -59,6 +59,8 @@ export class Settings {
     this._openRoomIds = new Set();
     this._openRowKeys = new Set();
     this._dndCleanups = [];
+    this.hybridPreferredProtocol = 'zigbee';
+    this._hybridSettingsLoaded = false;
 
     this.tab = 'rooms';
     this.tabs = [
@@ -69,6 +71,14 @@ export class Settings {
       ['devices', 'Geräte', () => this._tabDevices()],
     ];
     this._build();
+    this.hass?.callWS?.({ type: 'smarthome_companion/hybrids/get' })
+      ?.then((res) => {
+        const pref = res?.hybrid_settings?.preferred_protocol;
+        if (pref) this.hybridPreferredProtocol = pref;
+        this._hybridSettingsLoaded = true;
+        if (this.tab === 'nav' && this.el) this._renderBody(true);
+      })
+      ?.catch(() => {});
   }
 
   // ═══════════ Shell ═══════════
@@ -187,6 +197,12 @@ export class Settings {
       }
       const res = await this.hass.callWS({ type: 'smarthome_companion/dashboard/save', config });
       if (res?.save_failed) throw new Error('Speichern fehlgeschlagen');
+      if (this.hybridPreferredProtocol) {
+        await this.hass.callWS({
+          type: 'smarthome_companion/hybrids/settings',
+          preferred_protocol: this.hybridPreferredProtocol,
+        }).catch(() => {});
+      }
       this.destroy();
       this.onSaved();
     } catch (err) {
@@ -951,6 +967,19 @@ export class Settings {
       h('div', { class: 'row-card' },
         this._check(this.draft, 'sidebar_pin_top', 'Dashboard global ganz oben in der Seitenleiste anzeigen')),
 
+      this._title('Hybrid-Geräte (Standard-Funkweg)'),
+      this._hint('• Standard-Funkweg für Multi-Protokoll-Geräte\n• Automatischer Fallback bei Ausfall\n• Pro Gerät im Assistenten überschreibbar'),
+      h('div', { class: 'row-card' },
+        this._field('Standard-Funkweg', this._track(new CustomDropdown({
+          options: [
+            { value: 'zigbee', label: 'Zigbee (Standard)', icon: 'mdi:zigbee' },
+            { value: 'matter', label: 'Matter / Thread', icon: 'mdi:hub' },
+            { value: 'wlan', label: 'WLAN', icon: 'mdi:wifi' },
+          ],
+          value: this.hybridPreferredProtocol || 'zigbee',
+          onChange: (val) => { this.hybridPreferredProtocol = val || 'zigbee'; },
+        })).el)),
+
       this._title('Untere Navigationsleiste'),
       this._hint('• Direktsprung zu eingebauten Ansichten\n• Reihenfolge per Drag & Drop oder Pfeile'),
       this._list(this.draft.nav, {
@@ -1018,10 +1047,11 @@ export class Settings {
       ]);
       const configuredMap = setup?.devices || {};
       const groupsMap = setup?.groups || {};
+      const hiddenHybridDevs = new Set(setup?.hidden_hybrid_device_ids || []);
       const devList = devs || [];
       const areaMap = new Map((areas || []).map((a) => [a.area_id, a.name]));
 
-      const configuredIds = Object.keys(configuredMap);
+      const configuredIds = Object.keys(configuredMap).filter((id) => !hiddenHybridDevs.has(id));
       if (!configuredIds.length && !Object.keys(groupsMap).length) {
         wrap.replaceChildren(
           h('div', { class: 'empty' },

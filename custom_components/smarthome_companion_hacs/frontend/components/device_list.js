@@ -60,7 +60,15 @@ export function isBridgeOrCoordinator(d, devEntities = []) {
   return false;
 }
 
-/** Classify device radio standard as 'zigbee' or 'wifi_other'. */
+/** Returns true if a device is a SmartHome Companion Hybrid Master device. */
+export function isHybridMasterDevice(d) {
+  if (!d) return false;
+  return Array.isArray(d.identifiers) && d.identifiers.some(
+    (pair) => Array.isArray(pair) && pair[0] === 'smarthome_companion_hacs' && String(pair[1] || '').startsWith('hybrid_'),
+  );
+}
+
+/** Classify device radio standard as 'zigbee', 'matter' or 'wifi_other'. */
 export function classifyDeviceProtocol(d, devEntities = [], deviceMap = null) {
   if (!d) return 'wifi_other';
   if (d.isVirtualEntity) {
@@ -69,14 +77,23 @@ export function classifyDeviceProtocol(d, devEntities = [], deviceMap = null) {
     if (['zha', 'deconz', 'hue'].includes(plat) || /zigbee|zha|z2m|zigbee2mqtt/.test(hay)) {
       return 'zigbee';
     }
+    if (plat === 'matter' || /\bmatter\b/.test(hay)) {
+      return 'matter';
+    }
     return 'wifi_other';
   }
   if (_hasIdentifierPrefix(d, ['zha', 'deconz', 'hue', 'zigbee2mqtt', 'z2m', 'zigbee'])) {
     return 'zigbee';
   }
+  if (_hasIdentifierPrefix(d, ['matter']) || devEntities.some((e) => String(e.platform || '').toLowerCase() === 'matter')) {
+    return 'matter';
+  }
   const bridge = d.via_device_id && deviceMap ? deviceMap.get(d.via_device_id) : null;
   if (bridge && _hasIdentifierPrefix(bridge, ['zha', 'deconz', 'hue', 'zigbee2mqtt', 'z2m', 'zigbee'])) {
     return 'zigbee';
+  }
+  if (bridge && _hasIdentifierPrefix(bridge, ['matter'])) {
+    return 'matter';
   }
   const hay = `${d.manufacturer || ''} ${d.model || ''}`.toLowerCase();
   if (/zigbee2mqtt|zigbee|\bzha\b|deconz/.test(hay)) return 'zigbee';
@@ -89,6 +106,7 @@ export function classifyDeviceProtocol(d, devEntities = [], deviceMap = null) {
       return 'zigbee';
     }
   }
+  if (/\bmatter\b|open\s*connectivity/i.test(hay)) return 'matter';
   return 'wifi_other';
 }
 
@@ -186,10 +204,10 @@ export function getPendingChannelsForDevice(device, entities, configuredCfg) {
  * Filter out configuration, diagnostic, and internal utility switches.
  * Only genuine controllable actuators are treated as device channels.
  */
-export function isControllableActuator(e, { allowDisabledUser = false } = {}) {
+export function isControllableActuator(e, { allowDisabledUser = false, allowOwnHybrid = false } = {}) {
   if (!e || !e.entity_id) return false;
   if (e.disabled_by && !(allowDisabledUser && e.disabled_by === 'user')) return false;
-  if (isOwnIntegrationEntity(e)) return false;
+  if (!allowOwnHybrid && isOwnIntegrationEntity(e)) return false;
   if (e.entity_category === 'config' || e.entity_category === 'diagnostic') return false;
   if (IGNORED_PLATFORMS.has(String(e.platform || '').toLowerCase())) return false;
 
@@ -288,10 +306,11 @@ export function createWizardDeviceElements({
     : [device.manufacturer, device.model].filter(Boolean).join(' · ');
   const isConfigured = !!configuredCfg;
 
+  const isHybrid = isHybridMasterDevice(device);
   const devEntities = device.isVirtualEntity
     ? entities.filter((e) => e.entity_id === device.entity_id && !e.disabled_by)
-    : entities.filter((e) => e.device_id === device.id && !e.disabled_by && !isOwnIntegrationEntity(e));
-  const controllable = devEntities.filter((e) => isControllableActuator(e));
+    : entities.filter((e) => e.device_id === device.id && !e.disabled_by && (isHybrid || !isOwnIntegrationEntity(e)));
+  const controllable = devEntities.filter((e) => isControllableActuator(e, { allowOwnHybrid: isHybrid }));
   const disabledUserActuators = (!device.isVirtualEntity && controllable.length === 0)
     ? entities.filter((e) => e.device_id === device.id && e.disabled_by === 'user' && !isOwnIntegrationEntity(e) && isControllableActuator(e, { allowDisabledUser: true }))
     : [];
@@ -306,6 +325,9 @@ export function createWizardDeviceElements({
   }, isSelected ? icon('mdi:check') : null);
 
   const badges = [];
+  if (isHybridMasterDevice(device) || configuredCfg?.hybrid_id) {
+    badges.push(h('span', { class: 'badge-tag hybrid' }, icon('mdi:swap-horizontal-bold'), 'Hybrid'));
+  }
   if (isConfigured) {
     const cat = DEVICE_CATEGORIES.find((c) => c.id === configuredCfg.category);
     const catColor = cat?.color || 'var(--cd-accent)';

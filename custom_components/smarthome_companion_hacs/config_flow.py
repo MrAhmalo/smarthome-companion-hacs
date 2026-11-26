@@ -23,7 +23,7 @@ class SmartHomeCompanionConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle the initial step."""
         return self.async_show_menu(
             step_id="user",
-            menu_options=["hub", "groups", "blinds", "irrigation"],
+            menu_options=["hub", "groups", "hybrids", "blinds", "irrigation"],
         )
 
     async def async_step_hub(self, user_input=None):
@@ -42,6 +42,15 @@ class SmartHomeCompanionConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(
             title=MODULE_TITLES["groups"],
             data={"module": "groups"},
+        )
+
+    async def async_step_hybrids(self, user_input=None):
+        """Handle the hybrids module step."""
+        if self._module_exists("hybrids"):
+            return self.async_abort(reason="already_configured")
+        return self.async_create_entry(
+            title=MODULE_TITLES["hybrids"],
+            data={"module": "hybrids"},
         )
 
     async def async_step_blinds(self, user_input=None):

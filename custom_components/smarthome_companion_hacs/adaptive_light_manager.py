@@ -187,14 +187,21 @@ class AdaptiveLightManager:
     def _get_adaptive_entities(self, cfg: dict) -> list[str]:
         """Gibt alle Licht-Entitäten zurück, die adaptiv gesteuert werden sollen."""
         mode = cfg.get("entity_mode", "label")  # 'label' oder 'specific'
+        _raw_hidden = (
+            self.store.get_hidden_hybrid_ids() if hasattr(self.store, "get_hidden_hybrid_ids") else (set(), set())
+        )
+        _, hidden_ent_ids = (
+            _raw_hidden if isinstance(_raw_hidden, tuple) and len(_raw_hidden) == 2 else (set(), set())
+        )
 
         if mode == "specific":
-            return cfg.get("entities", [])
+            return [e for e in cfg.get("entities", []) if e not in hidden_ent_ids]
 
         # Label-Modus: alle Lichter mit Label 'adaptiv' oder alle Lichter
         label_filter = cfg.get("label_filter", "")
         all_light_states = [
             s for s in self.hass.states.async_all("light")
+            if s.entity_id not in hidden_ent_ids
         ]
 
         if label_filter:

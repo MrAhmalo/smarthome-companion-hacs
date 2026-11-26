@@ -10,6 +10,22 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+PROTOCOL_LABELS: dict[str, str] = {
+    "zigbee": "Zigbee",
+    "wlan": "WLAN",
+    "matter": "Matter",
+}
+_PROTO_SLUG_TAIL_RE = re.compile(r"(?:_(?:zigbee|wlan|matter))+$", re.IGNORECASE)
+_PROTO_LABEL_TAIL_RE = re.compile(r"(?:\s+(?:Zigbee|WLAN|Matter))+$", re.IGNORECASE)
+
+
+def _strip_protocol_slug_tail(slug: str) -> str:
+    return _PROTO_SLUG_TAIL_RE.sub("", slug or "").strip("_")
+
+
+def _strip_protocol_label_tail(name: str) -> str:
+    return _PROTO_LABEL_TAIL_RE.sub("", name or "").strip()
+
 
 def slugify_ha(text: str) -> str:
     """Transliterate German umlauts and slugify text for Home Assistant entity IDs."""
@@ -157,6 +173,7 @@ def sync_device_entity_ids(
     *,
     area_id: str | None = None,
     prev_dev: dict | None = None,
+    protocol_suffix: str | None = None,
 ) -> dict[str, str]:
     """Rename primary, channel, room-sensor, and ALL remaining sub-entities of a device consistently.
 
@@ -214,7 +231,14 @@ def sync_device_entity_ids(
         if a_entry:
             area_slug = slugify_ha(a_entry.name)
 
-    device_base_slug = _build_base_slug(custom_name, area_slug)
+    proto_slug = (
+        str(protocol_suffix).strip().lower()
+        if protocol_suffix and str(protocol_suffix).strip().lower() in PROTOCOL_LABELS
+        else None
+    )
+
+    device_base_slug = _build_base_slug(_strip_protocol_label_tail(custom_name), area_slug)
+    device_base_slug = _strip_protocol_slug_tail(device_base_slug)
     if not device_base_slug:
         return {}
 
@@ -227,7 +251,10 @@ def sync_device_entity_ids(
         ]
 
     # Collect known prefixes BEFORE mutating entity_registry so sub-entity suffix extraction stays accurate
-    target_prefixes: set[str] = {device_base_slug, slugify_ha(custom_name)}
+    clean_custom_name = _strip_protocol_label_tail(custom_name)
+    target_prefixes: set[str] = {device_base_slug, _strip_protocol_slug_tail(slugify_ha(clean_custom_name))}
+    if proto_slug:
+        target_prefixes.add(f"{device_base_slug}_{proto_slug}")
     known_prefix_set: set[str] = set(target_prefixes)
     for raw_n in (
         device.name if device else None,
@@ -322,7 +349,12 @@ def sync_device_entity_ids(
         handled_eids.add(old_eid)
         if not target_slug:
             return old_eid
-        target_eid = _resolve_unique_target_eid(ent_reg, entry.domain, target_slug, old_eid)
+        norm_slug = _strip_protocol_slug_tail(target_slug)
+        if not norm_slug:
+            return old_eid
+        if proto_slug:
+            norm_slug = f"{norm_slug}_{proto_slug}"
+        target_eid = _resolve_unique_target_eid(ent_reg, entry.domain, norm_slug, old_eid)
         if old_eid == target_eid:
             return old_eid
         try:
@@ -438,9 +470,9 @@ def sync_device_entity_ids(
     # Effective base slug for ALL remaining device sub-entities follows the renamed main entity's slug
     is_multi_ch = isinstance(sub_entities, dict) and len(sub_entities) > 1
     if final_primary_eid and not is_multi_ch:
-        effective_device_slug = final_primary_eid.split(".", 1)[1]
+        effective_device_slug = _strip_protocol_slug_tail(final_primary_eid.split(".", 1)[1])
     elif single_sensor_slug:
-        effective_device_slug = single_sensor_slug
+        effective_device_slug = _strip_protocol_slug_tail(single_sensor_slug)
     else:
         effective_device_slug = device_base_slug
 
@@ -476,7 +508,9 @@ def sync_device_entity_ids(
             linked_role=linked_role,
             strip_channel_prefix=strip_ch,
         )
-        desired_slug = f"{target_base}_{suffix}" if suffix else target_base
+        suffix = _strip_protocol_slug_tail(suffix)
+        clean_target_base = _strip_protocol_slug_tail(target_base)
+        desired_slug = f"{clean_target_base}_{suffix}" if suffix else clean_target_base
         _rename_entry(entry, desired_slug)
 
     # 4. Catch any entity ID changes compared to previous stored config of this device
@@ -534,6 +568,7 @@ def sync_device_friendly_names(
     dev_cfg: dict,
     *,
     area_id: str | None = None,
+    protocol_suffix: str | None = None,
 ) -> int:
     """Set HA friendly names on device & entities to '<Raumname> <Gerätename>'.
 
@@ -562,6 +597,17 @@ def sync_device_friendly_names(
     updated = 0
     is_virtual = str(device_id).startswith("entity:")
 
+    proto_key = (
+        str(protocol_suffix).strip().lower()
+        if protocol_suffix and str(protocol_suffix).strip().lower() in PROTOCOL_LABELS
+        else None
+    )
+    proto_label = PROTOCOL_LABELS[proto_key] if proto_key else None
+
+    def _with_proto_label(base_fn: str) -> str:
+        clean = _strip_protocol_label_tail(base_fn)
+        return f"{clean} {proto_label}".strip() if proto_label else clean
+
     if is_virtual:
         eid = primary_eid or str(device_id).split(":", 1)[1]
         entry = ent_reg.async_get(eid)
@@ -569,8 +615,10 @@ def sync_device_friendly_names(
             return 0
         eff_area = area_id if area_id is not None else entry.area_id
         rname = _area_name(eff_area)
-        dname = _strip_room_prefix(dev_cfg.get("custom_name") or entry.name or entry.original_name or "", rname)
-        target_fn = _compose_friendly_name(rname, dname)
+        dname = _strip_protocol_label_tail(
+            _strip_room_prefix(dev_cfg.get("custom_name") or entry.name or entry.original_name or "", rname)
+        )
+        target_fn = _with_proto_label(_compose_friendly_name(rname, dname))
         if target_fn and entry.name != target_fn:
             try:
                 ent_reg.async_update_entity(eid, name=target_fn)
@@ -583,10 +631,11 @@ def sync_device_friendly_names(
     eff_area = area_id if area_id is not None else (dev.area_id if dev else None)
     rname = _area_name(eff_area)
     raw_dname = (dev_cfg.get("custom_name") or (dev.name_by_user if dev else None) or (dev.name if dev else None) or "").strip()
-    dname = _strip_room_prefix(raw_dname, rname)
+    dname = _strip_protocol_label_tail(_strip_room_prefix(raw_dname, rname))
     if not dname:
         return 0
-    dev_target_fn = _compose_friendly_name(rname, dname)
+    dev_base_fn = _compose_friendly_name(rname, dname)
+    dev_target_fn = _with_proto_label(dev_base_fn)
 
     if dev is not None and dev_target_fn and dev.name_by_user != dev_target_fn:
         try:
@@ -621,11 +670,16 @@ def sync_device_friendly_names(
         handled_eids.add(sub_eid)
         ch_area = sub_data.get("area_id") if "area_id" in sub_data else eff_area
         ch_rname = _area_name(ch_area)
-        ch_dname = _strip_room_prefix(sub_data.get("custom_name") or sub_data.get("name") or dname, ch_rname)
-        ch_target_fn = _compose_friendly_name(ch_rname, ch_dname)
+        ch_dname = _strip_protocol_label_tail(
+            _strip_room_prefix(sub_data.get("custom_name") or sub_data.get("name") or dname, ch_rname)
+        )
+        ch_target_fn = _with_proto_label(_compose_friendly_name(ch_rname, ch_dname))
         has_en = bool(getattr(s_entry, "has_entity_name", False))
         if has_en:
-            desired_name = None if (len(enabled_subs) <= 1 or ch_target_fn == dev_target_fn) else ch_dname
+            if len(enabled_subs) <= 1 or ch_target_fn == dev_target_fn:
+                desired_name = None
+            else:
+                desired_name = _with_proto_label(ch_dname)
         else:
             desired_name = ch_target_fn
         if s_entry.name != desired_name:
@@ -639,17 +693,20 @@ def sync_device_friendly_names(
         if e.device_id != device_id or e.entity_id in handled_eids:
             continue
         has_en = bool(getattr(e, "has_entity_name", False))
+        orig = (e.original_name or e.name or "").strip()
+        orig_clean = _strip_protocol_label_tail(_strip_room_prefix(_strip_room_prefix(orig, rname), dname))
         if has_en:
-            if e.name is not None:
+            # Ensure even has_entity_name sub-entities terminate with Zigbee/WLAN/Matter without double label
+            desired_name = _with_proto_label(orig_clean) if (proto_label and orig_clean) else None
+            if e.name != desired_name:
                 try:
-                    ent_reg.async_update_entity(e.entity_id, name=None)
+                    ent_reg.async_update_entity(e.entity_id, name=desired_name)
                     updated += 1
                 except Exception as err:  # noqa: BLE001
-                    _LOGGER.warning("Could not reset friendly_name for %s: %s", e.entity_id, err)
+                    _LOGGER.warning("Could not update sub-entity friendly_name for %s: %s", e.entity_id, err)
         else:
-            orig = (e.original_name or e.name or "").strip()
-            orig_clean = _strip_room_prefix(_strip_room_prefix(orig, rname), dname)
-            sub_fn = f"{dev_target_fn} {orig_clean}".strip() if orig_clean else dev_target_fn
+            sub_base = f"{dev_base_fn} {orig_clean}".strip() if orig_clean else dev_base_fn
+            sub_fn = _with_proto_label(sub_base)
             if e.name != sub_fn:
                 try:
                     ent_reg.async_update_entity(e.entity_id, name=sub_fn)
@@ -893,7 +950,7 @@ async def async_sync_renamed_entities(hass, store, id_map: dict[str, str]) -> bo
 
     async with lock:
         pattern = _build_entity_id_pattern(clean_map)
-        for section in ("devices", "groups", "dashboard", "blinds", "irrigation", "adaptive_light", "simulation"):
+        for section in ("devices", "groups", "hybrids", "dashboard", "blinds", "irrigation", "adaptive_light", "simulation"):
             cur = store.data.get(section)
             if cur is not None:
                 updated, changed = replace_entity_ids_in_value(cur, clean_map, pattern)

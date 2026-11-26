@@ -2,7 +2,8 @@ import logging
 import os
 import json
 import re
-from datetime import timedelta, time, datetime
+import time
+from datetime import timedelta, time as dt_time, datetime
 # pyrefly: ignore [missing-import]
 import homeassistant.util.dt as dt_util
 
@@ -10,17 +11,36 @@ import homeassistant.util.dt as dt_util
 from homeassistant.core import callback
 # pyrefly: ignore [missing-import]
 from homeassistant.components.sensor import SensorEntity
+import types
 # pyrefly: ignore [missing-import]
-from homeassistant.helpers import device_registry as dr
+import homeassistant.const as _ha_const
+EVENT_HOMEASSISTANT_STARTED = getattr(_ha_const, "EVENT_HOMEASSISTANT_STARTED", "homeassistant_started")
+STATE_UNAVAILABLE = getattr(_ha_const, "STATE_UNAVAILABLE", "unavailable")
+STATE_UNKNOWN = getattr(_ha_const, "STATE_UNKNOWN", "unknown")
+UnitOfEnergy = getattr(_ha_const, "UnitOfEnergy", types.SimpleNamespace(KILO_WATT_HOUR="kWh", WATT_HOUR="Wh"))
+# pyrefly: ignore [missing-import]
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 # pyrefly: ignore [missing-import]
 from homeassistant.helpers.entity import DeviceInfo
+# pyrefly: ignore [missing-import]
+from homeassistant.helpers.event import async_track_state_change_event
 
 from .const import DOMAIN
 from .device_helpers import (
     build_blind_device_info,
     build_hub_device_info,
+    build_hybrid_device_info,
     build_irrigation_zone_device_info,
 )
+from .energy_counter import CompanionDeltaEnergySensor, normalize_energy_to_mwh
+from .entity_sync import PROTOCOL_LABELS
+from .group_sensors import (
+    GROUP_SENSOR_SPECS,
+    CompanionGroupAggregatedSensor,
+    CompanionGroupEnergySensor,
+    resolve_group_leaf_sensors,
+)
+from .hybrid_manager import resolve_source_entity_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -227,6 +247,424 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 "smarthome_companion_irrigation_updated", update_irrigation_sensors
             )
         )
+
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    entry_id = getattr(entry, "entry_id", "default")
+
+    # ── Group Master Aggregated Sensors (module in groups/legacy) ──
+    if store and module in ("groups", "legacy"):
+        g_owner = domain_data.get("_group_sensors_entry_id")
+        if not g_owner or g_owner == entry_id:
+            domain_data["_group_sensors_entry_id"] = entry_id
+            group_sensors_map: dict[tuple[str, str], SensorEntity] = {}
+
+            @callback
+            def sync_group_sensors(event=None):
+                groups = store.get_groups() or {}
+                active_keys: set[tuple[str, str]] = set()
+                new_ents: list[SensorEntity] = []
+
+                for gid in list(groups.keys()):
+                    buckets = resolve_group_leaf_sensors(hass, store, gid)
+                    for (dom, dc), member_eids in buckets.items():
+                        if dom != "sensor" or dc not in GROUP_SENSOR_SPECS or not member_eids:
+                            continue
+                        key = (gid, dc)
+                        active_keys.add(key)
+                        if key not in group_sensors_map:
+                            if GROUP_SENSOR_SPECS[dc]["mode"] == "delta_sum":
+                                ent: SensorEntity = CompanionGroupEnergySensor(hass, store, gid)
+                            else:
+                                ent = CompanionGroupAggregatedSensor(hass, store, gid, dc)
+                            ent.set_members(member_eids)
+                            group_sensors_map[key] = ent
+                            new_ents.append(ent)
+                        else:
+                            group_sensors_map[key].set_members(member_eids)
+
+                ent_reg = er.async_get(hass)
+                for stale_key in [k for k in group_sensors_map if k not in active_keys]:
+                    st_ent = group_sensors_map.pop(stale_key)
+                    if getattr(st_ent, "_unsub", None):
+                        st_ent._unsub()
+                        st_ent._unsub = None
+                    if getattr(st_ent, "_added", False) and st_ent.hass and st_ent.platform is not None:
+                        hass.async_create_task(st_ent.async_remove())
+                    uid = st_ent.unique_id
+                    if uid:
+                        reg_eid = ent_reg.async_get_entity_id("sensor", DOMAIN, uid)
+                        if reg_eid:
+                            try:
+                                ent_reg.async_remove(reg_eid)
+                            except Exception:  # noqa: BLE001
+                                pass
+
+                if new_ents:
+                    async_add_entities(new_ents)
+
+            sync_group_sensors()
+            entry.async_on_unload(hass.bus.async_listen(f"{DOMAIN}_dashboard_updated", sync_group_sensors))
+            entry.async_on_unload(hass.bus.async_listen(f"{DOMAIN}_hybrids_updated", sync_group_sensors))
+            _listen_start = getattr(hass.bus, "async_listen_once", None)
+            if callable(_listen_start):
+                entry.async_on_unload(_listen_start(EVENT_HOMEASSISTANT_STARTED, lambda _e: sync_group_sensors()))
+
+            @callback
+            def _cleanup_gs():
+                if domain_data.get("_group_sensors_entry_id") == entry_id:
+                    domain_data.pop("_group_sensors_entry_id", None)
+                for ent in group_sensors_map.values():
+                    if getattr(ent, "_unsub", None):
+                        ent._unsub()
+                        ent._unsub = None
+
+            entry.async_on_unload(_cleanup_gs)
+
+    # ── Hybrid Multi-Protocol Sensors & Delta Energy Counters (module in hybrids/legacy) ──
+    hybrid_mgr = domain_data.get("hybrid_manager")
+    if store and hybrid_mgr and module in ("hybrids", "legacy"):
+        h_owner = domain_data.get("_hybrid_sensors_entry_id")
+        if not h_owner or h_owner == entry_id:
+            domain_data["_hybrid_sensors_entry_id"] = entry_id
+            hybrid_sensors_map: dict[tuple[str, str], SensorEntity] = {}
+
+            @callback
+            def sync_hybrid_sensors(event=None):
+                hybrids = store.get_hybrids() or {}
+                active_keys: set[tuple[str, str]] = set()
+                new_ents: list[SensorEntity] = []
+
+                for hid, h_cfg in hybrids.items():
+                    if not isinstance(h_cfg, dict):
+                        continue
+                    for s_spec in h_cfg.get("sensors") or []:
+                        if not isinstance(s_spec, dict) or s_spec.get("domain") != "sensor":
+                            continue
+                        key = (hid, s_spec.get("sensor_key", ""))
+                        active_keys.add(key)
+                        if key not in hybrid_sensors_map:
+                            if s_spec.get("mode") == "delta_energy":
+                                ent = HybridEnergySensor(hass, store, hybrid_mgr, hid, s_spec)
+                            else:
+                                ent = HybridFallbackSensor(hass, store, hybrid_mgr, hid, s_spec)
+                            hybrid_sensors_map[key] = ent
+                            new_ents.append(ent)
+                        else:
+                            hybrid_sensors_map[key].async_refresh_hybrid(s_spec)
+
+                for stale_key in [k for k in hybrid_sensors_map if k not in active_keys]:
+                    st_ent = hybrid_sensors_map.pop(stale_key)
+                    if getattr(st_ent, "_unsub", None):
+                        st_ent._unsub()
+                        st_ent._unsub = None
+                    if getattr(st_ent, "_added", False) and st_ent.hass and st_ent.platform is not None:
+                        hass.async_create_task(st_ent.async_remove())
+
+                if new_ents:
+                    async_add_entities(new_ents)
+
+            sync_hybrid_sensors()
+            entry.async_on_unload(hass.bus.async_listen(f"{DOMAIN}_hybrids_updated", sync_hybrid_sensors))
+
+            @callback
+            def _cleanup_hs():
+                if domain_data.get("_hybrid_sensors_entry_id") == entry_id:
+                    domain_data.pop("_hybrid_sensors_entry_id", None)
+                for ent in hybrid_sensors_map.values():
+                    if getattr(ent, "_unsub", None):
+                        ent._unsub()
+                        ent._unsub = None
+
+            entry.async_on_unload(_cleanup_hs)
+
+
+class HybridEnergySensor(CompanionDeltaEnergySensor):
+    """Persistent `TOTAL_INCREASING` Delta Energy Master for a single physical multi-protocol device."""
+
+    def __init__(self, hass, store, hybrid_mgr, hybrid_id: str, spec: dict) -> None:
+        init_unit = str(spec.get("native_unit") or UnitOfEnergy.KILO_WATT_HOUR)
+        init_mwh = spec.get("initial_energy_mwh")
+        super().__init__(
+            mode="hybrid",
+            native_unit=init_unit,
+            max_kw=25.0,
+            initial_cumulative_mwh=int(init_mwh) if isinstance(init_mwh, (int, float)) else None,
+        )
+        self.hass = hass
+        self._store = store
+        self._hybrid_mgr = hybrid_mgr
+        self._hybrid_id = hybrid_id
+        self._spec = dict(spec)
+        self._sensor_key = self._spec.get("sensor_key", "energy")
+        self._ctrl = hybrid_mgr.get_controller(hybrid_id, "main")
+        self._unsub = None
+        self._active_proto: str | None = None
+        self._update_meta()
+
+    def _update_meta(self) -> None:
+        h_cfg = (self._store.get_hybrids() or {}).get(self._hybrid_id, {})
+        self._attr_name = "Energie"
+        self._attr_unique_id = self._spec.get("master_unique_id") or f"smarthome_companion_hybrid_{self._hybrid_id}_sensor_{self._sensor_key}"
+        self._attr_icon = "mdi:lightning-bolt"
+        self._attr_device_info = build_hybrid_device_info(self._hybrid_id, h_cfg, self._store)
+        if self._spec.get("master_entity_id"):
+            self.entity_id = self._spec["master_entity_id"]
+
+    @callback
+    def async_refresh_hybrid(self, spec: dict) -> None:
+        self._spec = dict(spec)
+        self._update_meta()
+        self._sync_sources()
+        self._rebind_tracking()
+        if self._added and self.hass and self.entity_id and self.platform is not None:
+            self._schedule_coalesced_write(force=True)
+
+    def _sync_sources(self) -> None:
+        h_cfg = (self._store.get_hybrids() or {}).get(self._hybrid_id, {})
+        sources = self._spec.get("sources") or {}
+        now = time.monotonic()
+
+        # Select highest-priority available transport for energy
+        chosen_proto: str | None = None
+        readings: dict[str, int | None] = {}
+        for proto in self._ctrl.get_protocol_order(h_cfg):
+            src = sources.get(proto)
+            eid = resolve_source_entity_id(self.hass, src)
+            if not eid:
+                continue
+            st = self.hass.states.get(eid) if self.hass else None
+            if st is None or st.state in (STATE_UNAVAILABLE, STATE_UNKNOWN, None, ""):
+                self._engine.mark_source_unavailable(proto)
+                readings[proto] = None
+                continue
+            mwh = normalize_energy_to_mwh(st.state, st.attributes.get("unit_of_measurement"))
+            readings[proto] = mwh
+            if mwh is not None and chosen_proto is None:
+                chosen_proto = proto
+
+        self._active_proto = chosen_proto
+        if chosen_proto is not None:
+            self._engine.set_active_source(chosen_proto, readings.get(chosen_proto), now=now)
+        for proto, mwh in readings.items():
+            if mwh is not None:
+                self._engine.process_reading(proto, mwh, now=now, is_active=(proto == chosen_proto))
+
+    @property
+    def available(self) -> bool:
+        return self._engine.initialized or self._active_proto is not None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        if not self._active_proto:
+            return {}
+        return {"active_transport": PROTOCOL_LABELS.get(self._active_proto, self._active_proto)}
+
+    async def async_added_to_hass(self) -> None:
+        self._added = True
+        await self._restore_delta_state()
+        self._sync_sources()
+        self._rebind_tracking()
+
+    def _rebind_tracking(self) -> None:
+        if self._unsub:
+            self._unsub()
+            self._unsub = None
+        if not self._added or not self.hass:
+            return
+        eid_to_proto: dict[str, str] = {}
+        for proto, src in (self._spec.get("sources") or {}).items():
+            eid = resolve_source_entity_id(self.hass, src)
+            if eid:
+                eid_to_proto[eid] = proto
+        if not eid_to_proto:
+            return
+
+        @callback
+        def _on_energy_tick(event) -> None:
+            eid = event.data.get("entity_id")
+            proto = eid_to_proto.get(eid or "")
+            if not proto:
+                return
+            h_cfg = (self._store.get_hybrids() or {}).get(self._hybrid_id, {})
+            sources = self._spec.get("sources") or {}
+            # Determine active transport cleanly on every event
+            chosen_proto = None
+            for p_cand in self._ctrl.get_protocol_order(h_cfg):
+                c_eid = resolve_source_entity_id(self.hass, sources.get(p_cand))
+                c_st = self.hass.states.get(c_eid) if c_eid else None
+                if c_st is not None and c_st.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN, None, ""):
+                    if normalize_energy_to_mwh(c_st.state, c_st.attributes.get("unit_of_measurement")) is not None:
+                        chosen_proto = p_cand
+                        break
+
+            prev_proto = self._active_proto
+            self._active_proto = chosen_proto
+            new_st = event.data.get("new_state")
+            now = time.monotonic()
+
+            if new_st is None or new_st.state in (STATE_UNAVAILABLE, STATE_UNKNOWN, None, ""):
+                self._engine.mark_source_unavailable(proto)
+                if chosen_proto and chosen_proto != prev_proto:
+                    c_eid = resolve_source_entity_id(self.hass, sources.get(chosen_proto))
+                    c_st = self.hass.states.get(c_eid) if c_eid else None
+                    c_mwh = normalize_energy_to_mwh(c_st.state, c_st.attributes.get("unit_of_measurement")) if c_st else None
+                    self._engine.set_active_source(chosen_proto, c_mwh, now=now)
+                    self._schedule_coalesced_write()
+                return
+
+            mwh = normalize_energy_to_mwh(new_st.state, new_st.attributes.get("unit_of_measurement"))
+            if mwh is None:
+                return
+            if chosen_proto and chosen_proto != prev_proto:
+                c_eid = resolve_source_entity_id(self.hass, sources.get(chosen_proto))
+                c_st = self.hass.states.get(c_eid) if c_eid else None
+                c_mwh = normalize_energy_to_mwh(c_st.state, c_st.attributes.get("unit_of_measurement")) if c_st else None
+                self._engine.set_active_source(chosen_proto, c_mwh, now=now)
+
+            added = self._engine.process_reading(proto, mwh, now=now, is_active=(proto == chosen_proto))
+            if added > 0 or chosen_proto != prev_proto:
+                self._schedule_coalesced_write()
+
+        self._unsub = async_track_state_change_event(self.hass, list(eid_to_proto.keys()), _on_energy_tick)
+
+    async def async_will_remove_from_hass(self) -> None:
+        await super().async_will_remove_from_hass()
+        if self._unsub:
+            self._unsub()
+            self._unsub = None
+
+
+class HybridFallbackSensor(SensorEntity):
+    """Per-sensor fallback Sensor for non-energy Hybrid sensors (power, voltage, temp, ...)."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(self, hass, store, hybrid_mgr, hybrid_id: str, spec: dict) -> None:
+        self.hass = hass
+        self._store = store
+        self._hybrid_mgr = hybrid_mgr
+        self._hybrid_id = hybrid_id
+        self._spec = dict(spec)
+        self._sensor_key = self._spec.get("sensor_key", "")
+        self._ctrl = hybrid_mgr.get_controller(hybrid_id, "main")
+        self._unsub = None
+        self._added = False
+        self._active_proto: str | None = None
+        self._value = None
+        self._unit = None
+        self._device_class = None
+        self._state_class = None
+        self._available = False
+        self._update_meta()
+
+    def _update_meta(self) -> None:
+        h_cfg = (self._store.get_hybrids() or {}).get(self._hybrid_id, {})
+        dc = str(self._spec.get("device_class") or "").strip().lower()
+        spec_meta = GROUP_SENSOR_SPECS.get(dc)
+        self._attr_name = (spec_meta["label"] if spec_meta else dc.replace("_", " ").title()) or self._sensor_key
+        self._attr_unique_id = self._spec.get("master_unique_id") or f"smarthome_companion_hybrid_{self._hybrid_id}_sensor_{self._sensor_key}"
+        if spec_meta:
+            self._attr_icon = spec_meta["icon"]
+            self._device_class = spec_meta["device_class"]
+            self._state_class = spec_meta["state_class"]
+        self._attr_device_info = build_hybrid_device_info(self._hybrid_id, h_cfg, self._store)
+        if self._spec.get("master_entity_id"):
+            self.entity_id = self._spec["master_entity_id"]
+
+    @callback
+    def async_refresh_hybrid(self, spec: dict) -> None:
+        self._spec = dict(spec)
+        self._update_meta()
+        self._recompute()
+        self._rebind_tracking()
+        if self._added and self.hass and self.entity_id and self.platform is not None:
+            self.async_write_ha_state()
+
+    def _recompute(self) -> None:
+        h_cfg = (self._store.get_hybrids() or {}).get(self._hybrid_id, {})
+        sources = self._spec.get("sources") or {}
+        for proto in self._ctrl.get_protocol_order(h_cfg):
+            eid = resolve_source_entity_id(self.hass, sources.get(proto))
+            if not eid:
+                continue
+            st = self.hass.states.get(eid) if self.hass else None
+            if st is not None and st.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN, None, ""):
+                self._active_proto = proto
+                attrs = st.attributes or {}
+                if self._unit is None and attrs.get("unit_of_measurement"):
+                    self._unit = attrs.get("unit_of_measurement")
+                if self._device_class is None and attrs.get("device_class"):
+                    self._device_class = attrs.get("device_class")
+                if self._state_class is None and attrs.get("state_class"):
+                    self._state_class = attrs.get("state_class")
+                try:
+                    self._value = float(st.state) if "." in str(st.state) else int(st.state)
+                except (TypeError, ValueError):
+                    self._value = st.state
+                self._available = True
+                return
+        self._active_proto = None
+        self._available = False
+
+    @property
+    def available(self) -> bool:
+        return self._available
+
+    @property
+    def native_value(self):
+        return self._value
+
+    @property
+    def native_unit_of_measurement(self):
+        return self._unit
+
+    @property
+    def device_class(self):
+        return self._device_class
+
+    @property
+    def state_class(self):
+        return self._state_class
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        if not self._active_proto:
+            return {}
+        return {"active_transport": PROTOCOL_LABELS.get(self._active_proto, self._active_proto)}
+
+    def _rebind_tracking(self) -> None:
+        if self._unsub:
+            self._unsub()
+            self._unsub = None
+        if not self._added or not self.hass:
+            return
+        eids = [
+            eid
+            for src in (self._spec.get("sources") or {}).values()
+            if (eid := resolve_source_entity_id(self.hass, src))
+        ]
+        if not eids:
+            return
+
+        @callback
+        def _changed(event) -> None:
+            self._recompute()
+            if self._added and self.hass and self.entity_id and self.platform is not None:
+                self.async_write_ha_state()
+
+        self._unsub = async_track_state_change_event(self.hass, list(dict.fromkeys(eids)), _changed)
+
+    async def async_added_to_hass(self) -> None:
+        self._added = True
+        self._recompute()
+        self._rebind_tracking()
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._added = False
+        if self._unsub:
+            self._unsub()
+            self._unsub = None
 
 
 class _BaseBlindsSensor(SensorEntity):

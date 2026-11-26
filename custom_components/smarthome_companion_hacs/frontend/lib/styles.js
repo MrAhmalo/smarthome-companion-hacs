@@ -869,6 +869,15 @@ input[type=range].slider::-moz-range-thumb {
 }
 .badge-tag.ok { background: rgba(67, 160, 71, .2); color: #81c784; }
 .badge-tag.area { background: rgba(3, 169, 244, .18); color: #4fc3f7; }
+.badge-tag.hybrid { background: rgba(171, 71, 188, .18); color: #ce93d8; }
+.hybrid-proposals-section {
+  display: grid; gap: 8px; margin-top: 12px; padding: 12px; border-radius: 14px;
+  background: rgba(171, 71, 188, .08); border: 1px solid rgba(171, 71, 188, .28);
+}
+.hybrid-proposal-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; border-radius: 12px; background: var(--cd-card); border: 1px solid rgba(128,128,128,.22);
+}
 .badge-tag.category {
   background: rgba(3, 169, 244, 0.16);
   background: color-mix(in srgb, var(--badge-cat-color, var(--cd-accent)) 16%, transparent);
