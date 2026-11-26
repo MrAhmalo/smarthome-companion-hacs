@@ -38,6 +38,7 @@ from .group_sensors import (
     GROUP_SENSOR_SPECS,
     CompanionGroupAggregatedSensor,
     CompanionGroupEnergySensor,
+    normalize_numeric_for_class,
     resolve_group_leaf_sensors,
 )
 from .hybrid_manager import resolve_source_entity_id
@@ -403,11 +404,11 @@ class HybridEnergySensor(CompanionDeltaEnergySensor):
 
     def _update_meta(self) -> None:
         h_cfg = (self._store.get_hybrids() or {}).get(self._hybrid_id, {})
-        self._attr_name = "Energie"
+        self._attr_name = self._spec.get("label") or "Energie"
         self._attr_unique_id = self._spec.get("master_unique_id") or f"smarthome_companion_hybrid_{self._hybrid_id}_sensor_{self._sensor_key}"
         self._attr_icon = "mdi:lightning-bolt"
         self._attr_device_info = build_hybrid_device_info(self._hybrid_id, h_cfg, self._store)
-        if self._spec.get("master_entity_id"):
+        if not self._added and self._spec.get("master_entity_id"):
             self.entity_id = self._spec["master_entity_id"]
 
     @callback
@@ -562,14 +563,18 @@ class HybridFallbackSensor(SensorEntity):
         h_cfg = (self._store.get_hybrids() or {}).get(self._hybrid_id, {})
         dc = str(self._spec.get("device_class") or "").strip().lower()
         spec_meta = GROUP_SENSOR_SPECS.get(dc)
-        self._attr_name = (spec_meta["label"] if spec_meta else dc.replace("_", " ").title()) or self._sensor_key
+        self._attr_name = self._spec.get("label") or (spec_meta["label"] if spec_meta else dc.replace("_", " ").title()) or self._sensor_key
         self._attr_unique_id = self._spec.get("master_unique_id") or f"smarthome_companion_hybrid_{self._hybrid_id}_sensor_{self._sensor_key}"
         if spec_meta:
             self._attr_icon = spec_meta["icon"]
             self._device_class = spec_meta["device_class"]
             self._state_class = spec_meta["state_class"]
+            if dc == "temperature" and self.hass and hasattr(self.hass, "config"):
+                self._unit = str(getattr(self.hass.config.units, "temperature_unit", "°C") or "°C")
+            else:
+                self._unit = spec_meta["unit"]
         self._attr_device_info = build_hybrid_device_info(self._hybrid_id, h_cfg, self._store)
-        if self._spec.get("master_entity_id"):
+        if not self._added and self._spec.get("master_entity_id"):
             self.entity_id = self._spec["master_entity_id"]
 
     @callback
@@ -584,6 +589,8 @@ class HybridFallbackSensor(SensorEntity):
     def _recompute(self) -> None:
         h_cfg = (self._store.get_hybrids() or {}).get(self._hybrid_id, {})
         sources = self._spec.get("sources") or {}
+        dc = str(self._spec.get("device_class") or "").strip().lower()
+        spec_meta = GROUP_SENSOR_SPECS.get(dc)
         for proto in self._ctrl.get_protocol_order(h_cfg):
             eid = resolve_source_entity_id(self.hass, sources.get(proto))
             if not eid:
@@ -592,16 +599,27 @@ class HybridFallbackSensor(SensorEntity):
             if st is not None and st.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN, None, ""):
                 self._active_proto = proto
                 attrs = st.attributes or {}
-                if self._unit is None and attrs.get("unit_of_measurement"):
-                    self._unit = attrs.get("unit_of_measurement")
-                if self._device_class is None and attrs.get("device_class"):
-                    self._device_class = attrs.get("device_class")
-                if self._state_class is None and attrs.get("state_class"):
-                    self._state_class = attrs.get("state_class")
-                try:
-                    self._value = float(st.state) if "." in str(st.state) else int(st.state)
-                except (TypeError, ValueError):
-                    self._value = st.state
+                if spec_meta:
+                    target_temp = str(self._unit or "°C")
+                    num = normalize_numeric_for_class(st.state, attrs.get("unit_of_measurement"), dc, target_temp_unit=target_temp)
+                    if num is not None:
+                        prec = int(spec_meta.get("precision", 2))
+                        self._value = round(num, prec) if prec > 0 else round(num)
+                    else:
+                        self._value = st.state
+                        self._state_class = None
+                else:
+                    if self._unit is None and attrs.get("unit_of_measurement"):
+                        self._unit = attrs.get("unit_of_measurement")
+                    if self._device_class is None and attrs.get("device_class"):
+                        self._device_class = attrs.get("device_class")
+                    if self._state_class is None and attrs.get("state_class"):
+                        self._state_class = attrs.get("state_class")
+                    try:
+                        self._value = float(st.state) if "." in str(st.state) else int(st.state)
+                    except (TypeError, ValueError):
+                        self._value = st.state
+                        self._state_class = None
                 self._available = True
                 return
         self._active_proto = None

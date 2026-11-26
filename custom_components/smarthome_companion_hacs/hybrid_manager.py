@@ -625,6 +625,57 @@ class HybridEventDebouncer:
         return True, action
 
 
+_SENSOR_LABELS: dict[str, str] = {
+    "power": "Leistung",
+    "energy": "Energie",
+    "temperature": "Temperatur",
+    "humidity": "Luftfeuchtigkeit",
+    "voltage": "Spannung",
+    "current": "Stromstärke",
+    "battery": "Batterie",
+    "illuminance": "Helligkeit",
+    "pressure": "Luftdruck",
+    "motion": "Bewegung",
+    "occupancy": "Belegung",
+    "presence": "Anwesenheit",
+    "smoke": "Rauch",
+    "moisture": "Feuchtigkeit",
+    "door": "Tür",
+    "window": "Fenster",
+    "opening": "Öffnung",
+    "garage_door": "Garagentor",
+    "problem": "Störung",
+    "tamper": "Manipulation",
+    "safety": "Sicherheit",
+    "gas": "Gas",
+    "heat": "Hitze",
+    "vibration": "Vibration",
+    "carbon_dioxide": "CO₂",
+    "aqi": "Luftqualität",
+    "pm25": "Feinstaub PM2.5",
+    "pm10": "Feinstaub PM10",
+    "volume": "Volumen",
+    "water": "Wasser",
+    "volume_flow_rate": "Durchfluss",
+}
+
+_UTILITY_ACTUATOR_RE = re.compile(
+    r"(?:overcharge|protection|kindersicherung|child_?lock|restart|reboot|update|firmware|"
+    r"auto_?off|inching|pairing|identify|interlock|relay_mode|power_on_state|eco_?mode|"
+    r"cloud|indicator|led_?mode|backlight|status_?led|detach)",
+    re.IGNORECASE,
+)
+
+
+def _is_utility_hybrid_actuator(entry) -> bool:
+    dom = getattr(entry, "domain", None) or ""
+    if dom == "light":
+        return False
+    eid = str(getattr(entry, "entity_id", "") or "").lower()
+    nm = str(getattr(entry, "name", None) or getattr(entry, "original_name", None) or "").lower()
+    return bool(_UTILITY_ACTUATOR_RE.search(eid) or _UTILITY_ACTUATOR_RE.search(nm))
+
+
 def _infer_sensor_role(entry, state) -> tuple[str, str, bool]:
     """Return `(sensor_key, device_class_or_role, is_binary)` for matching across protocols."""
     dom = getattr(entry, "domain", "sensor")
@@ -727,7 +778,7 @@ class HybridManager:
         devices_store = dict(self.store.get_devices())
         groups_store = dict(self.store.get_groups())
 
-        raw_hid = payload.get("hybrid_id") or payload.get("id")
+        raw_hid = payload.get("hybrid_id") or (payload.get("id") if isinstance(payload.get("id"), str) else None)
         is_edit = bool(raw_hid and raw_hid in hybrids)
         hid = str(raw_hid) if is_edit else f"hybrid_{int(time.time() * 1000)}"
 
@@ -848,8 +899,15 @@ class HybridManager:
         pre_actuators: dict[str, list] = {}
         pre_sensors: dict[str, dict[str, list]] = {}
         pre_events: dict[str, list] = {}
+        pre_sensor_states: dict[tuple[str, str], Any] = {}
         for proto, dev_ents in ents_by_proto.items():
-            acts = [e for e in dev_ents if e.domain in _ACTUATOR_DOMAINS and not e.disabled_by]
+            acts = [
+                e for e in dev_ents
+                if e.domain in _ACTUATOR_DOMAINS
+                and not e.disabled_by
+                and getattr(e, "entity_category", None) not in ("config", "diagnostic")
+                and not _is_utility_hybrid_actuator(e)
+            ]
             acts.sort(key=lambda e: e.entity_id)
             pre_actuators[proto] = acts
 
@@ -865,6 +923,11 @@ class HybridManager:
                     continue
                 st = self.hass.states.get(e.entity_id)
                 role_key, dc, is_bin = _infer_sensor_role(e, st)
+                e_cat = getattr(e, "entity_category", None)
+                if e_cat in ("config", "diagnostic") and dc != "battery":
+                    continue
+                if st is not None:
+                    pre_sensor_states[(proto, e.unique_id or e.entity_id)] = st
                 s_map.setdefault(role_key, []).append((e, dc, is_bin))
             pre_sensors[proto] = s_map
             pre_events[proto] = evs
@@ -958,10 +1021,12 @@ class HybridManager:
 
             # Build aligned Master channels
             max_ch = max((len(v) for v in pre_actuators.values()), default=0)
+            adopted_sub_map = (adopted_prev_cfg.get("entities") or {}).get("sub_entities") if isinstance(adopted_prev_cfg, dict) else {}
             channels_spec: list[dict[str, Any]] = []
             for idx in range(max_ch):
                 sources: dict[str, dict[str, str]] = {}
                 ch_domain = None
+                ch_label: str | None = None
                 for proto, acts in pre_actuators.items():
                     if idx < len(acts):
                         act_ent = acts[idx]
@@ -974,10 +1039,17 @@ class HybridManager:
                             ch_domain = "cover" if category == "jalousie" and act_ent.domain == "cover" else (
                                 "light" if category == "leuchte" and any(e.domain == "light" for p_list in pre_actuators.values() if idx < len(p_list) for e in [p_list[idx]]) else act_ent.domain
                             )
+                        if not ch_label and max_ch > 1:
+                            if proto == adopted_proto and isinstance(adopted_sub_map, dict) and act_ent.entity_id in adopted_sub_map:
+                                sc = adopted_sub_map[act_ent.entity_id]
+                                if isinstance(sc, dict):
+                                    ch_label = sc.get("custom_name") or sc.get("name")
                 if not sources:
                     continue
                 ch_domain = ch_domain or "switch"
                 ch_key = "main" if max_ch == 1 else f"ch_{idx + 1}"
+                if max_ch > 1 and not ch_label:
+                    ch_label = f"Kanal {idx + 1}"
                 if idx < len(adopted_channel_base_eids) and adopted_channel_base_eids[idx].split(".")[0] == ch_domain:
                     desired_eid = adopted_channel_base_eids[idx]
                 else:
@@ -987,10 +1059,11 @@ class HybridManager:
                     ch_domain,
                     m_uid,
                     desired_eid,
-                    friendly_suffix=None if max_ch == 1 else f"Kanal {idx + 1}",
+                    friendly_suffix=None if max_ch == 1 else ch_label,
                 )
                 channels_spec.append({
                     "channel_key": ch_key,
+                    "name": ch_label,
                     "domain": ch_domain,
                     "master_unique_id": m_uid,
                     "master_entity_id": m_eid,
@@ -1038,16 +1111,19 @@ class HybridManager:
                     else:
                         desired_s_eid = f"{dom_s}.{base_obj_slug}_{s_key}"
                     m_s_uid = f"smarthome_companion_hybrid_{hid}_{dom_s}_{s_key}"
-                    m_s_eid = _claim_master_entity(dom_s, m_s_uid, desired_s_eid, friendly_suffix=dc_s.replace("_", " ").title())
+                    base_s_label = _SENSOR_LABELS.get(dc_s) or dc_s.replace("_", " ").title()
+                    s_label = base_s_label if max_role_cnt == 1 else f"{base_s_label} {r_idx + 1}"
+                    m_s_eid = _claim_master_entity(dom_s, m_s_uid, desired_s_eid, friendly_suffix=s_label)
 
                     is_energy = (dom_s == "sensor" and dc_s == "energy")
                     if is_energy and not master_energy_eid:
                         master_energy_eid = m_s_eid
                         if adopted_energy_mwh is None:
-                            # Initialize from highest-priority available energy sensor
-                            for src_d in sources_s.values():
-                                st_e = self.hass.states.get(src_d["entity_id"]) or self.hass.states.get(
-                                    undo_renames[0][1] if undo_renames else ""
+                            # Initialize from highest-priority available pre-rename or current energy sensor
+                            for src_p, src_d in sources_s.items():
+                                st_e = (
+                                    self.hass.states.get(src_d["entity_id"])
+                                    or pre_sensor_states.get((src_p, src_d.get("unique_id") or src_d["entity_id"]))
                                 )
                                 if st_e is not None:
                                     u = st_e.attributes.get("unit_of_measurement") or "kWh"
@@ -1061,6 +1137,7 @@ class HybridManager:
 
                     sensors_spec.append({
                         "sensor_key": s_key,
+                        "label": s_label,
                         "domain": dom_s,
                         "device_class": dc_s,
                         "mode": "delta_energy" if is_energy else "fallback",
@@ -1130,7 +1207,8 @@ class HybridManager:
             cat_info = cats.get(category, {})
             cat_lbl = _ensure_label_exists(self.hass, category, name=cat_info.get("display_name", category), icon=cat_info.get("icon"), color=cat_info.get("color"))
             if channels_spec and cat_lbl:
-                _sync_entity_labels(self.hass, channels_spec[0]["master_entity_id"], [cat_lbl])
+                for ch_item in channels_spec:
+                    _sync_entity_labels(self.hass, ch_item["master_entity_id"], [cat_lbl])
             if master_power_eid:
                 p_lbl = _ensure_label_exists(self.hass, f"{category}_power", name=f"{cat_info.get('display_name', category)} Power")
                 if p_lbl:
@@ -1178,11 +1256,12 @@ class HybridManager:
             sub_entities_store = {}
             if len(channels_spec) > 1:
                 for c in channels_spec:
+                    ch_disp = c.get("name") or c["channel_key"]
                     sub_entities_store[c["master_entity_id"]] = {
                         "enabled": True,
                         "category": category,
-                        "custom_name": c["channel_key"],
-                        "name": c["channel_key"],
+                        "custom_name": ch_disp,
+                        "name": ch_disp,
                         "unique_id": c["master_unique_id"],
                         "original_id": c["master_entity_id"],
                     }

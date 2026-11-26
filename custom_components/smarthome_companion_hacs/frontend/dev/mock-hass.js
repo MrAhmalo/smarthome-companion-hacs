@@ -109,11 +109,14 @@ export class MockHass {
         }
       }
       const dismissed = new Set(this.dismissedHybridPairs || []);
-      const proposals = (this.hybridProposals || []).filter(
-        (p) => !dismissed.has(p.pair_key) && !(p.devices || []).some((d) => linkedIds.has(d.device_id)),
+      const unlinked = (this.hybridProposals || []).filter(
+        (p) => !(p.devices || []).some((d) => linkedIds.has(d.device_id)),
       );
+      const proposals = unlinked.filter((p) => !dismissed.has(p.pair_key));
+      const dismissedProposals = unlinked.filter((p) => dismissed.has(p.pair_key));
       return {
         proposals: JSON.parse(JSON.stringify(proposals)),
+        dismissed_proposals: JSON.parse(JSON.stringify(dismissedProposals)),
         hybrids: JSON.parse(JSON.stringify(this.hybrids || {})),
         hybrid_settings: JSON.parse(JSON.stringify(this.hybridSettings || {})),
       };
@@ -123,6 +126,14 @@ export class MockHass {
         this.dismissedHybridPairs.push(msg.pair_key);
       }
       return { success: true, pair_key: msg.pair_key };
+    }
+    if (msg.type === 'smarthome_companion/hybrids/restore_pair') {
+      if (msg.restore_all) {
+        this.dismissedHybridPairs = [];
+      } else if (msg.pair_key) {
+        this.dismissedHybridPairs = (this.dismissedHybridPairs || []).filter((k) => k !== msg.pair_key);
+      }
+      return { success: true, dismissed_hybrid_pairs: [...(this.dismissedHybridPairs || [])] };
     }
     if (msg.type === 'smarthome_companion/hybrids/settings') {
       if (msg.preferred_protocol) this.hybridSettings.preferred_protocol = msg.preferred_protocol;

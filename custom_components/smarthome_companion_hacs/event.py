@@ -105,7 +105,7 @@ class HybridEventEntity(EventEntity):
         self._attr_name = "Taster"
         self._attr_unique_id = self._spec.get("master_unique_id") or f"smarthome_companion_hybrid_{self._hybrid_id}_event_{self._event_key}"
         self._attr_device_info = build_hybrid_device_info(self._hybrid_id, h_cfg, self._store)
-        if self._spec.get("master_entity_id"):
+        if not self._added and self._spec.get("master_entity_id"):
             self.entity_id = self._spec["master_entity_id"]
 
     @callback

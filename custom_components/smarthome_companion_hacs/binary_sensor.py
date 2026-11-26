@@ -277,12 +277,14 @@ class HybridBinarySensor(BinarySensorEntity):
     def _update_meta(self) -> None:
         h_cfg = (self._store.get_hybrids() or {}).get(self._hybrid_id, {})
         dc = str(self._spec.get("device_class") or "").strip().lower()
-        self._attr_name = dc.replace("_", " ").title() or self._sensor_key
-        self._attr_unique_id = self._spec.get("master_unique_id") or f"smarthome_companion_hybrid_{self._hybrid_id}_binary_sensor_{self._sensor_key}"
         if dc in GROUP_BINARY_CLASSES:
+            self._attr_name = GROUP_BINARY_CLASSES[dc][0]
             self._attr_device_class = GROUP_BINARY_CLASSES[dc][1]
+        else:
+            self._attr_name = self._spec.get("label") or dc.replace("_", " ").title() or self._sensor_key
+        self._attr_unique_id = self._spec.get("master_unique_id") or f"smarthome_companion_hybrid_{self._hybrid_id}_binary_sensor_{self._sensor_key}"
         self._attr_device_info = build_hybrid_device_info(self._hybrid_id, h_cfg, self._store)
-        if self._spec.get("master_entity_id"):
+        if not self._added and self._spec.get("master_entity_id"):
             self.entity_id = self._spec["master_entity_id"]
 
     @callback

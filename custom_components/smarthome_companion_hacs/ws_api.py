@@ -67,6 +67,7 @@ def async_register_websockets(hass):
     websocket_api.async_register_command(hass, handle_save_hybrid)
     websocket_api.async_register_command(hass, handle_unpair_hybrid)
     websocket_api.async_register_command(hass, handle_dismiss_hybrid_pair)
+    websocket_api.async_register_command(hass, handle_restore_hybrid_pair)
     websocket_api.async_register_command(hass, handle_hybrid_settings)
 
 # ── Helpers ──
@@ -899,11 +900,12 @@ async def handle_get_hybrids(hass, connection, msg):
 })
 @websocket_api.async_response
 async def handle_discover_hybrids(hass, connection, msg):
-    from .hybrid_discovery import async_discover_hybrid_pairs
+    from .hybrid_discovery import async_discover_hybrid_pairs_with_dismissed
     store = hass.data[DOMAIN]["store"]
-    proposals = await async_discover_hybrid_pairs(hass, store)
+    proposals, dismissed_proposals = await async_discover_hybrid_pairs_with_dismissed(hass, store)
     connection.send_result(msg["id"], {
         "proposals": proposals,
+        "dismissed_proposals": dismissed_proposals,
         "hybrids": store.get_hybrids(),
         "hybrid_settings": store.get_hybrid_settings(),
     })
@@ -912,7 +914,6 @@ async def handle_discover_hybrids(hass, connection, msg):
 @websocket_api.websocket_command({
     vol.Required("type"): "smarthome_companion/hybrids/save",
     vol.Optional("hybrid_id"): vol.Any(str, None),
-    vol.Optional("id"): vol.Any(str, None),
     vol.Optional("name"): vol.Any(str, None),
     vol.Optional("area_id"): vol.Any(str, None),
     vol.Optional("category"): vol.Any(str, None),
@@ -929,7 +930,9 @@ async def handle_save_hybrid(hass, connection, msg):
         connection.send_error(msg["id"], "not_ready", "HybridManager is not initialized")
         return
     try:
-        hybrid = await manager.async_convert_to_hybrid(dict(msg))
+        # Strip HA's transport message `id` (integer) & `type` before converting
+        clean_payload = {k: v for k, v in msg.items() if k not in ("id", "type")}
+        hybrid = await manager.async_convert_to_hybrid(clean_payload)
         connection.send_result(msg["id"], {"success": True, "hybrid": hybrid})
     except ValueError as err:
         connection.send_error(msg["id"], "invalid_format", str(err))
@@ -984,6 +987,25 @@ async def handle_dismiss_hybrid_pair(hass, connection, msg):
     store.data["dismissed_hybrid_pairs"] = dismissed
     await store.async_save()
     connection.send_result(msg["id"], {"success": True, "pair_key": pk})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smarthome_companion/hybrids/restore_pair",
+    vol.Optional("pair_key"): str,
+    vol.Optional("restore_all"): bool,
+})
+@websocket_api.async_response
+async def handle_restore_hybrid_pair(hass, connection, msg):
+    store = hass.data[DOMAIN]["store"]
+    dismissed = list(store.get_dismissed_hybrid_pairs())
+    if msg.get("restore_all"):
+        remaining: list[str] = []
+    else:
+        pk = msg.get("pair_key")
+        remaining = [item for item in dismissed if item != pk]
+    store.data["dismissed_hybrid_pairs"] = remaining
+    await store.async_save()
+    connection.send_result(msg["id"], {"success": True, "dismissed_hybrid_pairs": remaining})
 
 
 @websocket_api.websocket_command({

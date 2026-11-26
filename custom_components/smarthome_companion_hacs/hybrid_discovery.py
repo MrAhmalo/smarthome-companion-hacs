@@ -96,6 +96,21 @@ def _strip_proto_and_area(name: str | None, area_name: str = "") -> str:
     return re.sub(r"\s+", " ", s).strip().lower()
 
 
+def _build_suggested_name(raw_name: str | None, area_name: str = "") -> str:
+    """Clean a device name for proposal display without mangling acronyms like 2PM or LED."""
+    s = str(raw_name or "").strip()
+    if area_name and s.lower().startswith(f"{area_name.lower()} "):
+        s = s[len(area_name) :].strip()
+    s = re.sub(
+        r"\b(?:zigbee2mqtt|zigbee|z2m|zha|deconz|wlan|wifi|wi[-_ ]?fi|matter|thread|shelly)\b",
+        " ",
+        s,
+        flags=re.IGNORECASE,
+    )
+    s = re.sub(r"[()\[\]·]+", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
 def _parse_hex_bytes(val: str | None) -> bytes | None:
     if not val:
         return None
@@ -260,7 +275,12 @@ def extract_device_signals(
             area_name = str(getattr(a_entry, "name", "") or "").strip()
 
     raw_name = str(getattr(dev_entry, "name_by_user", None) or getattr(dev_entry, "name", None) or "").strip()
-    controllable = [e for e in dev_entities if getattr(e, "domain", None) in _CONTROLLABLE_DOMAINS]
+    controllable = [
+        e for e in dev_entities
+        if getattr(e, "domain", None) in _CONTROLLABLE_DOMAINS
+        and not getattr(e, "disabled_by", None)
+        and getattr(e, "entity_category", None) not in ("config", "diagnostic")
+    ]
     domains = {e.domain for e in controllable}
     proto = classify_protocol(dev_entry, dev_entities, dev_reg)
 
@@ -410,8 +430,8 @@ def make_pair_key(dev_a: str, dev_b: str) -> str:
     return f"{dev_a}::{dev_b}" if dev_a <= dev_b else f"{dev_b}::{dev_a}"
 
 
-async def async_discover_hybrid_pairs(hass, store) -> list[dict[str, Any]]:
-    """Scan HA registries for unlinked physical devices exposed over 2+ protocols."""
+async def _discover_hybrid_pairs_internal(hass, store) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Scan HA registries and return `(active_proposals, dismissed_proposals)`."""
     dev_reg = dr.async_get(hass)
     ent_reg = er.async_get(hass)
     area_reg = ar.async_get(hass)
@@ -448,9 +468,6 @@ async def async_discover_hybrid_pairs(hass, store) -> list[dict[str, Any]]:
     for i in range(len(signals)):
         for j in range(i + 1, len(signals)):
             sa, sb = signals[i], signals[j]
-            pk = make_pair_key(sa.device_id, sb.device_id)
-            if pk in dismissed_pairs:
-                continue
             sc, reasons = score_pair(sa, sb)
             if sc >= 60:
                 scored_edges.append((sc, sa, sb, reasons))
@@ -458,7 +475,8 @@ async def async_discover_hybrid_pairs(hass, store) -> list[dict[str, Any]]:
     # 1:1 greedy maximum-weight bipartite matching
     scored_edges.sort(key=lambda item: item[0], reverse=True)
     used_devs: set[str] = set()
-    proposals: list[dict[str, Any]] = []
+    active_proposals: list[dict[str, Any]] = []
+    dismissed_proposals: list[dict[str, Any]] = []
 
     proto_rank = {"zigbee": 0, "matter": 1, "wlan": 2}
     for sc, sa, sb, reasons in scored_edges:
@@ -467,13 +485,14 @@ async def async_discover_hybrid_pairs(hass, store) -> list[dict[str, Any]]:
         used_devs.add(sa.device_id)
         used_devs.add(sb.device_id)
 
+        pk = make_pair_key(sa.device_id, sb.device_id)
         ordered = sorted((sa, sb), key=lambda s: (proto_rank.get(s.protocol, 9), not s.configured))
         first, second = ordered[0], ordered[1]
 
         adopted_sig = next((s for s in ordered if s.configured), None)
         pref_name = (
             (configured_devices.get(adopted_sig.device_id, {}).get("custom_name") if adopted_sig else None)
-            or next((s.clean_name.title() for s in ordered if s.clean_name), None)
+            or next((_build_suggested_name(s.name, s.area_name) for s in ordered if _build_suggested_name(s.name, s.area_name)), None)
             or first.name
         )
         pref_area = (adopted_sig.area_id if adopted_sig and adopted_sig.area_id else "") or first.area_id or second.area_id
@@ -483,8 +502,8 @@ async def async_discover_hybrid_pairs(hass, store) -> list[dict[str, Any]]:
             or second.primary_category_guess
         )
 
-        proposals.append({
-            "pair_key": make_pair_key(sa.device_id, sb.device_id),
+        entry = {
+            "pair_key": pk,
             "score": sc,
             "confidence": "high" if sc >= 85 else "medium",
             "reasons": reasons,
@@ -507,6 +526,21 @@ async def async_discover_hybrid_pairs(hass, store) -> list[dict[str, Any]]:
                 }
                 for s in ordered
             ],
-        })
+        }
+        if pk in dismissed_pairs:
+            dismissed_proposals.append(entry)
+        else:
+            active_proposals.append(entry)
 
-    return proposals
+    return active_proposals, dismissed_proposals
+
+
+async def async_discover_hybrid_pairs(hass, store) -> list[dict[str, Any]]:
+    """Scan HA registries for unlinked physical devices exposed over 2+ protocols."""
+    active, _ = await _discover_hybrid_pairs_internal(hass, store)
+    return active
+
+
+async def async_discover_hybrid_pairs_with_dismissed(hass, store) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return `(active_proposals, dismissed_proposals)` for wizard display and restore."""
+    return await _discover_hybrid_pairs_internal(hass, store)

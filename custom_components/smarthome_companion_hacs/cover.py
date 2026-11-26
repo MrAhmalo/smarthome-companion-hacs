@@ -304,11 +304,12 @@ class HybridCover(CoverEntity):
     def _update_attrs(self) -> None:
         h_cfg = (self._store.get_hybrids() or {}).get(self._hybrid_id, {})
         channels = h_cfg.get("channels") or []
-        self._attr_name = None if len(channels) <= 1 else f"Kanal {self._channel_key}"
+        ch_disp = self._ch.get("name") or f"Kanal {self._channel_key.replace('ch_', '')}"
+        self._attr_name = None if len(channels) <= 1 else ch_disp
         self._attr_unique_id = self._ch.get("master_unique_id") or f"smarthome_companion_hybrid_{self._hybrid_id}_{self._channel_key}"
         self._attr_icon = h_cfg.get("icon") or "mdi:window-shutter"
         self._attr_device_info = build_hybrid_device_info(self._hybrid_id, h_cfg, self._store)
-        if self._ch.get("master_entity_id"):
+        if not self._added and self._ch.get("master_entity_id"):
             self.entity_id = self._ch["master_entity_id"]
 
     @callback
